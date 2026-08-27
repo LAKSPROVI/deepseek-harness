@@ -313,6 +313,11 @@
   gap: 12px;
 }
 
+/* Native image picker stays browser-owned but is opened by the visible toolbar control. */
+.imageInput {
+  display: none;
+}
+
 /* Attach circle (figma + control): 28px, selector fill, primary glyph. */
 .add {
   display: grid;
