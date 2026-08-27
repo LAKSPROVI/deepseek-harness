@@ -335,6 +335,13 @@
     - id: ui-message-feedback
       name: '@deepseek-ai/dsh-client-ui-message-feedback'
 
+    # Push-to-talk microphone in the composer tool row: records one utterance,
+    # ships it base64 over the voiceInput Remote, and appends the transcript to
+    # the draft. The audio never becomes session data; only the message the
+    # human then sends does.
+    - id: ui-voice-input
+      name: '@deepseek-ai/dsh-client-ui-voice-input'
+
     # Model selection: the /model popupSelect + composer seat over session.models.
     - id: ui-model-selection
       name: '@deepseek-ai/dsh-client-ui-model-selection'
