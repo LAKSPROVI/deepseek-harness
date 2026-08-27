@@ -1969,6 +1969,15 @@ importers:
       '@deepseek-ai/dsh-tool-subagent':
         specifier: workspace:^
         version: link:../../subagent/tool-subagent
+      '@deepseek-ai/dsh-transcription':
+        specifier: workspace:^
+        version: link:../../transcription/transcription
+      '@deepseek-ai/dsh-transcription-groq':
+        specifier: workspace:^
+        version: link:../../transcription/transcription-groq
+      '@deepseek-ai/dsh-voice-input':
+        specifier: workspace:^
+        version: link:../../transcription/voice-input
       '@deepseek-ai/dsh-web-frontend':
         specifier: workspace:^
         version: link:../../../apps/web
@@ -10142,6 +10151,10 @@ importers:
         version: link:../transcription
 
   packages/transcription/voice-input:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
