@@ -76,3 +76,5 @@ There is no streaming transcription. One call carries one complete utterance, so
 The spoken language is not declared. The seam accepts a language hint and the browser sends none, because the UI locale is not evidence of what the speaker is speaking; the provider auto-detects instead.
 
 ACP stays audio-free: it refuses audio prompt content and advertises `promptCapabilities.audio: false`. The feature is web-only by construction, not by omission.
+
+Assembled behavior is proven in [`packages/transcription/voice-input/tests/loader-composition.spec.ts`](../../../../packages/transcription/voice-input/tests/loader-composition.spec.ts), which boots all three Host packages from a test-only `cordis.yml` through the Loader and replaces only Groq's HTTP endpoint. Two behaviors surface only there: a provider named in `provider` but never mounted is not a load failure, because selection resolves per call; and a mounted provider holding no credential answers `provider-unconfigured` rather than `provider-unavailable`, because `available()` reports on the credential reference. Disposing the provider fiber empties the registry while the seam keeps serving.

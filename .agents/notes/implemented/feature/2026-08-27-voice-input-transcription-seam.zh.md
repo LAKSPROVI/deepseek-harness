@@ -76,3 +76,5 @@ harness 在 web GUI 上获得语音输入，而无界面或 ACP 部署则经由 
 口语语言未被声明。seam 接受语言提示而浏览器不发送，因为 UI 语言不能作为说话人所用语言的证据；改由提供方自动检测。
 
 ACP 保持无音频：它拒绝音频提示内容，并声明 `promptCapabilities.audio: false`。本功能是构造上仅限 web，而非因遗漏而如此。
+
+组装后的行为由 [`packages/transcription/voice-input/tests/loader-composition.spec.ts`](../../../../packages/transcription/voice-input/tests/loader-composition.spec.ts) 证明：它经由 Loader 从一份仅用于测试的 `cordis.yml` 启动全部三个 Host 包，且只替换 Groq 的 HTTP 端点。有两个行为只在那里显现：在 `provider` 中指名却从未挂载的提供方不构成加载失败，因为选择是按调用解析的；而已挂载但不持有凭据的提供方回答 `provider-unconfigured` 而非 `provider-unavailable`，因为 `available()` 报告的是凭据引用。释放提供方的 fiber 会清空注册表，而 seam 仍继续服务。
