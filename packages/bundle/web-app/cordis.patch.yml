@@ -66,6 +66,21 @@
       config:
         maxNoteBytes: 8192
 
+    # Voice input: the transcription seam, its Groq provider, and the Remote
+    # surface the browser's microphone button reaches. Audio never becomes
+    # durable session data; only the transcript the human sends does.
+    - id: transcription
+      name: '@deepseek-ai/dsh-transcription'
+      config:
+        provider: groq
+        maxAudioBytes: 26214400
+
+    - id: transcription-groq
+      name: '@deepseek-ai/dsh-transcription-groq'
+
+    - id: voice-input
+      name: '@deepseek-ai/dsh-voice-input'
+
     # Browser Session export: `/export` command plus the shared download dialog.
     - id: session-log-download
       name: '@deepseek-ai/dsh-session-log-export'
