@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
 import { standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
@@ -7,8 +8,11 @@ import { standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
 // pins DSH_SNAPSHOT=replay and compares committed goldens; record/refresh remain
 // explicit local workflows. Real-model cases self-skip without DEEPSEEK_API_KEY.
 try {
-  // Node >= 21.7 native; throws when the file does not exist.
-  process.loadEnvFile(new URL('.env', import.meta.url).pathname)
+  // Node >= 21.7 native; throws when the file does not exist. fileURLToPath,
+  // not .pathname: on Windows the latter yields "/D:/A%20B/.env", whose leading
+  // slash and percent-encoding resolve to a path that never exists, so the suite
+  // would run uncredentialed even with a populated .env.
+  process.loadEnvFile(fileURLToPath(new URL('.env', import.meta.url)))
 } catch {
   // No .env — fine, the environment may already carry the variables.
 }
