@@ -84,6 +84,7 @@
     "@deepseek-ai/dsh-scope": "workspace:^",
     "@deepseek-ai/dsh-api-session-controller": "workspace:^",
     "@deepseek-ai/dsh-api-workspace-files": "workspace:^",
+    "@deepseek-ai/dsh-voice-input": "workspace:^",
     "zod": "^4.4.3"
   }
 }
