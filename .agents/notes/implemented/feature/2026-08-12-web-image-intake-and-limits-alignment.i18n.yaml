@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-12-web-image-intake-and-limits-alignment.md
-2026-08-12-web-image-intake-and-limits-alignment.md: 0bb8cadc8db4b4c28cf311bc9420c32744e173fb
-2026-08-12-web-image-intake-and-limits-alignment.zh.md: fafa7652756554a54a0a0952e843bf5f4b81b00d
+2026-08-12-web-image-intake-and-limits-alignment.md: 3c759334ff554ceb30fe07d8fb778517c6e9e532
+2026-08-12-web-image-intake-and-limits-alignment.zh.md: 73dbb36b94879ae3153f0f4ade1501cb5c56c26b
