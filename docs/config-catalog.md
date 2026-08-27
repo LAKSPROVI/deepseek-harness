@@ -2991,6 +2991,50 @@ export type ToolPresentationMode = 'native' | 'code' | 'both'
 
 Source: [`packages/core/tools/src/index.ts:654`](../packages/core/tools/src/index.ts)
 
+<a id="deepseek-aidsh-transcription"></a>
+
+## `@deepseek-ai/dsh-transcription`
+
+```ts config-catalog
+/**
+ * Config for the transcription seam. `provider` pins which backend wins; omitted,
+ * a single registered usable provider auto-selects. `maxAudioBytes` is the
+ * payload ceiling enforced before dispatch.
+ */
+export interface TranscriptionRuntimeConfig {
+  /** Explicit provider id. Omitted = auto-select when exactly one usable. */
+  readonly provider?: string
+  /** Positive-integer ceiling on one request's audio bytes. */
+  readonly maxAudioBytes?: number
+}
+```
+
+Source: [`packages/transcription/transcription/src/index.ts:45`](../packages/transcription/transcription/src/index.ts)
+
+<a id="deepseek-aidsh-transcription-groq"></a>
+
+## `@deepseek-ai/dsh-transcription-groq`
+
+Requires: `transcription`
+
+```ts config-catalog
+/** Plugin config (all optional — `apply` fills env-var and constant defaults). */
+export interface Config {
+  /** Literal Groq API key; prefer {@link Config.apiKeyEnv} so no secret enters configuration files. */
+  apiKey?: string
+  /** Credential reference resolved for each transcription; defaults to `GROQ_API_KEY`. */
+  apiKeyEnv?: string
+  /** OpenAI-compatible endpoint base; `/audio/transcriptions` is appended. */
+  baseURL?: string
+  /** Groq transcription model name. Defaults to `whisper-large-v3-turbo`. */
+  model?: string
+  /** Language hint used when a request carries none, e.g. `pt`. */
+  defaultLanguage?: string
+}
+```
+
+Source: [`packages/transcription/transcription-groq/src/index.ts:44`](../packages/transcription/transcription-groq/src/index.ts)
+
 <a id="deepseek-aidsh-typert-loader"></a>
 
 ## `@deepseek-ai/dsh-typert-loader`
@@ -3260,6 +3304,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-tool` ([`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-trajectory` ([`packages/client/ui-trajectory/src/index.ts`](../packages/client/ui-trajectory/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-user-questions` ([`packages/client/ui-user-questions/src/index.ts`](../packages/client/ui-user-questions/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-voice-input` ([`packages/client/ui-voice-input/src/index.ts`](../packages/client/ui-voice-input/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-workflow-run` ([`packages/client/ui-workflow-run/src/index.ts`](../packages/client/ui-workflow-run/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-workspace` ([`packages/client/ui-workspace/src/index.ts`](../packages/client/ui-workspace/src/index.ts))
 - `@deepseek-ai/dsh-command-compact` — requires `commands` · `compaction` ([`packages/compaction/command-compact/src/index.ts`](../packages/compaction/command-compact/src/index.ts))
@@ -3291,6 +3336,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
 - `@deepseek-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
 - `@deepseek-ai/dsh-user-questions` ([`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts))
+- `@deepseek-ai/dsh-voice-input` — requires `transcription` ([`packages/transcription/voice-input/src/index.ts`](../packages/transcription/voice-input/src/index.ts))
 - `@deepseek-ai/dsh-workspace` — requires `storageDomain` · `sessionPersistence` ([`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts))
 
 ## Seam packages (not directly loadable)
