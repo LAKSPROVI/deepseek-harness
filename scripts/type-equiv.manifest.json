@@ -1974,6 +1974,96 @@
       "doc": "docs/subsystems/feedback.md",
       "symbol": "MessageFeedbackDeleteResult",
       "source": "packages/feedback/message-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "TranscriptionAudioFormat",
+      "source": "packages/transcription/transcription/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "TranscriptionRequest",
+      "source": "packages/transcription/transcription/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "TranscriptionResult",
+      "source": "packages/transcription/transcription/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "TranscriptionProvider",
+      "source": "packages/transcription/transcription/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "TranscriptionRuntimeConfig",
+      "source": "packages/transcription/transcription/src/index.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputTranscribeRequest",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputTranscribeValue",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputAudioEmpty",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputAudioUndecodable",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputAudioTooLarge",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputProviderUnavailable",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputProviderUnconfigured",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputProviderFailed",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputAborted",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputFailure",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputSuccess",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputRejected",
+      "source": "packages/transcription/voice-input/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/transcription.md",
+      "symbol": "VoiceInputTranscribeResult",
+      "source": "packages/transcription/voice-input/src/types.ts"
     }
   ]
 }

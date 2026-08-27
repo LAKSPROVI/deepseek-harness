@@ -107,9 +107,11 @@ export const SERVICE_PAGE: Record<string, string> = {
   tokenMeter: 'token-meter.md',
   toolResultPruner: 'compaction.md',
   tools: 'tools.md',
+  transcription: 'transcription.md',
   typert: 'typert.md',
   typertGateway: 'typert.md',
   userQuestions: 'user-questions.md',
+  voiceInput: 'transcription.md',
   web: 'web.md',
   workflowEngine: 'workflow.md',
   workspaceRegistry: 'workspace.md',
@@ -530,6 +532,11 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   TypertPackageRecord: 'invariants.md',
   TypertSchemaFilter: 'invariants.md',
   TypertSchemaRecord: 'invariants.md',
+  TranscriptionProvider: 'transcription.md',
+  TranscriptionRequest: 'transcription.md',
+  TranscriptionResult: 'transcription.md',
+  VoiceInputTranscribeRequest: 'transcription.md',
+  VoiceInputTranscribeResult: 'transcription.md',
 }
 
 /** TypeScript lib and pinned framework types with no repository-owned data page. */

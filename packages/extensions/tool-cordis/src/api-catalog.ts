@@ -2136,6 +2136,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'transcription',
+    summary: 'The transcription service.',
+    description: 'The transcription service. Registered as `ctx.transcription` (one instance per context).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `TRANSCRIPTION_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `TRANSCRIPTION_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `TRANSCRIPTION_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `TRANSCRIPTION_PROVIDER_UNAVAILABLE`.',
+    methods: [
+      {
+        signature: 'registerProvider(provider: TranscriptionProvider): () => void',
+        description: 'Register a speech-to-text provider. Throws TranscriptionError `TRANSCRIPTION_DUPLICATE_PROVIDER` if its id is already registered. Returns a disposer; disposed with the calling fiber.',
+        parameters: [{ name: 'provider', description: 'the provider; its `id` is the registry key.' }],
+        returns: 'the disposer that unregisters the provider.',
+      },
+      {
+        signature: 'async transcribe(request: TranscriptionRequest, signal?: AbortSignal): Promise<TranscriptionResult>',
+        description: 'Transcribe one utterance through the selected provider. Enforces the payload bound and rejects an empty payload before dispatch, resolves the provider with the selection rules above, and trims the returned transcript. Throws TranscriptionError when the capability cannot run.',
+        parameters: [{ name: 'request', description: 'the audio payload, its format, and an optional language hint.' }, { name: 'signal', description: 'optional cancellation signal forwarded to the provider.' }],
+        returns: 'the transcript, with surrounding whitespace removed.',
+      },
+    ],
+  },
+  {
     key: 'typert',
     summary: 'Registry of generated schemas, package reflection, invocations, and Remote dependency providers.',
     description: 'Registry of generated schemas, package reflection, invocations, and Remote dependency providers.',
@@ -2216,6 +2235,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'Questions, owner agent, and abort signal.' }],
         returns: 'The answer chosen or typed by the human.',
         throws: ['{UserQuestionError} code `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when that live agent is owned by another agent.'],
+      },
+    ],
+  },
+  {
+    key: 'voiceInput',
+    summary: 'The Remote namespace one browser recording reaches.',
+    description: 'The Remote namespace one browser recording reaches. It owns no transcription policy of its own: the ceiling, provider selection, and trimming all belong to `ctx.transcription`, so a headless deployment enforces the same rules.',
+    methods: [
+      {
+        signature: '@Remote(\'transcribe\') async transcribe( request: VoiceInputTranscribeRequest, signal?: AbortSignal, ): Promise<VoiceInputTranscribeResult>',
+        description: 'Transcribe one uploaded utterance.',
+        parameters: [{ name: 'request', description: 'the recorded audio, its declared container format, and an optional language hint.' }, { name: 'signal', description: 'abort signal cancelling the upload\'s transcription.' }],
+        returns: 'the transcript, or a stable business failure.',
       },
     ],
   },
@@ -4854,6 +4886,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolSchema {\n    name: string;\n    description: string;\n    parameters: Record<string, unknown>;\n}',
   },
   {
+    name: 'TranscriptionAudioFormat',
+    declaration: 'export type TranscriptionAudioFormat = \'audio/webm\' | \'audio/ogg\' | \'audio/wav\' | \'audio/mp4\' | \'audio/mpeg\';',
+  },
+  {
+    name: 'TranscriptionProvider',
+    declaration: 'export interface TranscriptionProvider {\n    readonly id: string;\n    available(): boolean;\n    transcribe(request: TranscriptionRequest, signal?: AbortSignal): Promise<TranscriptionResult>;\n}',
+  },
+  {
+    name: 'TranscriptionRequest',
+    declaration: 'export interface TranscriptionRequest {\n    readonly audio: Uint8Array;\n    readonly format: TranscriptionAudioFormat;\n    readonly language?: string;\n}',
+  },
+  {
+    name: 'TranscriptionResult',
+    declaration: 'export interface TranscriptionResult {\n    readonly text: string;\n    readonly language?: string;\n}',
+  },
+  {
     name: 'TurnEndCancelCause',
     declaration: 'export type TurnEndCancelCause = AgentCancelCause | {\n    readonly kind: \'legacy\';\n};',
   },
@@ -4936,6 +4984,58 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UserQuestionProvider',
     declaration: 'export interface UserQuestionProvider {\n    ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>;\n}',
+  },
+  {
+    name: 'VoiceInputAborted',
+    declaration: 'export interface VoiceInputAborted {\n    readonly code: \'aborted\';\n}',
+  },
+  {
+    name: 'VoiceInputAudioEmpty',
+    declaration: 'export interface VoiceInputAudioEmpty {\n    readonly code: \'audio-empty\';\n}',
+  },
+  {
+    name: 'VoiceInputAudioTooLarge',
+    declaration: 'export interface VoiceInputAudioTooLarge {\n    readonly code: \'audio-too-large\';\n    readonly actualBytes: number;\n}',
+  },
+  {
+    name: 'VoiceInputAudioUndecodable',
+    declaration: 'export interface VoiceInputAudioUndecodable {\n    readonly code: \'audio-undecodable\';\n}',
+  },
+  {
+    name: 'VoiceInputFailure',
+    declaration: 'export type VoiceInputFailure = VoiceInputAudioEmpty | VoiceInputAudioUndecodable | VoiceInputAudioTooLarge | VoiceInputProviderUnavailable | VoiceInputProviderUnconfigured | VoiceInputProviderFailed | VoiceInputAborted;',
+  },
+  {
+    name: 'VoiceInputProviderFailed',
+    declaration: 'export interface VoiceInputProviderFailed {\n    readonly code: \'provider-failed\';\n    readonly detail: string;\n}',
+  },
+  {
+    name: 'VoiceInputProviderUnavailable',
+    declaration: 'export interface VoiceInputProviderUnavailable {\n    readonly code: \'provider-unavailable\';\n    readonly detail: string;\n}',
+  },
+  {
+    name: 'VoiceInputProviderUnconfigured',
+    declaration: 'export interface VoiceInputProviderUnconfigured {\n    readonly code: \'provider-unconfigured\';\n    readonly detail: string;\n}',
+  },
+  {
+    name: 'VoiceInputRejected',
+    declaration: 'export interface VoiceInputRejected<E extends VoiceInputFailure> {\n    readonly ok: false;\n    readonly error: E;\n}',
+  },
+  {
+    name: 'VoiceInputSuccess',
+    declaration: 'export interface VoiceInputSuccess<T> {\n    readonly ok: true;\n    readonly value: T;\n}',
+  },
+  {
+    name: 'VoiceInputTranscribeRequest',
+    declaration: 'export interface VoiceInputTranscribeRequest {\n    readonly mediaType: TranscriptionAudioFormat;\n    readonly data: string;\n    readonly language?: string;\n}',
+  },
+  {
+    name: 'VoiceInputTranscribeResult',
+    declaration: 'export type VoiceInputTranscribeResult = VoiceInputSuccess<VoiceInputTranscribeValue> | VoiceInputRejected<VoiceInputFailure>;',
+  },
+  {
+    name: 'VoiceInputTranscribeValue',
+    declaration: 'export interface VoiceInputTranscribeValue {\n    readonly text: string;\n    readonly language?: string;\n}',
   },
   {
     name: 'WebBootEntry',

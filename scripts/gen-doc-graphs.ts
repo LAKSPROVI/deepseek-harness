@@ -232,6 +232,22 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Owns local per-assistant-message feedback, lifecycle and target validation, per-item compare-and-set, and the Host unary Remote contract without entering Session history or telemetry.',
   },
   {
+    key: 'transcription',
+    pkg: 'transcription',
+    title: 'Speech-to-text seam',
+    mode: 'seam',
+    implementations: ['transcription-groq'],
+    consumers: ['voice-input'],
+    note: 'Owns provider registration, execution-time selection, the audio-byte ceiling, and transcript trimming; audio stays transient and never becomes durable or model-visible data.',
+  },
+  {
+    key: 'voiceInput',
+    pkg: 'voice-input',
+    title: 'Browser-facing voice transcription',
+    mode: 'core',
+    note: 'Decodes one base64 upload, delegates every transcription policy to the seam, and answers a closed business failure union over the Host unary Remote contract.',
+  },
+  {
     key: 'workspaceRegistry',
     pkg: 'workspace',
     title: 'Workspace entity registry',
