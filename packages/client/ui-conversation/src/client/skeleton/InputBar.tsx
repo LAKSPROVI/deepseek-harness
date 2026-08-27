@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { ChangeEvent, CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
   IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
@@ -100,6 +100,7 @@ export function InputBar({
     if (notice?.level === 'error') showToast(notice.text)
   }, [notice, showToast])
   const cardRef = useRef<HTMLDivElement | null>(null)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   // The Access seat's data: the host-computed permissions projection
@@ -243,6 +244,12 @@ export function InputBar({
   }, [addImages, attachments, imageLimits, showToast, t])
 
   const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
+  const onPickImages = (event: ChangeEvent<HTMLInputElement>): void => {
+    const files = Array.from(event.currentTarget.files ?? [])
+    // Clearing lets the browser emit change when the same file is picked again.
+    event.currentTarget.value = ''
+    intakeImages(files)
+  }
 
   // The keymap handlers read live bar state through this ref so the editor
   // registration survives re-renders without re-arming per keystroke.
@@ -446,6 +453,30 @@ export function InputBar({
                 onClick={onToggleCommandMenu}
               >
                 <IconPlusOutline16 size={14} />
+              </button>
+            </Tooltip>
+            <input
+              ref={imageInputRef}
+              className={css.imageInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              tabIndex={-1}
+              aria-hidden
+              onChange={onPickImages}
+            />
+            <Tooltip label={t('image.add')} side="top" delayMs={500}>
+              <button
+                type="button"
+                className={css.add}
+                aria-label={t('image.add')}
+                disabled={!canAcceptDrop}
+                onMouseDown={keepFocus}
+                onClick={() => { imageInputRef.current?.click() }}
+              >
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+                  <path d="M2.5 3.5h11v9h-11zM4.5 10l2.2-2.2 1.8 1.8 1.2-1.2 1.8 1.8M10.7 6.2h.1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
             </Tooltip>
             <div className={css.modes}>
