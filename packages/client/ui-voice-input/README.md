@@ -6,6 +6,8 @@ Push-to-talk voice input for the Web composer. The plugin contributes one microp
 
 This is a **presentation** package. It registers no tool, no prompt section, and no session event. Transcription itself belongs to [`@deepseek-ai/dsh-voice-input`](../../transcription/voice-input/README.md) and the transcription seam behind it; this package owns the recording gesture, the upload hop, and the failure copy.
 
+The client plugin activates from stable faces (`slots`, `remote`, and `locale`) and installs its composer contribution only when `remote.voiceInput` appears. Generated Remote namespaces are mounted asynchronously by `api-remotes`; treating `remote.voiceInput` as a static plugin injection turns valid startup ordering into a failed-plugin screen. The child injection scope is also withdrawn with the namespace during HMR.
+
 ## How one utterance travels
 
 A pointer press starts recording and a release sends it; keyboard activation toggles instead, because a keyboard cannot express "still holding" — Enter or Space starts, the next press sends. Both gestures land on the same start/stop pair, so the control is fully operable without a pointer.

@@ -30,8 +30,8 @@ export type { VoiceMediaType } from './audio.ts'
 /** Dictionary namespace owned by this plugin. */
 const NS = 'voiceInput'
 
-/** Required services: the seat's slot registry, the voiceInput Remote namespace, and the copy. */
-export const inject = ['slots', 'remote', 'remote.voiceInput', 'locale']
+/** Required services: stable Client faces; the voiceInput namespace arrives asynchronously. */
+export const inject = ['slots', 'remote', 'locale']
 
 /**
  * Client plugin body: register the `voiceInput` dictionaries and contribute
@@ -43,13 +43,21 @@ export const inject = ['slots', 'remote', 'remote.voiceInput', 'locale']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-voice-input: dictionaries')
 
-  ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
-    name: 'conversation.input.left',
-    id: 'voice-input',
-    order: 20,
-    locale: NS,
-    inject: (): VoiceInputInjected => ({
-      transcribe: (request, signal) => ctx.remote.voiceInput.transcribe(request, signal),
-    }),
-  }, VoiceInputButton))
+  // api-remotes mounts generated namespaces asynchronously. The desktop shell
+  // can finish its activation sweep before voiceInput exists, so making the
+  // namespace a static plugin injection turns normal startup ordering into a
+  // fatal "failed to load plugins" screen. Install the slot contribution in a
+  // child scope when the namespace appears; Cordis also disposes it if the
+  // namespace is withdrawn during HMR.
+  ctx.inject(['remote.voiceInput'], (scope: ClientContext) => {
+    scope.slots.inject('conversation.input.left', () => scope.slots.register({
+      name: 'conversation.input.left',
+      id: 'voice-input',
+      order: 20,
+      locale: NS,
+      inject: (): VoiceInputInjected => ({
+        transcribe: (request, signal) => scope.remote.voiceInput.transcribe(request, signal),
+      }),
+    }, VoiceInputButton))
+  })
 }

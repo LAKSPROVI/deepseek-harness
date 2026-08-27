@@ -68,8 +68,37 @@ describe('ui-voice-input browser plugin', () => {
     const b = await bench()
     await b.fiber.await()
 
+    expect(inject).toEqual(['slots', 'remote', 'locale'])
     expect(b.entry()).toMatchObject({ id: 'voice-input', order: 20, locale: 'voiceInput' })
     expect(b.entry()?.inject).toBeTypeOf('function')
+  })
+
+  it('activates before the voiceInput namespace and registers when it arrives', async () => {
+    const ctx = new Context()
+    class RemoteService extends Service {
+      constructor(serviceCtx: Context) {
+        super(serviceCtx, 'remote')
+      }
+    }
+    new RemoteService(ctx)
+    await ctx.plugin(SlotRegistry).await()
+    ctx.slots.register({
+      name: 'root',
+      children: { 'conversation.input.left': { kind: 'list', scope: 'session' } },
+    } as never, (() => null) as never)
+    ctx.provide('locale', new LocaleRuntime(ctx))
+
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    expect(ctx.slots.entries('conversation.input.left')).toHaveLength(0)
+
+    ctx.provide('remote.voiceInput', {
+      transcribe: () => Promise.resolve({ ok: true as const, value: { ok: true as const, value: { text: 'late' } } }),
+    })
+    await Promise.resolve()
+
+    expect(ctx.slots.entries('conversation.input.left')).toHaveLength(1)
+    await fiber.dispose()
   })
 
   it('carries a recorded utterance to the voiceInput Remote namespace', async () => {

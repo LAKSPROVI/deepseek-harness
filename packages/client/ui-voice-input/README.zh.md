@@ -6,6 +6,8 @@ Web composer 的按住说话语音输入。插件向会话 composer 的 `convers
 
 这是一个**表现层**包。它不注册工具、不注册 prompt 片段、不产生 session 事件。转写本身归 [`@deepseek-ai/dsh-voice-input`](../../transcription/voice-input/README.zh.md) 及其背后的 transcription seam；本包只拥有录音手势、上传这一跳，以及失败文案。
 
+客户端插件先依赖稳定的服务面（`slots`、`remote` 和 `locale`）启动，仅在 `remote.voiceInput` 出现后安装 composer 条目。`api-remotes` 异步挂载生成的 Remote 命名空间；把 `remote.voiceInput` 当作静态插件注入会把合法的启动顺序误判成插件加载失败。HMR 撤回命名空间时，子注入作用域也会随之释放。
+
 ## 一段录音的旅程
 
 指针按下开始录音、松开发送；键盘激活改为切换语义——键盘无法表达「仍在按住」，因此 Enter 或 Space 开始录音，再按一次发送。两种手势落在同一对 start/stop 上，所以该控件完全可以不用指针操作。
