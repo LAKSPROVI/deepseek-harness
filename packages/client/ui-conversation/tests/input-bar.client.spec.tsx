@@ -234,6 +234,25 @@ function attachmentOwner(slotCalls: readonly { key: string; owner: unknown }[]):
 }
 
 describe('image draft rail', () => {
+  it('opens the image picker and sends selected files through the shared intake path', () => {
+    const addImages = vi.fn(() => null)
+    const result = bench({ addImages })
+    const input = result.view.container.querySelector<HTMLInputElement>('input[type="file"]')!
+    const open = vi.spyOn(input, 'click')
+    const image = new File([Uint8Array.of(1, 2, 3)], 'pixel.png', { type: 'image/png' })
+
+    fireEvent.click(result.view.getByRole('button', { name: '添加图片' }))
+    expect(open).toHaveBeenCalledOnce()
+    expect(input.accept).toBe('image/png,image/jpeg,image/webp,image/gif')
+    expect(input.multiple).toBe(true)
+
+    fireEvent.change(input, { target: { files: [image] } })
+    fireEvent.change(input, { target: { files: [image] } })
+    expect(addImages).toHaveBeenNthCalledWith(1, [image])
+    expect(addImages).toHaveBeenNthCalledWith(2, [image])
+    expect(input.value).toBe('')
+  })
+
   it('collects clipboard files while preserving text from a mixed paste', () => {
     const addImages = vi.fn(() => null)
     const { textarea, shell } = bench({ addImages })
