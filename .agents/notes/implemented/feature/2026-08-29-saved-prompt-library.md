@@ -71,7 +71,7 @@ This keeps the feature inside the model-visible-implies-logged rule without a ne
 
 ## Testing
 
-Package contract tests cover Host registration and disposal through a memory provider, the duplicate-id and aggregate-limit rejections, count and per-field validation at and past each bound, draft composition into empty and occupied drafts with `submit` never called, the slash-prefix predicate, and the unavailable projection into the shared store. A real Loader composition test boots the Host half from a test-only `cordis.yml` and exercises namespace CRUD through `ctx.settings`.
+Package tests cover Host registration and disposal through a memory provider, duplicate-id and aggregate-limit rejections, count and per-field validation at and past each bound, controlled title/body editing and creation through the rendered settings form, draft composition into empty and occupied drafts with `submit` never called, the slash-prefix predicate, and the unavailable projection into the shared store. A real Loader composition test boots the Host half from a test-only `cordis.yml` and exercises namespace CRUD through `ctx.settings`.
 
 ## Consequences
 

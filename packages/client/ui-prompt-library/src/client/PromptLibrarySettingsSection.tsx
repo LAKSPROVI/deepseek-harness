@@ -86,7 +86,11 @@ export function PromptLibrarySettingsSection({
             <input
               value={draft.title}
               maxLength={MAX_PROMPT_TITLE_CHARS}
-              onChange={(event) => { setDraft(value => ({ ...value, title: event.currentTarget.value })); setLocalError(null) }}
+              onChange={(event) => {
+                const title = event.currentTarget.value
+                setDraft(value => ({ ...value, title }))
+                setLocalError(null)
+              }}
             />
           </label>
           <label className={css.label}>
@@ -95,7 +99,11 @@ export function PromptLibrarySettingsSection({
               value={draft.body}
               maxLength={MAX_PROMPT_BODY_CHARS}
               rows={8}
-              onChange={(event) => { setDraft(value => ({ ...value, body: event.currentTarget.value })); setLocalError(null) }}
+              onChange={(event) => {
+                const body = event.currentTarget.value
+                setDraft(value => ({ ...value, body }))
+                setLocalError(null)
+              }}
             />
           </label>
           {beginsWithSlashCommand(draft.body) && (
