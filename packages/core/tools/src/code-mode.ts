@@ -561,7 +561,7 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
               const result = parked.kind === 'post-result'
                 ? await scheduler.finalize(parked.exec, parked.result)
                 : scheduler.finish(parked.exec, parked.result)
-              if (!result.isError && result.content.some(block => block.type === 'image')) {
+              if (!result.isError && result.content.some(block => block.type === 'image' || block.type === 'file')) {
                 exec.deferContext(createUserMessage({
                   content: result.content,
                   source: { kind: 'plugin', plugin: 'tools-code-mode' },

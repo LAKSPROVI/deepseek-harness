@@ -3,27 +3,36 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import { AttachmentError } from './error.ts'
 import type {
+  FileAttachmentLimits,
+  FileAttachmentRef,
   ImageAttachmentLimits,
   ImageAttachmentRef,
   ImageRequestPolicy,
   RequestImageAttachment,
+  SaveFileAttachment,
   SaveImageAttachment,
+  StoredFileAttachment,
   StoredImageAttachment,
 } from './types.ts'
 
 export { AttachmentId, ImageVariantId } from './brand.ts'
-export { AttachmentError, isImageAdmissionError } from './error.ts'
-export type { AttachmentErrorCode, ImageAdmissionErrorCode } from './error.ts'
-export { admitEncodedImages } from './admission.ts'
+export { AttachmentError, isFileAdmissionError, isImageAdmissionError } from './error.ts'
+export type { AttachmentErrorCode, FileAdmissionErrorCode, ImageAdmissionErrorCode } from './error.ts'
+export { admitEncodedFiles, admitEncodedImages } from './admission.ts'
 export type {
   AttachmentId as AttachmentIdType,
+  EncodedFileAttachment,
   EncodedImageAttachment,
+  FileAttachmentLimits,
+  FileAttachmentRef,
   ImageAttachmentLimits,
   ImageAttachmentRef,
   ImageRequestPolicy,
   ImageMediaType,
   RequestImageAttachment,
+  SaveFileAttachment,
   SaveImageAttachment,
+  StoredFileAttachment,
   StoredImageAttachment,
 } from './types.ts'
 
@@ -41,6 +50,96 @@ export abstract class AttachmentStore extends Service {
 
   /** Deployment-resolved image policy used by authoritative and fast-path validation. */
   abstract readonly imageLimits: ImageAttachmentLimits
+
+  /** Deployment-resolved generic-file policy, absent when the provider only supports images. */
+  readonly fileLimits: FileAttachmentLimits | undefined = undefined
+
+  /**
+   * Validate one opaque file without persisting it.
+   * @param input - exact bytes and untrusted display metadata.
+   * @returns completion after the complete file admission policy succeeds.
+   */
+  async validateFile(input: SaveFileAttachment): Promise<void> {
+    void input
+    throw new AttachmentError(
+      'The mounted attachment provider does not support generic files.',
+      'FILE_ATTACHMENTS_UNSUPPORTED',
+    )
+  }
+
+  /** Validate generic-file count, aggregate bytes, and each exact byte length before writes. */
+  protected validateFileBatch(inputs: readonly SaveFileAttachment[]): void {
+    const limits = this.fileLimits
+    if (limits === undefined) {
+      throw new AttachmentError(
+        'The mounted attachment provider does not support generic files.',
+        'FILE_ATTACHMENTS_UNSUPPORTED',
+      )
+    }
+    if (inputs.length > limits.maxFilesPerMessage) {
+      throw new AttachmentError('File batch exceeds the configured file-count limit.', 'TOO_MANY_FILES')
+    }
+    let totalBytes = 0
+    for (const input of inputs) {
+      if (input.data.byteLength > limits.maxFileBytes) {
+        throw new AttachmentError('File exceeds the configured byte limit.', 'FILE_TOO_LARGE')
+      }
+      totalBytes += input.data.byteLength
+      if (!Number.isSafeInteger(totalBytes) || totalBytes > limits.maxMessageFileBytes) {
+        throw new AttachmentError('File batch exceeds the configured aggregate file-byte limit.', 'FILES_TOO_LARGE')
+      }
+    }
+  }
+
+  /**
+   * Validate one ordered file batch without persisting any member.
+   * @param inputs - opaque files in owning-message order.
+   * @returns completion after batch and per-file validation succeeds.
+   */
+  async validateFiles(inputs: readonly SaveFileAttachment[]): Promise<void> {
+    this.validateFileBatch(inputs)
+    for (const input of inputs) await this.validateFile(input)
+  }
+
+  /**
+   * Validate the complete ordered file batch before committing any member.
+   * @param inputs - opaque files in owning-message order.
+   * @returns durable references in the same order after every member succeeds.
+   */
+  async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]> {
+    await this.validateFiles(inputs)
+    const refs: FileAttachmentRef[] = []
+    for (const input of inputs) refs.push(await this.saveFile(input))
+    return refs
+  }
+
+  /**
+   * Validate and durably commit one opaque file without interpreting its bytes.
+   * @param input - exact bytes and untrusted display metadata.
+   * @returns the immutable content-addressed file reference.
+   */
+  saveFile(input: SaveFileAttachment): Promise<FileAttachmentRef> {
+    void input
+    return Promise.reject(new AttachmentError(
+      'The mounted attachment provider does not support generic files.',
+      'FILE_ATTACHMENTS_UNSUPPORTED',
+    ))
+  }
+
+  /**
+   * Read one opaque file and verify its digest and exact byte length.
+   * @param ref - durable reference from trusted session state.
+   * @param signal - optional cancellation for backend read and verification work.
+   * @returns exact verified bytes and the supplied reference.
+   */
+  readFile(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachment> {
+    signal?.throwIfAborted()
+    void ref
+    return Promise.reject(new AttachmentError(
+      'The mounted attachment provider does not support generic files.',
+      'FILE_ATTACHMENTS_UNSUPPORTED',
+    ))
+  }
 
   /**
    * Validate one image without persisting it.

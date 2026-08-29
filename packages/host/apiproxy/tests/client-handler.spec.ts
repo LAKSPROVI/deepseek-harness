@@ -56,6 +56,7 @@ function scriptedApi(overrides: {
       fork: r => ok(r, { sessionId: sid('s-fork') }),
       prompt: r => ok(r, { accepted: true as const }),
       attachment: r => ok(r, {
+        type: 'image' as const,
         attachment: { attachmentId: 'a' as never, mediaType: 'image/png', bytes: 1, width: 1, height: 1 },
         data: 'AA==',
       }),

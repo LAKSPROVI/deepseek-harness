@@ -13,6 +13,8 @@ import type {
   ToolCallBlock,
   ToolResultNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
+import { textOnlyFileText } from '@deepseek-ai/dsh-llm/content'
+import type { ContentBlock, FileBlock } from '@deepseek-ai/dsh-llm/types'
 import type {
   TrajectoryCellProps,
   TrajectorySourceBlock,
@@ -663,6 +665,34 @@ function finiteTime(time: number | null | undefined): number | null {
   return typeof time === 'number' && Number.isFinite(time) ? time : null
 }
 
+function fileBlock(value: unknown): FileBlock | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const block = value as Partial<FileBlock>
+  return block.type === 'file' ? block as FileBlock : undefined
+}
+
+function contentBlockText(block: ContentBlock): string | undefined {
+  switch (block.type) {
+    case 'text':
+      return block.text
+    case 'file':
+      return textOnlyFileText(block.attachment)
+    case 'tool-result': {
+      const text = block.content.map(contentBlockText).filter(value => value !== undefined).join('\n')
+      return text === '' ? undefined : text
+    }
+    default:
+      return undefined
+  }
+}
+
+function assistantBlockText(block: AssistantBlock): string | undefined {
+  if (block.kind === 'text') return block.text
+  if (block.kind !== 'other') return undefined
+  const file = fileBlock(block.block)
+  return file === undefined ? undefined : textOnlyFileText(file.attachment)
+}
+
 function expandAssistant(
   node: AssistantMessageNode,
   startIndex: number,
@@ -683,8 +713,10 @@ function expandAssistant(
     : durationSeconds(node.time, recordedStart ?? prevAbsTime)
   const nodeAbs = streaming ? null : finiteTime(node.time)
   const messageText = node.blocks
-    .filter(block => block.kind === 'text' && (!streaming || block.text !== ''))
-    .map(block => block.kind === 'text' ? block.text : '')
+    .flatMap((block) => {
+      const text = assistantBlockText(block)
+      return text === undefined || (streaming && text === '') ? [] : [text]
+    })
     .join('\n\n')
   const thinkingText = node.blocks
     .filter(block => block.kind === 'reasoning' && (!streaming || block.text !== ''))
@@ -791,11 +823,19 @@ function assistantSourceBlock(block: AssistantBlock): TrajectorySourceBlock {
       type: 'image',
       content: stringifySourceValue(block.attachment),
     }
+    case 'file': return {
+      type: 'file',
+      content: textOnlyFileText(block.attachment),
+    }
     case 'other': return sourceBlock(block.block)
   }
 }
 
 function sourceBlock(value: unknown): TrajectorySourceBlock {
+  const file = fileBlock(value)
+  if (file !== undefined) {
+    return { type: 'file', content: textOnlyFileText(file.attachment) }
+  }
   if (typeof value !== 'object' || value === null) {
     return { type: 'unknown', content: stringifySourceValue(value) }
   }
@@ -1058,9 +1098,8 @@ function summarizeResult(
     return { result: node.error?.code ?? 'error' }
   }
   for (const block of node.content) {
-    if (block.type === 'text' && typeof block.text === 'string' && block.text !== '') {
-      return { result: '', resultPreviewMarkdown: block.text }
-    }
+    const text = contentBlockText(block)
+    if (text !== undefined && text !== '') return { result: '', resultPreviewMarkdown: text }
   }
   return { result: 'No output' }
 }
@@ -1083,8 +1122,8 @@ function detailResult(node: ToolResultNode): string {
       : `${node.error.name}: ${node.error.code}`
   }
   const text = node.content
-    .filter(block => block.type === 'text' && typeof block.text === 'string')
-    .map(block => block.type === 'text' ? block.text : '')
+    .map(contentBlockText)
+    .filter(value => value !== undefined)
     .join('\n')
   if (text !== '') return text
   if (
@@ -1095,10 +1134,10 @@ function detailResult(node: ToolResultNode): string {
   return JSON.stringify(node.content, null, 2)
 }
 
-function detailContent(content: readonly { type: string; text?: string }[]): string {
+function detailContent(content: readonly ContentBlock[]): string {
   return content
-    .filter(block => block.type === 'text' && typeof block.text === 'string')
-    .map(block => block.text ?? '')
+    .map(contentBlockText)
+    .filter(value => value !== undefined)
     .join('\n')
 }
 
@@ -1110,16 +1149,17 @@ function detailReasoning(content: readonly { type: string; text?: string }[]): s
 }
 
 function previewContent(
-  content: readonly { type: string; text?: string }[],
+  content: readonly ContentBlock[],
 ): string | undefined {
   for (const block of content) {
-    if (block.type === 'text' && typeof block.text === 'string') return block.text
+    const text = contentBlockText(block)
+    if (text !== undefined) return text
   }
   return undefined
 }
 
 function previewContentProperty(
-  content: readonly { type: string; text?: string }[],
+  content: readonly ContentBlock[],
 ): Pick<TrajectoryCellProps, 'previewMarkdown'> {
   const previewMarkdown = previewContent(content)
   return previewMarkdown === undefined ? {} : { previewMarkdown }

@@ -2,10 +2,11 @@
  * Host-side session-log download: streams one ZIP archive whose files are the
  * sessions' stored artifact text verbatim plus every referenced media object.
  * The root artifact sits under its original base name (`session.jsonl`); each
- * subagent descendant under `subagents/<id>/<filename>`; each image referenced
- * by any included log under `media/<attachmentId>.<ext>` (content-addressed,
- * so one archive never duplicates a shared image). No manifest is written —
- * every file is byte-identical to the backend's durable artifact or attachment
+ * subagent descendant under `subagents/<id>/<filename>`; each attachment
+ * referenced by any included log under `media/` (content-addressed, so one
+ * archive never duplicates a shared object). Raster extensions come from
+ * verified media types; opaque files keep a safe display name or `.bin`. No
+ * manifest is written — every file is byte-identical to the durable artifact or attachment
  * store and self-describing through its own header line or media type. Before
  * each live session's artifact read, the SessionStore flush barrier makes the
  * current in-memory log durable; cold sessions need no barrier. Request abort
@@ -21,7 +22,9 @@
 
 import { Zip, ZipDeflate } from 'fflate'
 import type { Context } from '@deepseek-ai/cordis'
-import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type {
+  AttachmentStore, FileAttachmentRef, ImageAttachmentRef,
+} from '@deepseek-ai/dsh-attachment'
 import type { SessionLineageNode, SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
 import type { SessionId, SessionStore } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence, SessionRawArtifact } from '@deepseek-ai/dsh-session-persistence'
@@ -84,10 +87,15 @@ export async function flushLiveSessionLog(
   signal?.throwIfAborted()
 }
 
-/** One exported file: a stored artifact text or one referenced media object. */
+/** One exported file: a stored artifact text or one referenced attachment object. */
 export type SessionLogZipEntry =
   | { readonly path: string; readonly content: string }
   | { readonly path: string; readonly data: Uint8Array }
+
+/** One tagged durable reference named by an exported session log. */
+type ExportAttachmentRef =
+  | { readonly type: 'image'; readonly ref: ImageAttachmentRef }
+  | { readonly type: 'file'; readonly ref: FileAttachmentRef }
 
 /** Zip extension for each accepted raster media type. */
 const MEDIA_TYPE_EXTENSIONS: Record<ImageAttachmentRef['mediaType'], string> = {
@@ -97,24 +105,37 @@ const MEDIA_TYPE_EXTENSIONS: Record<ImageAttachmentRef['mediaType'], string> = {
   'image/gif': 'gif',
 }
 
-/**
- * The zip path for one media object: content-addressed by the opaque
- * attachment id so shared images land once and the id in the log maps back to
- * the archive entry without a manifest.
- * @param ref - the durable reference from a session log.
- * @returns the archive path.
- */
-function mediaEntryPath(ref: ImageAttachmentRef): string {
-  return `media/${String(ref.attachmentId)}.${MEDIA_TYPE_EXTENSIONS[ref.mediaType]}`
+/** One safe ZIP path segment preserving readable Unicode and ordinary filename punctuation. */
+function safeAttachmentSegment(value: string, fallback: string): string {
+  const segment = value.replace(/[\\/\u0000-\u001F\u007F<>:"|?*]/g, '_').trim()
+  return segment === '' || segment === '.' || segment === '..' ? fallback : segment
 }
 
 /**
- * Collect every image reference inside one content array, descending into
+ * Resolve the ZIP path for one referenced attachment. Raster extensions come
+ * from verified media types; opaque files keep only their sanitized display
+ * name and otherwise use `.bin`, without MIME sniffing.
+ * @param attachment - tagged durable reference from a session log.
+ * @returns one path below `media/`.
+ */
+function mediaEntryPath(attachment: ExportAttachmentRef): string {
+  const id = safeSessionIdSegment(String(attachment.ref.attachmentId)) || 'attachment'
+  if (attachment.type === 'image') {
+    return `media/${id}.${MEDIA_TYPE_EXTENSIONS[attachment.ref.mediaType]}`
+  }
+  const name = attachment.ref.name
+  return name === undefined
+    ? `media/${id}.bin`
+    : `media/${id}-${safeAttachmentSegment(name, 'attachment.bin')}`
+}
+
+/**
+ * Collect every attachment reference inside one content array, descending into
  * nested tool results the way the live attachment route does.
  * @param content - an event content array (or nested tool-result content).
  * @param refs - the dedupe map being filled (keyed by attachment id).
  */
-function collectImageRefs(content: unknown, refs: Map<string, ImageAttachmentRef>): void {
+function collectAttachmentRefs(content: unknown, refs: Map<string, ExportAttachmentRef>): void {
   if (!Array.isArray(content)) return
   const pending: unknown[] = []
   for (const item of content) pending.push(item)
@@ -122,9 +143,12 @@ function collectImageRefs(content: unknown, refs: Map<string, ImageAttachmentRef
     const value = pending.pop()
     if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
     const block = value as { type?: unknown; attachment?: unknown; content?: unknown }
-    if (block.type === 'image' && typeof block.attachment === 'object' && block.attachment !== null) {
-      const ref = block.attachment as ImageAttachmentRef
-      refs.set(String(ref.attachmentId), ref)
+    if ((block.type === 'image' || block.type === 'file')
+      && typeof block.attachment === 'object' && block.attachment !== null) {
+      const attachment = block.type === 'image'
+        ? { type: 'image' as const, ref: block.attachment as ImageAttachmentRef }
+        : { type: 'file' as const, ref: block.attachment as FileAttachmentRef }
+      refs.set(String(attachment.ref.attachmentId), attachment)
     }
     if (Array.isArray(block.content)) {
       for (const item of block.content) pending.push(item)
@@ -133,13 +157,13 @@ function collectImageRefs(content: unknown, refs: Map<string, ImageAttachmentRef
 }
 
 /**
- * Collect every image reference one session event carries, across the same
+ * Collect every attachment reference one session event carries, across the same
  * carriers the live attachment route scans (direct content, message content,
  * inserted messages, and completed assistant chunk blocks).
  * @param event - one parsed JSONL event object.
  * @param refs - the dedupe map being filled (keyed by attachment id).
  */
-function collectEventImageRefs(event: unknown, refs: Map<string, ImageAttachmentRef>): void {
+function collectEventAttachmentRefs(event: unknown, refs: Map<string, ExportAttachmentRef>): void {
   const data = (event as { data?: unknown }).data
   if (typeof data !== 'object' || data === null) return
   const carrier = data as {
@@ -148,23 +172,23 @@ function collectEventImageRefs(event: unknown, refs: Map<string, ImageAttachment
     inserted?: Array<{ content?: unknown }>
     chunk?: { type?: unknown; block?: unknown }
   }
-  collectImageRefs(carrier.content, refs)
-  if (carrier.message !== undefined) collectImageRefs(carrier.message.content, refs)
+  collectAttachmentRefs(carrier.content, refs)
+  if (carrier.message !== undefined) collectAttachmentRefs(carrier.message.content, refs)
   if (carrier.inserted !== undefined) {
-    for (const message of carrier.inserted) collectImageRefs(message.content, refs)
+    for (const message of carrier.inserted) collectAttachmentRefs(message.content, refs)
   }
-  if (carrier.chunk?.type === 'block-end') collectImageRefs([carrier.chunk.block], refs)
+  if (carrier.chunk?.type === 'block-end') collectAttachmentRefs([carrier.chunk.block], refs)
 }
 
 /**
- * Collect the distinct media references one stored artifact text names.
- * Lines that fail to parse cannot reference media and are skipped (the
+ * Collect the distinct attachment references one stored artifact text names.
+ * Lines that fail to parse cannot reference attachments and are skipped (the
  * artifact text itself is exported verbatim regardless).
  * @param content - the stored artifact text.
  * @returns the dedupe map keyed by attachment id.
  */
-function imageRefsInArtifact(content: string): Map<string, ImageAttachmentRef> {
-  const refs = new Map<string, ImageAttachmentRef>()
+function attachmentRefsInArtifact(content: string): Map<string, ExportAttachmentRef> {
+  const refs = new Map<string, ExportAttachmentRef>()
   for (const line of content.split('\n')) {
     if (line === '') continue
     let event: unknown
@@ -173,7 +197,7 @@ function imageRefsInArtifact(content: string): Map<string, ImageAttachmentRef> {
     } catch {
       continue
     }
-    collectEventImageRefs(event, refs)
+    collectEventAttachmentRefs(event, refs)
   }
   return refs
 }
@@ -204,10 +228,10 @@ export function sessionLogZipFilename(sessionId: string): string {
  * Yield the export entries in zip order: the preloaded root artifact first,
  * then every subagent descendant in lineage order (each flushed when live,
  * read from the persistence backend right before it is yielded, and dropped
- * after the consumer moves on), then every distinct media object referenced by any of
- * the included logs (read and verified from the attachment store, one archive
+ * after the consumer moves on), then every distinct attachment object referenced
+ * by any included log (read and verified from the attachment store, one archive
  * entry per attachment id). The host holds at most one descendant's artifact
- * text and one media object at a time beyond the root.
+ * text and one attachment object at a time beyond the root.
  * @param deps - the mounted export services (the caller answered 500 before this runs).
  * @param root - the already-read root artifact (read by the caller so the
  * missing-session path can answer cleanly before streaming starts).
@@ -223,9 +247,9 @@ export async function* sessionLogZipEntries(
   includeDescendants: boolean,
   signal?: AbortSignal,
 ): AsyncGenerator<SessionLogZipEntry> {
-  const media = new Map<string, ImageAttachmentRef>()
+  const media = new Map<string, ExportAttachmentRef>()
   const rememberMedia = (content: string): void => {
-    for (const [id, ref] of imageRefsInArtifact(content)) media.set(id, ref)
+    for (const [id, ref] of attachmentRefsInArtifact(content)) media.set(id, ref)
   }
   rememberMedia(root.content)
   yield { path: root.filename, content: root.content }
@@ -257,18 +281,20 @@ export async function* sessionLogZipEntries(
     signal?.throwIfAborted()
     yield* collect(lineage.descendants)
   }
-  for (const ref of media.values()) {
+  for (const attachment of media.values()) {
     signal?.throwIfAborted()
-    const stored = await deps.attachments.readImage(ref, signal)
+    const stored = attachment.type === 'image'
+      ? await deps.attachments.readImage(attachment.ref, signal)
+      : await deps.attachments.readFile(attachment.ref, signal)
     signal?.throwIfAborted()
-    yield { path: mediaEntryPath(ref), data: stored.data }
+    yield { path: mediaEntryPath(attachment), data: stored.data }
   }
 }
 
 /** How many code units of artifact text one zip push carries (bounded encode memory). */
 const PUSH_CHUNK_CODE_UNITS = 1 << 16
 
-/** How many bytes of media one zip push carries (bounded memory; images are already size-capped). */
+/** How many attachment bytes one ZIP push carries (bounded memory; admission already size-caps objects). */
 const PUSH_CHUNK_BYTES = 1 << 16
 
 /** Byte capacity retained by the response stream before ZIP production waits for pull. */

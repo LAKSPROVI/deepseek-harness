@@ -4,6 +4,54 @@ import type { AttachmentId, ImageVariantId } from './brand.ts'
 
 export type { AttachmentId } from './brand.ts'
 
+/** Durable, serializable reference to one immutable opaque file. */
+export interface FileAttachmentRef {
+  /** Opaque content-addressed identifier; never a filesystem path or bearer URL. */
+  attachmentId: AttachmentId
+  /** Normalized declared media type, or `application/octet-stream`. */
+  mediaType: string
+  /** Exact stored byte length. */
+  bytes: number
+  /** Optional sanitized display name; storage never interprets it as a path. */
+  name?: string
+}
+
+/** Deployment-resolved limits for generic-file admission. */
+export interface FileAttachmentLimits {
+  /** Maximum exact bytes accepted for one file. */
+  maxFileBytes: number
+  /** Maximum generic-file count accepted in one message. */
+  maxFilesPerMessage: number
+  /** Maximum aggregate generic-file bytes accepted in one message. */
+  maxMessageFileBytes: number
+}
+
+/** Base64-encoded generic-file upload accompanying one wire request. */
+export interface EncodedFileAttachment {
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Canonical base64 encoding of the exact file bytes. */
+  data: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+
+/** Request to validate and durably commit one opaque file. */
+export interface SaveFileAttachment {
+  /** Exact file bytes; providers must not execute, decode, or extract them. */
+  data: Uint8Array
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+
+/** Stored opaque bytes returned after reference and digest verification. */
+export interface StoredFileAttachment {
+  ref: FileAttachmentRef
+  data: Uint8Array
+}
+
 /** Raster image formats accepted by the version-one attachment path. */
 export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
 

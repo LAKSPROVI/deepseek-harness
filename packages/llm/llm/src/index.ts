@@ -29,7 +29,7 @@ import type { LlmCallConfig, LlmCallConfigAdapterDefaults } from './call-config.
 import { HarnessError, INVALID_CREDENTIAL_CODE } from './error.ts'
 import { normalizeLlmFailure } from './adapter-failure.ts'
 import { normalizeApiKey } from './api-key.ts'
-import { contentHasImage, projectImagesForTextModel } from './content.ts'
+import { contentNeedsModalityFallback, projectUnsupportedModalities } from './content.ts'
 
 export * from './attribution.ts'
 export * from './brand.ts'
@@ -928,11 +928,24 @@ export class LlmRuntime extends Service {
           ? deepFreeze({ ...options, ...resolvedConfig })
           : { ...options, ...resolvedConfig }
       const projectedOptions = modelInfo.inputModalities !== undefined
-        && !modelInfo.inputModalities.includes('image')
-        && resolvedOptions.messages.some(message => contentHasImage(message.content))
+        && resolvedOptions.messages.some(message => (
+          contentNeedsModalityFallback(message.content, modelInfo.inputModalities as readonly ModelModality[])
+        ))
         ? Object.isFrozen(resolvedOptions)
-          ? deepFreeze({ ...resolvedOptions, messages: projectImagesForTextModel(resolvedOptions.messages) as Message[] })
-          : { ...resolvedOptions, messages: projectImagesForTextModel(resolvedOptions.messages) as Message[] }
+          ? deepFreeze({
+            ...resolvedOptions,
+            messages: projectUnsupportedModalities(
+              resolvedOptions.messages,
+              modelInfo.inputModalities,
+            ) as Message[],
+          })
+          : {
+            ...resolvedOptions,
+            messages: projectUnsupportedModalities(
+              resolvedOptions.messages,
+              modelInfo.inputModalities,
+            ) as Message[],
+          }
         : resolvedOptions
       const stream = dispatch(this.forAdapter(projectedOptions, adapter))
       iterator = stream[Symbol.asyncIterator]()

@@ -9,29 +9,35 @@ import { ImageLightbox } from '../ImageLightbox.tsx'
 import { attachmentRailLabels, dropOverlayLabels, lightboxLabels } from './labels.ts'
 import css from './ComposerAttachments.module.css'
 
-/** Rail item retaining its browser-owned attachment for callbacks. */
 interface ComposerRailItem extends AttachmentRailItem {
-  attachment: ComposerAttachment
+  attachment: Extract<ComposerAttachment, { kind: 'image' }>
 }
 
-/** Draft-image rail, document drop target, and original-image preview slot entry. */
+/** Draft attachment rail, document drop target, and image preview slot entry. */
 export function ComposerAttachments({
-  attachments, canAcceptDrop, onAddImages, onRemoveImage, dropLimits, t,
+  attachments, canAcceptDrop, intakeAttachments, onRemoveAttachment, dropLimits, t,
 }: ComposerAttachmentsProps) {
-  const [preview, setPreview] = useState<ComposerAttachment | null>(null)
+  const images = useMemo(
+    () => attachments.filter((item): item is Extract<ComposerAttachment, { kind: 'image' }> => item.kind === 'image'),
+    [attachments],
+  )
+  const files = useMemo(
+    () => attachments.filter((item): item is Extract<ComposerAttachment, { kind: 'file' }> => item.kind === 'file'),
+    [attachments],
+  )
+  const [preview, setPreview] = useState<Extract<ComposerAttachment, { kind: 'image' }> | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const dragDepth = useRef(0)
   const closePreview = useCallback(() => { setPreview(null) }, [])
 
   useEffect(() => {
-    if (preview !== null && !attachments.some(attachment => attachment.id === preview.id)) setPreview(null)
-  }, [attachments, preview])
+    if (preview !== null && !images.some(image => image.id === preview.id)) setPreview(null)
+  }, [images, preview])
 
   useEffect(() => {
     const fileTransfer = (event: globalThis.DragEvent): DataTransfer | null => {
-      const dataTransfer = event.dataTransfer
-      if (dataTransfer === null || !dataTransfer.types.includes('Files')) return null
-      return dataTransfer
+      const transfer = event.dataTransfer
+      return transfer !== null && transfer.types.includes('Files') ? transfer : null
     }
     const reset = (): void => {
       dragDepth.current = 0
@@ -44,25 +50,22 @@ export function ComposerAttachments({
       setDragActive(true)
     }
     const onDragOver = (event: globalThis.DragEvent): void => {
-      const dataTransfer = fileTransfer(event)
-      if (dataTransfer === null) return
+      const transfer = fileTransfer(event)
+      if (transfer === null) return
       event.preventDefault()
-      dataTransfer.dropEffect = canAcceptDrop ? 'copy' : 'none'
+      transfer.dropEffect = canAcceptDrop ? 'copy' : 'none'
     }
     const onDragLeave = (event: globalThis.DragEvent): void => {
       if (fileTransfer(event) === null) return
       dragDepth.current = Math.max(0, dragDepth.current - 1)
       if (dragDepth.current === 0) setDragActive(false)
-      const leftViewport = event.clientX <= 0 || event.clientY <= 0
-        || event.clientX >= window.innerWidth || event.clientY >= window.innerHeight
-      if ((event.target === document.documentElement || event.target === document.body) && leftViewport) reset()
     }
     const onDrop = (event: globalThis.DragEvent): void => {
-      const dataTransfer = fileTransfer(event)
-      if (dataTransfer === null) return
+      const transfer = fileTransfer(event)
+      if (transfer === null) return
       event.preventDefault()
       reset()
-      if (canAcceptDrop) onAddImages([...dataTransfer.files])
+      if (canAcceptDrop) intakeAttachments([...transfer.files])
     }
     document.addEventListener('dragenter', onDragEnter)
     document.addEventListener('dragover', onDragOver)
@@ -76,32 +79,45 @@ export function ComposerAttachments({
       document.removeEventListener('drop', onDrop)
       window.removeEventListener('dragend', reset)
     }
-  }, [canAcceptDrop, onAddImages])
+  }, [canAcceptDrop, intakeAttachments])
 
-  const railItems = useMemo<ComposerRailItem[]>(() => attachments.map(attachment => ({
+  const railItems = useMemo<ComposerRailItem[]>(() => images.map(attachment => ({
     id: attachment.id,
     previewUrl: attachment.previewUrl,
     alt: attachment.file.name || t('image.pending'),
     removeLabel: t('image.remove', { name: attachment.file.name }),
     attachment,
-  })), [attachments, t])
+  })), [images, t])
 
   return (
     <>
-      {dragActive && (
-        <DropOverlay
-          disabled={!canAcceptDrop}
-          labels={dropOverlayLabels(t, canAcceptDrop, dropLimits)}
-        />
-      )}
-      {railItems.length > 0 && (
+      {dragActive && <DropOverlay disabled={!canAcceptDrop} labels={dropOverlayLabels(t, canAcceptDrop, dropLimits)} />}
+      {(railItems.length > 0 || files.length > 0) && (
         <div className={css.rail}>
-          <AttachmentRail
-            items={railItems}
-            labels={attachmentRailLabels(t)}
-            onOpen={(item) => { setPreview(item.attachment) }}
-            onRemove={(item) => { onRemoveImage(item.attachment.id) }}
-          />
+          {railItems.length > 0 && (
+            <AttachmentRail
+              items={railItems}
+              labels={attachmentRailLabels(t)}
+              onOpen={(item) => { setPreview(item.attachment) }}
+              onRemove={(item) => { onRemoveAttachment(item.attachment.id) }}
+            />
+          )}
+          {files.length > 0 && (
+            <div className={css.files} role="group" aria-label={t('file.pending')}>
+              {files.map(file => (
+                <div key={file.id} className={css.fileCard}>
+                  <span className={css.fileIcon} aria-hidden>📄</span>
+                  <span className={css.fileName} title={file.file.name}>{file.file.name || t('file.unnamed')}</span>
+                  <button
+                    type="button"
+                    className={css.fileRemove}
+                    aria-label={t('file.remove', { name: file.file.name || t('file.unnamed') })}
+                    onClick={() => { onRemoveAttachment(file.id) }}
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {preview !== null && (

@@ -3,10 +3,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
-import type { MessageImagesProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { MessageAttachmentsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { ImageGallery, MessageImage } from '../src/MessageImage.tsx'
 import type { MessageImageLabels } from '../src/MessageImage.tsx'
-import { MessageImages } from '../src/client/MessageImages.tsx'
+import { MessageAttachments } from '../src/client/MessageAttachments.tsx'
 
 afterEach(cleanup)
 
@@ -158,56 +158,105 @@ describe('ImageGallery', () => {
   })
 
   it('renders the conversation slot entry with translated labels', async () => {
-    const t = ((key: string, params?: Readonly<Record<string, unknown>>) => {
-      const translated: Record<string, string> = {
-        'image.label': '图片',
-        'image.openOriginal': '查看原图',
-        'image.loading': '图片加载中…',
-        'image.loadFailed': '图片加载失败，点击重试',
-        'image.preview': '原图预览',
-        'image.closePreview': '关闭原图预览',
-      }
-      if (key === 'image.openOriginalLabel') {
-        const label = params?.label
-        return `${typeof label === 'string' ? label : ''}，点击查看原图`
-      }
-      return translated[key] ?? key
-    }) as MessageImagesProps['t']
-    const loadImage = vi.fn().mockResolvedValue('blob:slot-image')
-    const useSession: MessageImagesProps['useSession'] = () => {
-      throw new Error('MessageImages does not read the session snapshot')
-    }
-    const useInput: MessageImagesProps['useInput'] = () => {
-      throw new Error('MessageImages does not read the input snapshot')
-    }
-    const useSessions: MessageImagesProps['useSessions'] = () => {
-      throw new Error('MessageImages does not read the session list snapshot')
-    }
-    const useWorkspaces: MessageImagesProps['useWorkspaces'] = () => {
-      throw new Error('MessageImages does not read the workspace list snapshot')
-    }
-    const props: MessageImagesProps = {
-      sessionId: 'message-images-test' as MessageImagesProps['sessionId'],
-      useSession,
-      useSessions,
-      useWorkspaces,
-      useProjection: () => undefined,
-      useInput,
-      inputActions: {
-        setDraft: vi.fn(),
-        addImages: vi.fn(() => true),
-        removeImage: vi.fn(),
-        pruneImages: vi.fn(),
-        submit: vi.fn(),
-      },
-      images: [{ attachment }],
-      loadImage,
-      align: 'end',
-      t,
-    }
-    const view = render(<MessageImages {...props} />)
+    const loadAttachment = vi.fn().mockResolvedValue('blob:slot-image')
+    const view = render(<MessageAttachments {...slotProps({
+      attachments: [{ kind: 'image', attachment }],
+      loadAttachment,
+    })} />)
     await waitFor(() => { expect(view.getByAltText('history.png')).toBeTruthy() })
     expect(view.getByRole('button', { name: 'history.png，点击查看原图' })).toBeTruthy()
     expect(view.container.querySelector('[data-align="end"]')).not.toBeNull()
+  })
+})
+
+const fileAttachment = {
+  attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
+  mediaType: 'application/octet-stream',
+  bytes: 2048,
+  name: 'contract.pdf',
+}
+
+function slotProps(
+  owner: Pick<MessageAttachmentsProps, 'attachments' | 'loadAttachment'>,
+): MessageAttachmentsProps {
+  const t = ((key: string, params?: Readonly<Record<string, unknown>>) => {
+    const translated: Record<string, string> = {
+      'image.label': '图片',
+      'image.openOriginal': '查看原图',
+      'image.loading': '图片加载中…',
+      'image.loadFailed': '图片加载失败，点击重试',
+      'image.preview': '原图预览',
+      'image.closePreview': '关闭原图预览',
+      'file.unnamed': '未命名文件',
+    }
+    if (key === 'image.openOriginalLabel') {
+      const label = params?.label
+      return `${typeof label === 'string' ? label : ''}，点击查看原图`
+    }
+    return translated[key] ?? key
+  }) as MessageAttachmentsProps['t']
+  return {
+    sessionId: 'message-attachments-test' as MessageAttachmentsProps['sessionId'],
+    useSession: () => { throw new Error('MessageAttachments does not read the session snapshot') },
+    useSessions: () => { throw new Error('MessageAttachments does not read the session list snapshot') },
+    useWorkspaces: () => { throw new Error('MessageAttachments does not read the workspace list snapshot') },
+    align: 'end',
+    t,
+    ...owner,
+  } as unknown as MessageAttachmentsProps
+}
+
+describe('MessageAttachments', () => {
+  it('downloads an opaque historical file through the session-authorized loader', async () => {
+    const loadAttachment = vi.fn().mockResolvedValue('blob:durable-file')
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const view = render(<MessageAttachments {...slotProps({
+      attachments: [{ kind: 'file', attachment: fileAttachment }],
+      loadAttachment,
+    })} />)
+
+    const card = view.getByRole('button', { name: /contract\.pdf/ })
+    expect(view.container.querySelector('img')).toBeNull()
+    expect(card.textContent).toContain('application/octet-stream')
+
+    fireEvent.click(card)
+    await waitFor(() => { expect(click).toHaveBeenCalled() })
+    expect(loadAttachment).toHaveBeenCalledWith(fileAttachment)
+    click.mockRestore()
+  })
+
+  it('ignores another click while an authorized file download is pending', async () => {
+    let settle!: (url: string) => void
+    const loadAttachment = vi.fn(() => new Promise<string>((resolve) => { settle = resolve }))
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const view = render(<MessageAttachments {...slotProps({
+      attachments: [{ kind: 'file', attachment: fileAttachment }],
+      loadAttachment,
+    })} />)
+
+    const card = view.getByRole('button', { name: /contract\.pdf/ })
+    fireEvent.click(card)
+    expect((card as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(card)
+    expect(loadAttachment).toHaveBeenCalledTimes(1)
+    settle('blob:pending-file')
+    await waitFor(() => { expect(click).toHaveBeenCalledTimes(1) })
+    expect((card as HTMLButtonElement).disabled).toBe(false)
+    click.mockRestore()
+  })
+
+  it('names an unnamed opaque file and keeps image groups separate from it', async () => {
+    const { name: _named, ...unnamed } = fileAttachment
+    const loadAttachment = vi.fn().mockResolvedValue('blob:mixed')
+    const view = render(<MessageAttachments {...slotProps({
+      attachments: [
+        { kind: 'image', attachment },
+        { kind: 'file', attachment: unnamed },
+      ],
+      loadAttachment,
+    })} />)
+
+    await waitFor(() => { expect(view.getByAltText('history.png')).toBeTruthy() })
+    expect(view.getByRole('button', { name: /未命名文件/ })).toBeTruthy()
   })
 })

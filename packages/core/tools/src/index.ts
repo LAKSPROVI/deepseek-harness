@@ -9,7 +9,7 @@ import z from '@deepseek-ai/schemastery'
 import { AnonymousEntries, NamedEntries, ScopedLayers, scopeOf, scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer, Scoped } from '@deepseek-ai/dsh-scope'
 import type { CallId, ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
-import { assertNever, deepFreeze, HarnessError } from '@deepseek-ai/dsh-llm'
+import { assertNever, deepFreeze, HarnessError, textOnlyFileText } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
 import type { JsonValue, UserMessage } from '@deepseek-ai/dsh-session'
@@ -624,7 +624,11 @@ function errorMessage(error: unknown): string {
 /** Derive one failure message from policy feedback without changing its rendered blocks. */
 function failureMessageFromContent(content: ContentBlock[]): string {
   const text = content
-    .map(block => block.type === 'text' ? block.text : `[${block.type} content]`)
+    .map(block => block.type === 'text'
+      ? block.text
+      : block.type === 'file'
+        ? textOnlyFileText(block.attachment)
+        : `[${block.type} content]`)
     .join('\n')
   return text.length > 0 ? text : 'tool result blocked by post-execute policy'
 }
@@ -969,7 +973,6 @@ export class ToolRuntime extends Service {
         yield ctx.systemPrompt.section(this.sdkSection())
       }
     }.bind(this), 'tools.presentAs()')
-    // oxlint-disable-next-line typescript/no-misused-promises -- synchronous composite teardown; direct return preserves disposer identity
     return dispose
   }
 

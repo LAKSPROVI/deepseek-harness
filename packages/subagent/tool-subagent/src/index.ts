@@ -12,7 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { AgentOptions } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
 import { assertSubagentMaxDepth, settleRun } from '@deepseek-ai/dsh-subagent'
 import type { SubagentProvider, SubagentResult, SubagentRun } from '@deepseek-ai/dsh-subagent'
@@ -98,14 +98,39 @@ export const Config: z<Config> = z.object({
   maxDepth: z.union([z.natural().max(Number.MAX_SAFE_INTEGER), z.const('provider-managed' as const)]).default(3),
 })
 
-/** Render text blocks from the canonical JSON block array without trusting arbitrary values. */
+type FileAttachment = Extract<ContentBlock, { type: 'file' }>['attachment']
+
+/** Read a file attachment from a generic JSON block without trusting arbitrary values. */
+function jsonFileAttachment(value: JsonValue): FileAttachment | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value) || value.type !== 'file') return undefined
+  const attachment = value.attachment
+  if (typeof attachment !== 'object' || attachment === null || Array.isArray(attachment)
+    || typeof attachment.attachmentId !== 'string'
+    || typeof attachment.mediaType !== 'string'
+    || typeof attachment.bytes !== 'number'
+    || !Number.isSafeInteger(attachment.bytes)
+    || attachment.bytes < 0
+    || (attachment.name !== undefined && typeof attachment.name !== 'string')) return undefined
+  return attachment as unknown as FileAttachment
+}
+
+/** Render model-visible blocks from the canonical JSON block array. */
 function outputValueText(values: JsonValue[]): string {
-  return values
-    .filter((value): value is { type: 'text'; text: string } =>
-      typeof value === 'object' && value !== null && !Array.isArray(value)
-      && value.type === 'text' && typeof value.text === 'string')
-    .map(value => value.text)
-    .join('')
+  return values.flatMap((value) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return []
+    if (value.type === 'text' && typeof value.text === 'string') return [value.text]
+    const attachment = jsonFileAttachment(value)
+    return attachment === undefined ? [] : [textOnlyFileText(attachment)]
+  }).join('')
+}
+
+/** Project final or partial child output into model-visible text. */
+function contentText(blocks: readonly ContentBlock[]): string {
+  return blocks.flatMap((block) => {
+    if (block.type === 'text') return [block.text]
+    if (block.type === 'file') return [textOnlyFileText(block.attachment)]
+    return []
+  }).join('')
 }
 
 /** Settle pending startup without rejecting the task producer contract. */
@@ -153,10 +178,7 @@ function withDiagnosticAndPartialText(error: string, result: SubagentResult): st
   const diagnostic = result.diagnostic === undefined
     ? ''
     : `\nDiagnostic: ${result.diagnostic}`
-  const text = result.output
-    .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
-    .map(block => block.text)
-    .join('')
+  const text = contentText(result.output)
   const partial = text.length === 0
     ? ''
     : `\nPartial output before the run ended:\n${text}`

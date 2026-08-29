@@ -18,7 +18,7 @@ Peer products converge on an attachment rail above the editor, but their storage
 
 Pasted or dropped raster images are the Web composer's first consumer of a durable attachment capability. Unsent files remain temporary client-owned draft state. Every rich-content intake adapter decodes its wire blocks, proves route capability, and delegates the complete image batch to the attachment service before appending its message event. A provider adapter that produces structured image output must durably commit the output before appending its assistant block. Canonical user and assistant content contains only role-neutral `ImageBlock` references.
 
-Version one supports PNG, JPEG, WebP, and GIF paste and drag-and-drop, image-only or mixed prompts, historical user and assistant image rendering, and original-image preview on a single click (display and interaction specifics superseded in part by the [attachment-display alignment note](2026-08-11-web-attachment-display-alignment.md)). File picking, generic files, PDF, audio, video, image copying, and a custom context menu remain separate follow-ups.
+The image path supports PNG, JPEG, WebP, and GIF through the file picker, paste, and drag-and-drop, image-only or mixed prompts, historical user and assistant image rendering, and original-image preview on a single click (display and interaction specifics superseded in part by the [attachment-display alignment note](2026-08-11-web-attachment-display-alignment.md)). [Opaque generic files](2026-08-29-opaque-generic-file-attachments.md) use the same intake and durable store through a separate `FileBlock`; PDF interpretation, audio, video, image copying, and a custom context menu remain separate follow-ups.
 
 ### Product behavior
 
@@ -56,15 +56,13 @@ interface ChatStoreState {
 
 interface InputState {
   draft: string
-  imageIds: readonly DraftAttachmentId[]
+  attachmentIds: readonly DraftAttachmentId[]
 }
 
-interface ComposerAttachment {
-  kind: 'image'
-  id: DraftAttachmentId
-  file: File
-  previewUrl: string
-}
+type ComposerAttachment =
+  | { kind: 'image'; id: DraftAttachmentId; file: File; previewUrl: string }
+  | { kind: 'file'; id: DraftAttachmentId; file: File }
+
 ```
 
 This split uses the session provide channel's input hook and actions as the single subscription path for live composer state while keeping non-serializable browser objects out of persisted JSON. Only the plain-text draft mirror uses `localStorage`; attachment identifiers, browser `File` objects, and object URLs remain scoped to the live session input shell. Unsent images therefore do not survive reload or session-scope disposal. A Workspace switch moves a mixed text-and-image draft only when the destination shell accepts the complete image batch; refusal leaves both parts with the source. A native client may stage input in an OS temporary directory, but it must treat that path exactly like the browser object URL: delete it when no longer needed and copy the bytes into the durable store before message acceptance.
@@ -140,7 +138,7 @@ Composer thumbnails and each `MessageImage` own ephemeral original-preview state
 
 ### Limits and trust boundaries
 
-Version one accepts PNG, JPEG, WebP, and GIF only. SVG and remote URLs are excluded. Source intake defaults are 32 MiB per image, 20 images and 100 MiB aggregate image bytes per message, 100 million decoded pixels per image, and 16384px on either side. The provider-independent master defaults to a 2048px long edge and 4 MiB safety cap. Provider request pixel and encoded-byte limits are separate route policies. These deployment-varying limits are validated backend configuration and enforced before persistence or request transmission. The client connection carrier has an independent configurable `maxRequestBodyBytes` cap, 160 MiB by default, and fails load if it cannot hold the aggregate source limit after base64 and envelope expansion. A body without a declared length is rejected when it crosses the cap rather than drained to its end.
+The specialized image path accepts PNG, JPEG, WebP, and GIF only; SVG and remote URLs never enter raster decoding. Source intake defaults are 20 MiB per image, 20 images and 200 MiB aggregate image bytes per message, 64 million decoded pixels per image, and 8192px on either side. The provider-independent master defaults to a 2048px long edge and 4 MiB safety cap. Generic files have an independent default of 20 files, 20 MiB each, and 200 MiB aggregate. Provider request pixel and encoded-byte limits are separate route policies. These deployment-varying limits are validated backend configuration and enforced before persistence or request transmission. The client connection carrier has an independent configurable `maxRequestBodyBytes` cap, 300 MiB by default, and fails load if it cannot hold the largest configured aggregate after base64 and envelope expansion. A body without a declared length is rejected when it crosses the cap rather than drained to its end.
 
 Malformed base64, unsupported or mismatched media, truncated image payloads, excess bytes, excess image count, excess pixels, excess per-side dimensions, missing objects, and integrity mismatches return stable structured failures. Original filenames are reduced to a display basename, control characters are removed, and no local path is logged or returned to the browser.
 
@@ -226,4 +224,4 @@ Rejected because tool renderers are pure, synchronous, and replayable. MCP prepa
 - Original preview decodes more pixels than the inline control displays. Pixel limits, one clicked preview, and object-URL disposal bound but do not eliminate transient browser memory.
 - Capability metadata may be missing or stale. Host preflight improves feedback, while adapter enforcement remains authoritative.
 - A future output provider may require authenticated retrieval before an assistant image can complete, adding latency and a new failure point. Persist-before-event ordering favors replay integrity.
-- File picking, generic files/PDF, audio/video, durable draft staging, image copying, custom context menus, output-provider certification, and reference-aware garbage collection remain independent designs.
+- PDF interpretation, audio/video, durable draft staging, image copying, custom context menus, output-provider certification, and reference-aware garbage collection remain independent designs. File picking and opaque generic files are owned by the [generic-file attachment decision](2026-08-29-opaque-generic-file-attachments.md).

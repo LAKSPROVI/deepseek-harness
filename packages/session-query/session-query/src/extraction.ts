@@ -1,5 +1,6 @@
 /** First-party semantic text extraction for session-query consumers. */
 
+import { textOnlyFileText } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
 /**
@@ -71,6 +72,8 @@ function blockText(block: SessionContentBlock): string[] {
       return [block.text]
     case 'reasoning':
       return []
+    case 'file':
+      return [textOnlyFileText(block.attachment)]
     case 'tool-call':
       return [block.name, block.arguments]
     case 'tool-result':

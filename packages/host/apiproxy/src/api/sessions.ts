@@ -5,7 +5,10 @@
  */
 
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
-import type { AttachmentIdType, ImageAttachmentLimits, ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
+import type {
+  AttachmentIdType, EncodedFileAttachment, FileAttachmentLimits, FileAttachmentRef,
+  ImageAttachmentLimits, ImageAttachmentRef, ImageMediaType,
+} from '@deepseek-ai/dsh-attachment'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
 import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
 // The pure-type outlet: api/ is browser-importable, and the package root's
@@ -19,6 +22,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionStateMap {
     sessionListMetadata: SessionListMetadata
     imageLimits: null
+    fileLimits: null
   }
   interface SessionProjectionMap {
     /**
@@ -36,6 +40,8 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
      * composed — clients skip the pre-check and let the host answer.
      */
     imageLimits: ImageAttachmentLimits
+    /** Generic-file admission limits enforced by the same prompt commit path. */
+    fileLimits: FileAttachmentLimits
   }
 }
 
@@ -87,10 +93,16 @@ export interface SessionProjectionsBlock {
   values: Partial<SessionProjectionMap>
 }
 
-/** Browser-submitted prompt content; the host promotes image bytes to durable references. */
+/** Browser-submitted prompt content; the host promotes encoded bytes to durable references. */
 export type PromptContentPart =
   | { type: 'text'; text: string }
   | { type: 'image'; mediaType: ImageMediaType; data: string; name?: string }
+  | ({ type: 'file' } & EncodedFileAttachment)
+
+/** Authenticated attachment bytes returned after session-log authorization. */
+export type SessionAttachmentValue =
+  | { type: 'image'; attachment: ImageAttachmentRef; data: string }
+  | { type: 'file'; attachment: FileAttachmentRef; data: string }
 
 /** Complete model selection for one session. */
 export interface ModelSelection {
@@ -356,9 +368,9 @@ export interface SessionsApi {
   }>):
   Promise<RpcResponse<{ accepted: true; command?: { kind: 'success'; text?: string } }>>
 
-  /** Reads one durable image after proving that this session's log references its id. */
+  /** Reads one durable image or file after proving that this session's log references its id. */
   attachment(request: RpcRequest<{ sessionId: SessionId; attachmentId: AttachmentIdType }>):
-  Promise<RpcResponse<{ attachment: ImageAttachmentRef; data: string }>>
+  Promise<RpcResponse<SessionAttachmentValue>>
 
   /**
    * Edits, removes, or strictly steers one pending queued occurrence on an ordinary session.

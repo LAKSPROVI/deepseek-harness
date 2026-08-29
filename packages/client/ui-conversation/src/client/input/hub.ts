@@ -9,7 +9,7 @@
  * real host entity, so the sink is one unconditional prompt path.
  */
 import type { ClientContext, ISessions, SessionBinding, SessionFace, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { InputTriggerController, SubmitImageAttachment, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import type { InputTriggerController, SubmitAttachment, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { queueReadFaceOf } from '../queue/store.ts'
 import type { ComposerKeyboard, DraftAttachmentId, SessionInputResolver, SessionInput } from './contract.ts'
@@ -27,12 +27,12 @@ interface ConversationAttachmentFace {
   sendSession(
     session: SessionFace,
     text: string,
-    imageIds: readonly DraftAttachmentId[],
+    attachmentIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
     signal?: AbortSignal,
   ): Promise<SubmitOutcome>
-  serializeDraftImages(imageIds: readonly DraftAttachmentId[]): Promise<readonly SubmitImageAttachment[]>
-  releaseDraftImage(id: DraftAttachmentId): void
+  serializeDraftAttachments(attachmentIds: readonly DraftAttachmentId[]): Promise<readonly SubmitAttachment[]>
+  releaseDraftAttachment(id: DraftAttachmentId): void
 }
 
 /** Session-addressed input facade registry (SessionInputResolver face + composer-layer extras). */
@@ -77,19 +77,19 @@ export class InputHub implements SessionInputResolver {
       inputTriggers: () => this.controller(actx),
       popup: () => this.popup(actx),
       queue: queueReadFaceOf(session),
-      defaultSink: (text, imageIds, mode, signal) => this.sink(session, text, imageIds, mode, signal),
+      defaultSink: (text, attachmentIds, mode, signal) => this.sink(session, text, attachmentIds, mode, signal),
       steerQueue: () => { void this.steerQueue(session, shell) },
-      commandImages: {
-        serialize: ids => this.conversation().serializeDraftImages(ids),
+      commandAttachments: {
+        serialize: ids => this.conversation().serializeDraftAttachments(ids),
         // Asymmetric with serialize on purpose: release settles AFTER the
         // submit RPC, where session teardown may already have unloaded the
         // conversation service (the same tolerance as the scope disposer
         // above); leaked preview URLs then die with the document.
         release: (ids) => {
           const conversation = this.rootCtx.get('conversation') as ConversationAttachmentFace | undefined
-          for (const imageId of ids) conversation?.releaseDraftImage(imageId)
+          for (const attachmentId of ids) conversation?.releaseDraftAttachment(attachmentId)
         },
-        unsupportedNotice: token => this.t('command.imagesUnsupported', {
+        unsupportedNotice: token => this.t('command.attachmentsUnsupported', {
           command: token.trim().replace(/^\//u, ''),
         }),
       },
@@ -110,11 +110,11 @@ export class InputHub implements SessionInputResolver {
       ]
       return () => {
         for (const off of offs) off()
-        const drafts = shell.snapshot.imageIds
+        const drafts = shell.snapshot.attachmentIds
         shell.dispose()
         this.shells.delete(id)
         const conversation = this.rootCtx.get('conversation') as ConversationAttachmentFace | undefined
-        for (const imageId of drafts) conversation?.releaseDraftImage(imageId)
+        for (const attachmentId of drafts) conversation?.releaseDraftAttachment(attachmentId)
       }
     }, 'conversation.input: session shell')
     return shell
@@ -165,12 +165,12 @@ export class InputHub implements SessionInputResolver {
   private sink(
     session: SessionFace,
     text: string,
-    imageIds: readonly DraftAttachmentId[],
+    attachmentIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
     signal: AbortSignal,
   ): Promise<SubmitOutcome> {
-    if (text === '' && imageIds.length === 0) return Promise.resolve({ kind: 'success' })
-    return this.conversation().sendSession(session, text, imageIds, mode, signal)
+    if (text === '' && attachmentIds.length === 0) return Promise.resolve({ kind: 'success' })
+    return this.conversation().sendSession(session, text, attachmentIds, mode, signal)
   }
 
   /**

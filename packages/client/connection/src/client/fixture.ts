@@ -20,7 +20,9 @@ import type {
   ToolResultMessage,
   UserMessage,
 } from '@deepseek-ai/dsh-llm'
-import type { AttachmentIdType, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type {
+  AttachmentIdType, FileAttachmentRef, ImageAttachmentRef,
+} from '@deepseek-ai/dsh-attachment'
 import type {
   SessionEvent,
   SessionId,
@@ -33,7 +35,8 @@ import type { CommandDescriptor, CommandExecution, CommandResult } from '@deepse
 import { deriveEventMessage, foldSurface } from '@deepseek-ai/dsh-session/surface'
 import type {
   ApiProxy, ClientRequest, ClientResponse, HistoryEntry, HostFrame, MuxFrame, RpcReceipt,
-  ModelProviderGroup, ModelSelection, RpcRequest, RpcResponse, RpcResult, ServerRequest, ServerResponse, SessionSummary,
+  ModelProviderGroup, ModelSelection, RpcRequest, RpcResponse, RpcResult, ServerRequest, ServerResponse,
+  SessionAttachmentValue, SessionSummary,
   ToolCallView, ToolEventView, ToolResultView, WorkspaceId, WorkspaceView,
 } from './api.ts'
 import type { RequestPayload, ResponseValue, RpcMethodMap } from '@deepseek-ai/dsh-host-apiproxy/api'
@@ -1444,6 +1447,8 @@ export interface FixtureOptions {
   empty?: boolean
   /** Reject every prompt before appending its user event. */
   rejectPrompt?: boolean
+  /** Expose a seeded durable prompt-library namespace to assembled Web tests. */
+  promptLibrary?: boolean
   /** Publish the Session but fail its Workspace account write. */
   failWorkspaceAttach?: boolean
   /** Publish and frame the Session, then throw instead of returning create. */
@@ -1534,9 +1539,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     session.sessionId,
     { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
   ]))
-  const attachments = new Map<string, { attachment: ImageAttachmentRef; data: string }>([[
+  const attachments = new Map<string, SessionAttachmentValue>([[
     String(FIXTURE_IMAGE_REF.attachmentId),
-    { attachment: FIXTURE_IMAGE_REF, data: FIXTURE_IMAGE_DATA },
+    { type: 'image', attachment: FIXTURE_IMAGE_REF, data: FIXTURE_IMAGE_DATA },
   ]])
   /** Credential store double: set/unset flip the describe badge, values never read back. */
   const fixtureCredentials = new Map<string, true>([
@@ -1555,6 +1560,23 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     ['my-agent', { trust: 'user', content: "- id: tool-read\n  name: '@deepseek-ai/dsh-tool-read'\n" }],
   ])
   let fixtureDefaultPreset = 'standard'
+  const promptLibraryValue = {
+    prompts: [
+      { id: 'fixture-review', title: 'Review change', body: 'Review this change for correctness and security.' },
+      { id: 'fixture-compact', title: 'Compact session', body: '/compact' },
+    ],
+  }
+  const promptLibrarySchema = {
+    uid: 16,
+    refs: {
+      3: { type: 'string', meta: { min: 1, max: 80, required: true } },
+      7: { type: 'string', meta: { min: 1, max: 120, required: true } },
+      11: { type: 'string', meta: { min: 1, max: 12000, required: true } },
+      12: { type: 'object', meta: { default: {} }, dict: { id: 3, title: 7, body: 11 } },
+      15: { type: 'array', meta: { default: [], max: 100 }, inner: 12 },
+      16: { type: 'object', meta: { default: {} }, dict: { prompts: 15 } },
+    },
+  }
   const nextTurn = new Map<SessionId, number>([[sid('fx-alpha'), 75]])
   let nextSession = 1
   let nextRpc = 1
@@ -1752,13 +1774,13 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         value: [
           { name: 'compact', description: 'fixture：压缩当前会话上下文' },
           { name: 'echo', description: 'fixture：回显参数', input: { hint: 'text to echo' } },
-          { name: 'goal', description: 'set or view the goal for a long-running task', input: { hint: '<objective>', images: true } },
+          { name: 'goal', description: 'set or view the goal for a long-running task', input: { hint: '<objective>', attachments: true } },
           { name: 'permission', description: 'Switch the permission preset (sandbox mode + approval policy)', input: { hint: '<preset>' } },
-          { name: 'plan', description: 'Enter or leave plan mode', input: { hint: '[off|message]', images: true } },
+          { name: 'plan', description: 'Enter or leave plan mode', input: { hint: '[off|message]', attachments: true } },
         ],
       }
     },
-    execute(id: SessionId, line: string, images: readonly unknown[] = []): RpcResult<CommandExecution | undefined> {
+    execute(id: SessionId, line: string, attachments: readonly unknown[] = []): RpcResult<CommandExecution | undefined> {
       const missing = requireGoalSession(id)
       if (missing !== undefined) return missing
       // Structured split mirroring the Host parser: name + verbatim rawInput
@@ -1766,20 +1788,18 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       const match = /^\/(\S+)((?:\s.*)?)$/.exec(line.trim())
       const name = match?.[1]
       const args = match?.[2] ?? ''
-      // Mirror the Host image policy AFTER command resolution, matching the
-      // executor's order (an unknown name answers undefined and logs no
-      // lifecycle): the declaration rejection covers every known command
-      // without `input.images`, and the two producer grammar rejections cover
-      // the declaring commands' control-only lines. The fixture stores no
-      // bytes, so an accepted batch is acknowledged and dropped.
+      // Mirror the Host attachment policy after command resolution. An unknown
+      // name answers undefined and logs no lifecycle; known commands either
+      // accept the complete envelope or reject it before the handler runs. The
+      // fixture stores no bytes, so an accepted batch is acknowledged and dropped.
       const known = ['permission', 'goal', 'compact', 'echo', 'plan']
-      if (images.length > 0 && name !== undefined && known.includes(name)) {
+      if (attachments.length > 0 && name !== undefined && known.includes(name)) {
         const rejection = name !== 'goal' && name !== 'plan'
-          ? `/${name} does not accept image attachments`
+          ? `/${name} does not accept attachments`
           : name === 'goal' && args.trim() === ''
-            ? 'Image attachments only accompany a goal objective: /goal <objective> or /goal edit <objective>.'
+            ? 'Attachments only accompany a goal objective: /goal <objective> or /goal edit <objective>.'
             : name === 'plan' && args.trim() === 'off'
-              ? 'Image attachments cannot accompany /plan off.'
+              ? 'Attachments cannot accompany /plan off.'
               : undefined
         if (rejection !== undefined) {
           const commandId = `fx-cmd-${logOf(id).length}` as CommandId
@@ -2508,20 +2528,32 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         const userText = content.map(b => (b.type === 'text' ? b.text : '')).join('')
         const durable: ContentBlock[] = content.map((block) => {
           if (block.type === 'text') return block
-          const attachment: ImageAttachmentRef = {
-            attachmentId: `fixture:${randomUuid()}` as AttachmentIdType,
-            mediaType: block.mediaType,
-            bytes: Math.max(
-              1,
-              Math.floor(block.data.length * 3 / 4)
-              - (block.data.endsWith('==') ? 2 : block.data.endsWith('=') ? 1 : 0),
-            ),
-            width: 160,
-            height: 90,
+          const attachmentId = `fixture:${randomUuid()}` as AttachmentIdType
+          const bytes = Math.max(
+            1,
+            Math.floor(block.data.length * 3 / 4)
+            - (block.data.endsWith('==') ? 2 : block.data.endsWith('=') ? 1 : 0),
+          )
+          if (block.type === 'image') {
+            const attachment: ImageAttachmentRef = {
+              attachmentId,
+              mediaType: block.mediaType,
+              bytes,
+              width: 160,
+              height: 90,
+              ...block.name === undefined ? {} : { name: block.name },
+            }
+            attachments.set(String(attachmentId), { type: 'image', attachment, data: block.data })
+            return { type: 'image', attachment }
+          }
+          const attachment: FileAttachmentRef = {
+            attachmentId,
+            mediaType: block.mediaType ?? 'application/octet-stream',
+            bytes,
             ...block.name === undefined ? {} : { name: block.name },
           }
-          attachments.set(String(attachment.attachmentId), { attachment, data: block.data })
-          return { type: 'image', attachment }
+          attachments.set(String(attachmentId), { type: 'file', attachment, data: block.data })
+          return { type: 'file', attachment }
         })
         if (mode === 'steer' && replays.has(id)) {
           // Steering: the durable user/message lands inside the current turn; the replay continues.
@@ -3000,7 +3032,15 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           applies: 'live',
           secrets: [{ path: ['apiKey'], set: false }],
           revision: 0,
-        }],
+        }, ...options.promptLibrary ? [{
+          ns: 'prompt-library',
+          schema: promptLibrarySchema,
+          value: promptLibraryValue,
+          user: promptLibraryValue,
+          applies: 'live' as const,
+          secrets: [],
+          revision: 1,
+        }] : []],
       }),
       // Native opens are deterministic no-op successes in this fixture, as is host.openPath.
       openDocument: request => ok(request, { opened: true as const }),
@@ -3099,7 +3139,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           agentId: SessionId
           line?: string
           query?: string
-          images?: readonly unknown[]
+          encodedAttachments?: readonly unknown[]
           ref?: { id: string; revision: number }
           request?: { objective?: string; maxGoalRounds?: number }
         }
@@ -3107,7 +3147,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       const sessionId = args.agentId
       switch (endpoint) {
         case 'commands/list': return Promise.resolve(commandRemotes.list(sessionId))
-        case 'commands/execute': return Promise.resolve(commandRemotes.execute(sessionId, args.line as string, args.images ?? []))
+        case 'commands/execute': return Promise.resolve(commandRemotes.execute(sessionId, args.line as string, args.encodedAttachments ?? []))
         case 'fileReferences/list': return Promise.resolve(referenceRemotes.files(sessionId, args.query ?? ''))
         case 'sessionReferenceResolver/candidates': return Promise.resolve(referenceRemotes.sessions(sessionId, args.query ?? ''))
         case 'goals/create': return Promise.resolve(goalRemotes.create(sessionId, {
@@ -3279,6 +3319,7 @@ function fixtureOptionsFromLocation(): FixtureOptions {
   return {
     empty: query.get('fixture') === 'empty',
     rejectPrompt: query.get('fixturePrompt') === 'reject',
+    promptLibrary: query.get('fixturePromptLibrary') === '1',
     failWorkspaceAttach: query.get('fixtureAttach') === 'fail',
     dropSessionCreateResponse: query.get('fixtureSessionCreate') === 'drop-response',
     createFrameOrder: query.get('fixtureFrames') === 'workspace-first' ? 'workspace-first' : 'session-first',

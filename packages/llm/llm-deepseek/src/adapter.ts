@@ -8,7 +8,7 @@
  * @module dsh-llm-deepseek/adapter
  */
 
-import { attributionHeaders, contentHasImage, CONTEXT_WINDOW_EXCEEDED_CODE, isContextWindowExceededError, isQuotaExceededError, LlmAdapter, LlmError, offloadRequestImagesWithPolicy, ProviderRequestId, QUOTA_EXCEEDED_CODE, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { attributionHeaders, contentHasImage, CONTEXT_WINDOW_EXCEEDED_CODE, isContextWindowExceededError, isQuotaExceededError, LlmAdapter, LlmError, offloadRequestImagesWithPolicy, projectUnsupportedModalities, ProviderRequestId, QUOTA_EXCEEDED_CODE, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type {
   ContentBlock,
   GenerateOptions,
@@ -39,6 +39,9 @@ import { parseSse } from './sse.ts'
 import { translate } from './translate.ts'
 import type { WireError, WireRequest } from './types.ts'
 
+/** One request modality advertised by the direct-fetch adapter. */
+type DeepSeekInputModality = Extract<ModelModality, 'text' | 'image'>
+
 /** One optional model entry advertised by the direct-fetch adapter. */
 export interface DeepSeekCatalogModel {
   /** Wire model id accepted by the configured endpoint. */
@@ -52,7 +55,7 @@ export interface DeepSeekCatalogModel {
   /** Per-request output cap for this model; omission falls back to the profile's {@link DeepSeekConnectionOptions.maxTokens}. */
   maxTokens?: number
   /** Accepted request modalities; omission is text-only. */
-  inputModalities?: ModelModality[]
+  inputModalities?: DeepSeekInputModality[]
   /** Total-pixel budget for one deterministic request preview. */
   imagePixelBudget?: number
   /** Encoded-byte cap for one deterministic request preview. */
@@ -439,16 +442,17 @@ export class DeepSeekAdapter extends LlmAdapter {
     // never observes a configuration change and the next call re-resolves.
     // The key resolves *from this snapshot*, so an endpoint and the secret
     // sent to it can never come from different configuration generations.
-    const hasImages = options.messages.some(message => contentHasImage(message.content))
+    const model = connection.models.find(entry => entry.id === options.model)
+    const projectedMessages = projectUnsupportedModalities(
+      options.messages,
+      model?.inputModalities ?? ['text'],
+    )
+    const requestOptions = projectedMessages === options.messages
+      ? options
+      : { ...options, messages: [...projectedMessages] }
+    const hasImages = requestOptions.messages.some(message => contentHasImage(message.content))
     let attachments: AttachmentStore | undefined
     if (hasImages) {
-      const model = connection.models.find(entry => entry.id === options.model)
-      if (model?.inputModalities?.includes('image') !== true) {
-        throw new LlmError(
-          `DeepSeek model "${options.model}" does not accept image input.`,
-          'UNSUPPORTED_CONTENT',
-        )
-      }
       attachments = this.config.resolveAttachments?.()
       if (attachments === undefined) {
         throw new LlmError(
@@ -465,7 +469,7 @@ export class DeepSeekAdapter extends LlmAdapter {
       : AbortSignal.any([options.signal, consumer.signal])
     using watchdog = idleWatchdog(upstream, connection.streamIdleTimeoutMs, STREAM_IDLE_TIMEOUT_CODE)
     const iterator = this.request(
-      options,
+      requestOptions,
       watchdog.signal,
       connection,
       apiKey,

@@ -48,15 +48,26 @@ export interface TokenSpan {
   readonly draftRev: number
 }
 
-/** Base64-encoded composer image accompanying one claimed submit transaction. */
-export interface SubmitImageAttachment {
-  /** Declared media type; the host verifies it against the decoded bytes. */
-  readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
-  /** Canonical base64 encoding of the image bytes. */
-  readonly data: string
-  /** Optional display name; never interpreted as a path. */
-  readonly name?: string
-}
+/** Base64-encoded composer attachment accompanying one claimed submit transaction. */
+export type SubmitAttachment =
+  | {
+    readonly type: 'image'
+    /** Declared media type; the host verifies it against the decoded bytes. */
+    readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+    /** Canonical base64 encoding of the image bytes. */
+    readonly data: string
+    /** Optional display name; never interpreted as a path. */
+    readonly name?: string
+  }
+  | {
+    readonly type: 'file'
+    /** Declared media type; absent or malformed values use the binary fallback. */
+    readonly mediaType?: string
+    /** Canonical base64 encoding of the exact file bytes. */
+    readonly data: string
+    /** Optional display name; never interpreted as a path. */
+    readonly name?: string
+  }
 
 /**
  * Command-mode entry credential. Pure data + a closure method — no class, no
@@ -68,17 +79,17 @@ export interface CommandClaim {
   /** Ghost-text hint rendered while the claim's args are blank. */
   readonly hint?: string
   /**
-   * Whether composer image attachments may accompany this command's submit.
-   * Absent = the composer refuses to submit while images are attached, keeping
-   * the draft and the images in place behind a visible notice.
+   * Whether composer attachments may accompany this command's submit. Absent =
+   * the composer refuses to submit while attachments are present, keeping the
+   * draft and attachments in place behind a visible notice.
    */
-  readonly images?: boolean
+  readonly attachments?: boolean
   /**
    * Enter transaction, supplied by the source as a closure.
-   * @param images - serialized composer images accompanying the submission;
-   *   the composer passes them only when {@link CommandClaim.images} is true.
+   * @param attachments - serialized composer attachments in display order; the
+   *   composer passes them only when {@link CommandClaim.attachments} is true.
    */
-  submit(args: string, actx: ClientContext, images: readonly SubmitImageAttachment[]): Promise<SubmitOutcome>
+  submit(args: string, actx: ClientContext, attachments: readonly SubmitAttachment[]): Promise<SubmitOutcome>
 }
 
 /**
@@ -126,8 +137,8 @@ export type PickOutcome =
  * presence to accept or refuse a whole submission.
  */
 export interface SubmitEnvelope {
-  /** Number of image attachments accompanying the draft. */
-  readonly images: number
+  /** Number of attachments accompanying the draft, regardless of type. */
+  readonly attachments: number
 }
 
 /** Candidate request passed to a source. The signal is superseded on query change / menu close. */

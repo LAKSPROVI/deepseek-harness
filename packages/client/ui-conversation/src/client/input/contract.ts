@@ -33,12 +33,12 @@ export interface InputTarget {
 export interface SessionInput extends InputTarget {
   /** Single write path for draft text (all mutation rides machine events). */
   setDraft(text: string): void
-  /** Append ordered browser-owned image ids; busy admission phases refuse. */
-  addImages(ids: readonly DraftAttachmentId[]): boolean
-  /** Remove one browser-owned image id; busy admission phases refuse. */
-  removeImage(id: DraftAttachmentId): void
+  /** Append ordered browser-owned attachment ids; busy admission phases refuse. */
+  addAttachments(ids: readonly DraftAttachmentId[]): boolean
+  /** Remove one browser-owned attachment id; busy admission phases refuse. */
+  removeAttachment(id: DraftAttachmentId): void
   /** Drop ids whose browser-owned objects no longer exist. */
-  pruneImages(ids: readonly DraftAttachmentId[]): void
+  pruneAttachments(ids: readonly DraftAttachmentId[]): void
   /**
    * THE complexity sink: enter adjudication, submit transaction, and the default sink live inside.
    * @param mode - delivery intent retained through asynchronous adjudication and serialization.
@@ -73,12 +73,12 @@ export interface SessionInputResolver {
 export interface InputActions {
   /** Single public draft write path (full next draft; occurrence math via diff scan). */
   setDraft(text: string): void
-  /** Append ordered browser-owned image ids; busy admission phases refuse. */
-  addImages(ids: readonly DraftAttachmentId[]): boolean
-  /** Remove one browser-owned image id; busy admission phases refuse. */
-  removeImage(id: DraftAttachmentId): void
+  /** Append ordered browser-owned attachment ids; busy admission phases refuse. */
+  addAttachments(ids: readonly DraftAttachmentId[]): boolean
+  /** Remove one browser-owned attachment id; busy admission phases refuse. */
+  removeAttachment(id: DraftAttachmentId): void
   /** Drop ids whose browser-owned objects no longer exist. */
-  pruneImages(ids: readonly DraftAttachmentId[]): void
+  pruneAttachments(ids: readonly DraftAttachmentId[]): void
   /** Enter submission (adjudication / claim transaction / default sink inside). */
   submit(): void
 }
@@ -212,13 +212,13 @@ export interface InputMachineOptions {
 /** Published input state (the currency; per-session). */
 export interface InputState {
   readonly draft: string
-  /** Ordered runtime-only image ids; bytes and URLs stay in ConversationController. */
-  readonly imageIds: readonly DraftAttachmentId[]
+  /** Ordered runtime-only attachment ids; bytes and preview URLs stay in ConversationController. */
+  readonly attachmentIds: readonly DraftAttachmentId[]
   /** Monotonic draft revision (span CAS compares against this). */
   readonly draftRev: number
   readonly phase: 'plain' | 'adjudicating' | 'claimed' | 'submitting'
   /** Present exactly while claimed/submitting (claim snapshot during flight; submit closure withheld). */
-  readonly claim?: { readonly token: string; readonly hint?: string; readonly images?: boolean }
+  readonly claim?: { readonly token: string; readonly hint?: string; readonly attachments?: boolean }
   /** Reference occurrence table, sorted by offset. */
   readonly occurrences: readonly Occurrence[]
   /** Live paste-match attempt (absent when no paste is matchable). */

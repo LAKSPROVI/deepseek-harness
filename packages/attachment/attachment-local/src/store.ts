@@ -9,9 +9,13 @@ import {
   AttachmentId,
 } from '@deepseek-ai/dsh-attachment'
 import type {
+  FileAttachmentLimits,
+  FileAttachmentRef,
   ImageAttachmentLimits,
   ImageAttachmentRef,
+  SaveFileAttachment,
   SaveImageAttachment,
+  StoredFileAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
 import { normalizeImage } from './normalization.ts'
@@ -32,17 +36,32 @@ function displayName(value: string | undefined): string | undefined {
   // ordinary character, so path.basename would keep a Windows client's full
   // local path and leak it into the reference and the session log.
   const leaf = value.slice(Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\')) + 1)
-  const clean = leaf.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 255)
-  return clean === '' ? undefined : clean
+  const clean = leaf.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 255)
+  return clean === '' || clean === '.' || clean === '..' ? undefined : clean
+}
+
+const MEDIA_TYPE_PATTERN = /^[!#$%&'*+.^_`|~0-9a-z-]+\/[!#$%&'*+.^_`|~0-9a-z-]+$/
+const FILE_MEDIA_TYPE_FALLBACK = 'application/octet-stream'
+
+/** Normalize an untrusted declared media type without inspecting file bytes. */
+function fileMediaType(value: string | undefined): string {
+  const essence = value?.split(';', 1)[0]?.trim().toLowerCase()
+  return essence !== undefined && MEDIA_TYPE_PATTERN.test(essence)
+    ? essence
+    : FILE_MEDIA_TYPE_FALLBACK
 }
 
 function objectPath(root: string, sha256: string): string {
   return join(root, 'objects', sha256.slice(0, 2), sha256)
 }
 
-function ensureReference(ref: ImageAttachmentRef): string {
+type StoredObjectRef = Pick<FileAttachmentRef, 'attachmentId' | 'bytes'>
+
+function ensureReference(ref: StoredObjectRef): string {
   const match = ID_PATTERN.exec(String(ref.attachmentId))
-  if (match?.[1] === undefined) throw new AttachmentError('Attachment reference is invalid.', 'INVALID_ATTACHMENT_REF')
+  if (match?.[1] === undefined || !Number.isSafeInteger(ref.bytes) || ref.bytes < 0) {
+    throw new AttachmentError('Attachment reference is invalid.', 'INVALID_ATTACHMENT_REF')
+  }
   return match[1]
 }
 
@@ -175,19 +194,14 @@ async function ensureDurableHome(path: string): Promise<string> {
   return home
 }
 
-/**
- * Publish one already verified normalized image below a versioned attachment root.
- * @param root - absolute `DSH_HOME/attachments/v1` root.
- * @param prepared - deterministic normalized bytes and reference.
- * @returns durable content-addressed normalized image reference.
- */
-export async function commitPreparedImageFile(
+/** Publish exact verified bytes through the private atomic object path. */
+async function commitPreparedObject<T extends StoredObjectRef>(
   root: string,
-  prepared: PreparedImageFile,
-): Promise<ImageAttachmentRef> {
-  const normalized = prepared.data
-  const sha256 = ensureReference(prepared.ref)
-  if (digest(normalized) !== sha256 || normalized.byteLength !== prepared.ref.bytes) {
+  data: Uint8Array,
+  ref: T,
+): Promise<T> {
+  const sha256 = ensureReference(ref)
+  if (digest(data) !== sha256 || data.byteLength !== ref.bytes) {
     throw new AttachmentError('Prepared attachment bytes do not match their reference.', 'ATTACHMENT_CORRUPT')
   }
   const bucket = join(root, 'objects', sha256.slice(0, 2))
@@ -203,7 +217,7 @@ export async function commitPreparedImageFile(
   let handle
   try {
     handle = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600)
-    await handle.writeFile(normalized)
+    await handle.writeFile(data)
     await handle.sync()
     await handle.close()
     handle = undefined
@@ -213,7 +227,9 @@ export async function commitPreparedImageFile(
       /* v8 ignore next -- Private same-filesystem directories make EEXIST the only recoverable link race. */
       if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
       const existing = new Uint8Array(await readFile(target))
-      if (digest(existing) !== sha256) throw new AttachmentError('Stored attachment failed integrity verification.', 'ATTACHMENT_CORRUPT')
+      if (digest(existing) !== sha256 || existing.byteLength !== ref.bytes) {
+        throw new AttachmentError('Stored attachment failed integrity verification.', 'ATTACHMENT_CORRUPT')
+      }
     }
     // Persist the target entry and close a concurrent bucket-creation window
     // before the reference can reach a session checkpoint. The dedup path
@@ -236,9 +252,22 @@ export async function commitPreparedImageFile(
       },
     )
     if (error instanceof AttachmentError) throw error
-    throw new AttachmentError('Unable to persist image attachment.', 'ATTACHMENT_WRITE_FAILED', { cause: error })
+    throw new AttachmentError('Unable to persist attachment.', 'ATTACHMENT_WRITE_FAILED', { cause: error })
   }
-  return prepared.ref
+  return ref
+}
+
+/**
+ * Publish one already verified normalized image below a versioned attachment root.
+ * @param root - absolute `DSH_HOME/attachments/v1` root.
+ * @param prepared - deterministic normalized bytes and reference.
+ * @returns durable content-addressed normalized image reference.
+ */
+export function commitPreparedImageFile(
+  root: string,
+  prepared: PreparedImageFile,
+): Promise<ImageAttachmentRef> {
+  return commitPreparedObject(root, prepared.data, prepared.ref)
 }
 
 /**
@@ -258,6 +287,109 @@ export async function saveImageFile(
   return commitPreparedImageFile(root, await prepareImageFile(input, limits, policy))
 }
 
+/** Fully prepared opaque object, copied and verified before any batch write. */
+export interface PreparedFileAttachment {
+  /** Exact immutable snapshot whose digest is {@link ref.attachmentId}. */
+  data: Uint8Array
+  /** Durable reference describing {@link data}. */
+  ref: FileAttachmentRef
+}
+
+/**
+ * Validate and snapshot one opaque file without interpreting or persisting it.
+ * @param input - exact bytes and untrusted display metadata.
+ * @param limits - resolved generic-file admission policy.
+ * @returns copied bytes and canonical reference facts ready for atomic publication.
+ */
+export function prepareFileAttachment(
+  input: SaveFileAttachment,
+  limits: FileAttachmentLimits,
+): PreparedFileAttachment {
+  if (input.data.byteLength > limits.maxFileBytes) {
+    throw new AttachmentError('File exceeds the configured byte limit.', 'FILE_TOO_LARGE')
+  }
+  const data = new Uint8Array(input.data)
+  const sha256 = digest(data)
+  const name = displayName(input.name)
+  return {
+    data,
+    ref: {
+      attachmentId: AttachmentId(`sha256:${sha256}`),
+      mediaType: fileMediaType(input.mediaType),
+      bytes: data.byteLength,
+      ...(name === undefined ? {} : { name }),
+    },
+  }
+}
+
+/**
+ * Publish one prepared opaque file without decoding, executing, or extracting it.
+ * @param root - absolute `DSH_HOME/attachments/v1` root.
+ * @param prepared - copied exact bytes and canonical reference.
+ * @returns durable content-addressed file reference.
+ */
+export function commitPreparedFileAttachment(
+  root: string,
+  prepared: PreparedFileAttachment,
+): Promise<FileAttachmentRef> {
+  return commitPreparedObject(root, prepared.data, prepared.ref)
+}
+
+/**
+ * Validate, snapshot, and atomically publish one opaque file.
+ * @param root - absolute `DSH_HOME/attachments/v1` root.
+ * @param input - exact bytes and untrusted display metadata.
+ * @param limits - resolved generic-file admission policy.
+ * @returns durable content-addressed file reference.
+ */
+export function saveFileAttachment(
+  root: string,
+  input: SaveFileAttachment,
+  limits: FileAttachmentLimits,
+): Promise<FileAttachmentRef> {
+  return commitPreparedFileAttachment(root, prepareFileAttachment(input, limits))
+}
+
+/** Read exact object bytes after validating the opaque id, length, and digest. */
+async function readStoredObject(
+  root: string,
+  ref: StoredObjectRef,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  signal?.throwIfAborted()
+  const sha256 = ensureReference(ref)
+  let data: Uint8Array
+  try {
+    data = new Uint8Array(await readFile(objectPath(root, sha256), { signal }))
+  } catch (error) {
+    signal?.throwIfAborted()
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      throw new AttachmentError('Attachment object is missing.', 'ATTACHMENT_NOT_FOUND')
+    }
+    throw new AttachmentError('Unable to read attachment.', 'ATTACHMENT_READ_FAILED', { cause: error })
+  }
+  signal?.throwIfAborted()
+  if (data.byteLength !== ref.bytes || digest(data) !== sha256) {
+    throw new AttachmentError('Stored attachment failed integrity verification.', 'ATTACHMENT_CORRUPT')
+  }
+  return data
+}
+
+/**
+ * Read one opaque file and verify its exact byte length and content digest.
+ * @param root - absolute `DSH_HOME/attachments/v1` root.
+ * @param ref - durable content-addressed file reference.
+ * @param signal - optional cancellation for filesystem and verification work.
+ * @returns exact verified bytes and the supplied reference.
+ */
+export async function readFileAttachment(
+  root: string,
+  ref: FileAttachmentRef,
+  signal?: AbortSignal,
+): Promise<StoredFileAttachment> {
+  return { ref, data: await readStoredObject(root, ref, signal) }
+}
+
 /**
  * Read and verify one content-addressed image.
  * @param root - absolute `DSH_HOME/attachments/v1` root.
@@ -271,18 +403,7 @@ export async function readImageFile(
   ref: ImageAttachmentRef,
   signal?: AbortSignal,
 ): Promise<StoredImageAttachment> {
-  signal?.throwIfAborted()
-  const sha256 = ensureReference(ref)
-  let data: Uint8Array
-  try {
-    data = new Uint8Array(await readFile(objectPath(root, sha256), { signal }))
-  } catch (error) {
-    signal?.throwIfAborted()
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') throw new AttachmentError('Attachment object is missing.', 'ATTACHMENT_NOT_FOUND')
-    throw new AttachmentError('Unable to read image attachment.', 'ATTACHMENT_READ_FAILED', { cause: error })
-  }
-  signal?.throwIfAborted()
-  if (digest(data) !== sha256) throw new AttachmentError('Stored attachment failed integrity verification.', 'ATTACHMENT_CORRUPT')
+  const data = await readStoredObject(root, ref, signal)
   // The digest proves these are the exact bytes admission fully decoded, so
   // the read path only re-derives the header fields (no raster decode, no
   // per-request pixel amplification on history replay).

@@ -87,7 +87,43 @@ function assistantMessage(id: string, text: string) {
   }
 }
 
+const FILE_REF = {
+  attachmentId: 'sha256:0123456789abcdef' as never,
+  mediaType: 'application/pdf',
+  bytes: 42,
+  name: 'brief.pdf',
+} as const
+
 describe('Trajectory conversation Definitions', () => {
+  it('preserves file blocks in input and assistant nodes', () => {
+    const current = snapshot(assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'user/message', {
+        id: 'file-input',
+        role: 'user',
+        content: [{ type: 'file', attachment: FILE_REF }],
+        source: { kind: 'user' },
+      }),
+      at(3, 'step/start', { turn: 1, step: 1 }),
+      at(4, 'assistant/message', {
+        turn: 1,
+        step: 1,
+        message: {
+          id: 'file-output',
+          role: 'assistant',
+          content: [{ type: 'file', attachment: FILE_REF }],
+          source: { kind: 'model', provider: 'test', model: 'test' },
+        },
+      }),
+      at(5, 'step/end', { turn: 1, step: 1 }),
+    ]))
+
+    expect(current.eventNodes).toMatchObject([
+      { kind: 'user', content: [{ type: 'file', attachment: FILE_REF }] },
+      { kind: 'assistant', blocks: [{ kind: 'file', attachment: FILE_REF }] },
+    ])
+  })
+
   it('assembles streaming usage, preserves retry facts, and materializes interruption', () => {
     const value = assembler([
       at(1, 'turn/start', { turn: 1 }),

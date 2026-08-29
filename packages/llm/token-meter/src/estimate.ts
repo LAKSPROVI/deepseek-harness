@@ -6,6 +6,7 @@
  * @module @deepseek-ai/dsh-token-meter/estimate
  */
 
+import { textOnlyFileText } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, Message } from '@deepseek-ai/dsh-llm'
 import type { EpochHeader } from '@deepseek-ai/dsh-session'
 
@@ -30,6 +31,10 @@ export function estimateContent(blocks: readonly ContentBlock[]): number {
       case 'text':
       case 'reasoning':
         tokens += Math.ceil(block.text.length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
+        break
+      case 'file':
+        tokens += Math.ceil(textOnlyFileText(block.attachment).length / CHARS_PER_TOKEN)
+          + BLOCK_OVERHEAD
         break
       case 'tool-call':
         tokens += Math.ceil(block.name.length / CHARS_PER_TOKEN)

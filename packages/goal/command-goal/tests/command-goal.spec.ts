@@ -97,7 +97,7 @@ describe('@deepseek-ai/dsh-command-goal registration', () => {
     expect(test.ctx.commands.list(test.agent)).toContainEqual({
       name: 'goal',
       description: 'set or view the goal for a long-running task',
-      input: { hint: '[<objective>|clear|edit <objective>|pause|resume]', images: true },
+      input: { hint: '[<objective>|clear|edit <objective>|pause|resume]', attachments: true },
     })
     expect(test.ctx.commands.find(test.agent, 'goal')).toBeDefined()
 
@@ -262,17 +262,17 @@ describe('/goal image attachments', () => {
     })
   }
 
-  /** Run /goal with `count` composer images through the executor boundary. */
+  /** Run /goal with `count` composer attachments through the executor boundary. */
   async function runWithImages(test: Harness, suffix: string, count: number) {
-    const images = Array.from({ length: count }, (_, index) => ({
-      mediaType: 'image/png' as const, data: PNG, name: `ref-${index + 1}.png`,
+    const attachments = Array.from({ length: count }, (_, index) => ({
+      type: 'image' as const, mediaType: 'image/png' as const, data: PNG, name: `ref-${index + 1}.png`,
     }))
-    const execution = await test.ctx.commands.execute(test.agent, `/goal${suffix}`, images, new AbortController().signal)
+    const execution = await test.ctx.commands.execute(test.agent, `/goal${suffix}`, attachments, new AbortController().signal)
     if (execution === undefined) throw new Error('goal command was not registered')
     return execution.result
   }
 
-  it('submits one user followup carrying the admitted images ahead of the round prompt', async () => {
+  it('submits one user followup carrying the admitted attachments ahead of the round prompt', async () => {
     const test = await harness()
     provideStore(test)
     const followup = vi.fn()
@@ -286,7 +286,7 @@ describe('/goal image attachments', () => {
     }
     expect(message.source).toEqual({ kind: 'user' })
     expect(message.content.map(block => block.type)).toEqual(['image', 'image', 'text'])
-    expect(message.content.at(-1)).toEqual({ type: 'text', text: 'Reference images for the goal objective.' })
+    expect(message.content.at(-1)).toEqual({ type: 'text', text: 'Reference attachments for the goal objective.' })
     expect((message.content[0] as { attachment: { name: string } }).attachment.name).toBe('ref-1.png')
   })
 

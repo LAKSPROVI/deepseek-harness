@@ -10,7 +10,7 @@ import { makeTranslate, SlotTestRuntime } from '@deepseek-ai/dsh-client-test-run
 import type { QueuedMessage, SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 import { ComposerBlockRegistry } from '../src/client/input/blocks.ts'
 import { InputHub } from '../src/client/input/hub.ts'
-import { ConversationController, UnsupportedImageMediaTypeError } from '../src/client/service.ts'
+import { ConversationController } from '../src/client/service.ts'
 import { zh } from '../src/client/locales.ts'
 
 async function bench(readAttachment?: SessionFace['readAttachment']) {
@@ -88,13 +88,13 @@ describe('ConversationController', () => {
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:draft-1')
     const revoked = vi.spyOn(URL, 'revokeObjectURL').mockReturnValue(undefined)
     try {
-      const [attachment] = b.root.createDraftImages([
+      const [attachment] = b.root.createDraftAttachments([
         new File([new Uint8Array(4)], 'a.png', { type: 'image/png' }),
       ])
       if (attachment === undefined) throw new Error('draft attachment missing')
-      b.root.input.for(b.runtime.sessions.scope('s1')!).addImages([attachment.id])
+      b.root.input.for(b.runtime.sessions.scope('s1')!).addAttachments([attachment.id])
       await b.runtime.sessions.remove('s1')
-      expect(b.root.draftImages([attachment.id])).toEqual([])
+      expect(b.root.draftAttachments([attachment.id])).toEqual([])
       expect(revoked).toHaveBeenCalledWith('blob:draft-1')
     } finally {
       created.mockRestore()
@@ -103,14 +103,18 @@ describe('ConversationController', () => {
     await b.runtime.dispose()
   })
 
-  it('validates every MIME type before allocating previews', async () => {
+  it('allocates previews only for raster images and keeps other types opaque', async () => {
     const b = await bench()
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview')
-    expect(() => b.root.createDraftImages([
+    // SVG is never rendered as an image: it rides the generic file lane, so it
+    // gets no object URL and no preview allocation.
+    const [png, svg] = b.root.createDraftAttachments([
       new File([Uint8Array.of(1)], 'valid.png', { type: 'image/png' }),
       new File([Uint8Array.of(2)], 'invalid.svg', { type: 'image/svg+xml' }),
-    ])).toThrow(UnsupportedImageMediaTypeError)
-    expect(created).not.toHaveBeenCalled()
+    ])
+    expect(png?.kind).toBe('image')
+    expect(svg?.kind).toBe('file')
+    expect(created).toHaveBeenCalledOnce()
     created.mockRestore()
     await b.runtime.dispose()
   })
@@ -124,7 +128,7 @@ describe('ConversationController', () => {
     } as const
     const pending = b.root.resolveImage(sessionId, attachment)
     b.root.releaseSessionImages(sessionId)
-    read.resolve({ ok: true, value: { attachment, data: Uint8Array.of(1) } })
+    read.resolve({ ok: true, value: { type: 'image', attachment, data: Uint8Array.of(1) } })
     await expect(pending).rejects.toThrow('historical image scope was released')
     await b.runtime.dispose()
   })

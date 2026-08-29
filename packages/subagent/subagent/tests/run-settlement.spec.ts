@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   settleRun,
@@ -6,6 +7,15 @@ import {
 } from '../src/index.ts'
 
 const MAX_SUBAGENT_DIAGNOSTIC_BYTES = 4_096
+const fileBlock = {
+  type: 'file',
+  attachment: {
+    attachmentId: `sha256:${'f'.repeat(64)}`,
+    mediaType: 'text/plain',
+    bytes: 12,
+    name: 'notes.txt',
+  },
+} as unknown as Extract<ContentBlock, { type: 'file' }>
 
 describe('outcome mapping helpers', () => {
   it.each([
@@ -23,6 +33,18 @@ describe('outcome mapping helpers', () => {
       result: Promise.resolve({ output, stopReason: stopReason as never }),
       dispose: () => Promise.resolve(),
     })).resolves.toEqual(expected)
+  })
+
+  it('projects file output into completed background text', async () => {
+    await expect(settleRun({
+      id: SessionId('child-file'),
+      localAgent: undefined,
+      result: Promise.resolve({ output: [{ type: 'text', text: 'before ' }, fileBlock], stopReason: 'completed' }),
+      dispose: () => Promise.resolve(),
+    })).resolves.toEqual({
+      status: 'completed',
+      output: `before ${textOnlyFileText(fileBlock.attachment)}`,
+    })
   })
 
   it('settleRun disposes the run before reporting, on both result paths', async () => {

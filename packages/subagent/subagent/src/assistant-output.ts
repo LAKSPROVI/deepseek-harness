@@ -10,7 +10,7 @@
  * @module @deepseek-ai/dsh-subagent/assistant-output
  */
 
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
 /**
@@ -25,8 +25,8 @@ export class AssistantOutputFold {
 
   /**
    * Fold one session event: a non-empty assistant message becomes the
-   * candidate final answer, and a `text-delta` chunk extends the streamed
-   * fallback; every other event contributes nothing.
+   * candidate final answer, while text deltas and completed file blocks extend
+   * the streamed text fallback; every other event contributes nothing.
    * @param event - the next observed session event.
    */
   push(event: SessionEvent): void {
@@ -35,6 +35,10 @@ export class AssistantOutputFold {
       if (content.length > 0) this.message = content
     } else if (event.type === 'assistant/chunk' && event.data.chunk.type === 'text-delta') {
       this.pushText(event.data.chunk.text)
+    } else if (event.type === 'assistant/chunk'
+      && event.data.chunk.type === 'block-end'
+      && event.data.chunk.block.type === 'file') {
+      this.pushText(textOnlyFileText(event.data.chunk.block.attachment))
     }
   }
 

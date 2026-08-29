@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { AttachmentId, AttachmentStore, ImageVariantId } from '@deepseek-ai/dsh-attachment'
 import type {
+  FileAttachmentRef,
   ImageAttachmentLimits,
   ImageAttachmentRef,
   ImageRequestPolicy,
@@ -9,7 +10,7 @@ import type {
   SaveImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
-import LlmRuntime, { createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, userAgent } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, textOnlyFileText, textOnlyImageText, userAgent } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -30,6 +31,13 @@ const IMAGE_REF: ImageAttachmentRef = {
   bytes: 1,
   width: 1,
   height: 1,
+}
+
+const FILE_REF: FileAttachmentRef = {
+  attachmentId: AttachmentId(`sha256:${'f'.repeat(64)}`),
+  mediaType: 'application/pdf',
+  bytes: 7,
+  name: 'brief.pdf',
 }
 
 async function harness(baseURL: string, overrides: Record<string, unknown> = {}): Promise<Context> {
@@ -872,44 +880,30 @@ describe('provider profile lifecycle', () => {
     expect(new LlmError('x', 'X')).toBeInstanceOf(Error)
   })
 
-  it('rejects unsupported or unresolved image input before provider I/O', async () => {
-    const adapter = adapterOf({ openai: {}, deepseek: {} })
-    const drain = async (options: Parameters<PiAiAdapter['stream']>[0]): Promise<void> => {
-      for await (const _chunk of adapter.stream(options)) { /* drain */ }
-    }
+  it('projects unsupported attachments before direct adapter context conversion', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const adapter = adapterOf({
+      deepseek: { baseURL: server.url },
+    })
 
-    await expect(drain({
+    for await (const _chunk of adapter.stream({
       provider: 'deepseek',
       model: 'deepseek-v4-flash',
       messages: [createUserMessage({
-        content: [{ type: 'image', attachment: IMAGE_REF }],
+        content: [
+          { type: 'image', attachment: IMAGE_REF },
+          { type: 'file', attachment: FILE_REF },
+        ],
         source: { kind: 'plugin', plugin: 'test' },
       })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
-    await expect(drain({
-      provider: 'openai',
-      model: 'gpt-4.1',
-      messages: [createUserMessage({
-        content: [{ type: 'image', attachment: IMAGE_REF }],
-        source: { kind: 'plugin', plugin: 'test' },
-      })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
-    await expect(drain({
-      provider: 'openai',
-      model: 'gpt-4.1',
-      messages: [createUserMessage({
-        content: [{
-          type: 'tool-result',
-          toolCallId: 'call-outer' as never,
-          content: [{
-            type: 'tool-result',
-            toolCallId: 'call-inner' as never,
-            content: [{ type: 'image', attachment: IMAGE_REF }],
-          }],
-        }],
-        source: { kind: 'plugin', plugin: 'test' },
-      })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
+    })) { /* drain */ }
+
+    expect(server.requests[0]).toMatchObject({
+      messages: [{
+        role: 'user',
+        content: `${textOnlyImageText(IMAGE_REF)}${textOnlyFileText(FILE_REF)}`,
+      }],
+    })
   })
 
   it('validates profiles at the shared resolver boundary', () => {

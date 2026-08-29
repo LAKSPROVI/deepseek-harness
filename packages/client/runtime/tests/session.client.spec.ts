@@ -482,6 +482,32 @@ describe('prompt and cancel errors', () => {
     })
   })
 
+  it('refuses generic files in subagent continuations without dropping or routing them', async () => {
+    const api = new FakeApiClient()
+    const session = new Session(SID, api, fakeRemote(), {
+      address: { parentSessionId: PARENT, childSessionId: SID, mode: 'continuable' },
+      parentAvailable: true,
+    })
+    await session.open()
+
+    const result = await session.prompt([{
+      type: 'file', data: 'AQ==', mediaType: 'application/pdf', name: 'brief.pdf',
+    }], 'queue')
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'attachment-error',
+        details: { reason: 'SUBAGENT_ATTACHMENT_UNSUPPORTED' },
+      },
+    })
+    expect(api.callsOf('subagent.prompt')).toEqual([])
+    expect(session.getSnapshot().promptError).toMatchObject({
+      op: 'send',
+      error: { details: { reason: 'SUBAGENT_ATTACHMENT_UNSUPPORTED' } },
+    })
+  })
+
   it('lands an interrupt business failure in promptError with op=stop', async () => {
     const api = new FakeApiClient()
     api.onSubagentInterrupt = () => Promise.resolve(err({
@@ -568,6 +594,7 @@ describe('prompt and cancel errors', () => {
     expect(result).toEqual({
       ok: true,
       value: {
+        type: 'image',
         attachment: { attachmentId: 'a', mediaType: 'image/png', bytes: 1, width: 1, height: 1 },
         data: Uint8Array.of(0),
       },

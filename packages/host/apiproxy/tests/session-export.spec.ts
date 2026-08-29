@@ -1,7 +1,8 @@
 /**
  * session.export host path: the GET download endpoint streams a ZIP whose
- * files are the stored artifacts verbatim (root + optional descendants), and
- * the degenerate compositions fail loudly (missing services → 500, missing
+ * files are the stored artifacts verbatim (root + optional descendants) plus
+ * every referenced image or opaque file, and the degenerate compositions fail
+ * loudly (missing services → 500, missing
  * root → 404, missing descendant → errored stream).
  */
 
@@ -9,7 +10,7 @@ import { randomBytes } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { unzipSync, strFromU8 } from 'fflate'
-import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionLineageNode } from '@deepseek-ai/dsh-session-query'
@@ -49,9 +50,26 @@ function storedImage(id: string, mediaType: ImageAttachmentRef['mediaType'] = 'i
   }
 }
 
+/** One durable opaque file object served by the fake attachment store. */
+function storedFile(id: string, name?: string) {
+  return {
+    ref: {
+      attachmentId: sid(id), mediaType: 'application/octet-stream', bytes: 3,
+      ...name === undefined ? {} : { name },
+    } as unknown as FileAttachmentRef,
+    data: new Uint8Array([5, 6, 7]),
+  }
+}
+
 /** A user/message event line carrying one image reference. */
 function imageEventLine(id: string, mediaType: ImageAttachmentRef['mediaType'] = 'image/png'): string {
   return `{"type":"user/message","seq":1,"time":1000,"data":{"content":[{"type":"image","attachment":{"attachmentId":"${id}","mediaType":"${mediaType}","bytes":4,"width":2,"height":2}}]}}`
+}
+
+/** A user/message event line carrying one opaque file reference. */
+function fileEventLine(id: string, name?: string): string {
+  const display = name === undefined ? '' : `,"name":${JSON.stringify(name)}`
+  return `{"type":"user/message","seq":1,"time":1000,"data":{"content":[{"type":"file","attachment":{"attachmentId":"${id}","mediaType":"application/octet-stream","bytes":3${display}}}]}}`
 }
 
 async function buildApi(
@@ -109,6 +127,7 @@ async function buildApi(
       validateImage: async () => {},
       saveImage: async () => { throw new Error('export never saves images') },
       readImage,
+      readFile: async (ref: FileAttachmentRef) => storedFile(String(ref.attachmentId), ref.name),
     } as never)
   }
   if (services.sessions !== undefined) ctx.provide('sessions', services.sessions as never)
@@ -617,6 +636,27 @@ describe('session.export download endpoint', () => {
     const files = unzipSync(await responseBytes(response))
     expect(Object.keys(files).sort()).toEqual(['media/img-1.png', 'session.jsonl'])
     expect(files['media/img-1.png']).toEqual(storedImage('img-1').data)
+  })
+
+  it('exports opaque files once with safe names and exact bytes', async () => {
+    const root = artifact('session-root', undefined, [
+      '{"type":"session","version":0,"id":"session-root","createdAt":1000}',
+      fileEventLine('file:1', 'reports/quarter?.pdf'),
+      fileEventLine('file:1', 'reports/quarter?.pdf'),
+      fileEventLine('file:2'),
+    ].join('\n') + '\n')
+    const api = await buildApi({ 'session-root': root })
+    const response = await toFetchHandler(api).fetch(
+      new Request('http://host/api/session.export?sessionId=session-root'),
+    )
+    const files = unzipSync(await responseBytes(response))
+    expect(Object.keys(files).sort()).toEqual([
+      'media/file_1-reports_quarter_.pdf',
+      'media/file_2.bin',
+      'session.jsonl',
+    ])
+    expect(files['media/file_1-reports_quarter_.pdf']).toEqual(storedFile('file:1').data)
+    expect(files['media/file_2.bin']).toEqual(storedFile('file:2').data)
   })
 
   it('collects media referenced from nested tool results', async () => {

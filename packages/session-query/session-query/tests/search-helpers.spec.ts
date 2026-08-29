@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, CallId , createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
+import {
+  createUserMessage, CallId, createMessage, createToolResultMessage, textOnlyFileText,
+} from '@deepseek-ai/dsh-llm'
 import SessionStore, {
   SESSION_FORMAT_VERSION,
   SessionId,
@@ -20,6 +22,13 @@ import {
 import { TestSessionQueryEngine } from './test-service.ts'
 
 const id = SessionId('session')
+const FILE_REF = {
+  attachmentId: 'sha256:0123456789abcdef' as never,
+  mediaType: 'application/pdf',
+  bytes: 42,
+  name: 'brief.pdf',
+} as const
+const FILE_TEXT = textOnlyFileText(FILE_REF)
 
 function header(value: string, extra: Partial<SessionHeader> = {}): SessionHeader {
   return { version: SESSION_FORMAT_VERSION, id: SessionId(value), createdAt: 10, ...extra }
@@ -35,11 +44,15 @@ describe('session-query semantic extraction', () => {
     const messageContent: SessionEvent<'user/message'>['data']['content'] = [
       { type: 'text', text: ' visible ' },
       { type: 'reasoning', text: 'thought' },
+      { type: 'file', attachment: FILE_REF },
       { type: 'tool-call', id: callId, name: 'read', arguments: '{"path":"a"}' },
       {
         type: 'tool-result',
         toolCallId: callId,
-        content: [{ type: 'text', text: 'nested' }],
+        content: [
+          { type: 'text', text: 'nested' },
+          { type: 'file', attachment: FILE_REF },
+        ],
         isError: false,
       },
       { type: 'future-content', payload: 'hidden' } as never,
@@ -94,7 +107,9 @@ describe('session-query semantic extraction', () => {
     ]
 
     for (const event of events.slice(0, 3)) {
-      expect(extractSessionEventText(event)).toBe('visible\nread\n{"path":"a"}\nnested')
+      expect(extractSessionEventText(event)).toBe([
+        'visible', FILE_TEXT, 'read', '{"path":"a"}', 'nested', FILE_TEXT,
+      ].join('\n'))
     }
     expect(extractSessionEventText({
       type: 'assistant/message',
@@ -146,7 +161,11 @@ describe('session-query semantic extraction', () => {
 describe('session-query document and filter helpers', () => {
   const events: SessionEvent[] = [
     { type: 'user/message', seq: 0, time: 10, data: createUserMessage({
-      content: [{ type: 'text', text: 'Hello\n(AI)+' }], source: { kind: 'user' },
+      content: [
+        { type: 'text', text: 'Hello\n(AI)+' },
+        { type: 'file', attachment: FILE_REF },
+      ],
+      source: { kind: 'user' },
     }), surfaceOp: 'append' },
     { type: 'assistant/chunk', seq: 1, time: 11, data: { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'raw' } } },
     { type: 'assistant/message', seq: 2, time: 12, data: {
@@ -168,7 +187,7 @@ describe('session-query document and filter helpers', () => {
       .toEqual(['shadowed', 'log-only', 'current', 'log-only'])
     const documents = buildSessionEventSearchDocuments(id, events)
     expect(documents.map(document => [document.seq, document.text, document.surface])).toEqual([
-      [0, 'Hello\n(AI)+', 'shadowed'],
+      [0, `Hello\n(AI)+\n${FILE_TEXT}`, 'shadowed'],
       [2, 'replacement', 'current'],
       [3, 'interrupted', 'log-only'],
     ])
@@ -204,6 +223,8 @@ describe('session-query document and filter helpers', () => {
       { kind: 'text', text: 'hello   (ai)+' },
     ])).toEqual([documents[0]])
     expect(compileSessionTextFilter('CAFÉ').test('café')).toBe(true)
+    expect(filterSessionEventDocuments(documents, [{ kind: 'text', text: 'brief.pdf' }]))
+      .toEqual([documents[0]])
     expect(filterSessionEventDocuments(documents)).toEqual(documents)
     expect(filterSessionEventDocuments(documents, [{ kind: 'surface', values: [] }])).toEqual([])
     expect(() => filterSessionEventDocuments(documents, [{ kind: 'surface', values: ['future' as never] }]))
@@ -280,10 +301,12 @@ describe('session-query document and filter helpers', () => {
       content: [{ type: 'text', text: 'Alpha\n beta' }], source: { kind: 'user' },
     }), { surfaceOp: 'append' })
     session.append('user/message', createUserMessage({
-      content: [{ type: 'text', text: 'other' }], source: { kind: 'user' },
+      content: [{ type: 'file', attachment: FILE_REF }], source: { kind: 'user' },
     }), { surfaceOp: 'append' })
     await expect(ctx.sessionQuery.filterEvents(id, [{ kind: 'text', text: 'alpha beta' }]))
       .resolves.toMatchObject([{ seq: 0, text: 'Alpha\n beta' }])
+    await expect(ctx.sessionQuery.filterEvents(id, [{ kind: 'text', text: 'brief.pdf' }]))
+      .resolves.toMatchObject([{ seq: 1, text: FILE_TEXT }])
   })
 })
 

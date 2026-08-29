@@ -15,8 +15,8 @@ export interface DeepSeekUploadRecord {
   scope: DeepSeekFileScopeType
   /** Provider-independent normalized attachment from which the uploaded request version was derived. */
   attachmentId: AttachmentId
-  /** Complete request transformation identity, including route budgets and encoder parameters. */
-  variantId: ImageVariantIdType
+  /** Complete upload identity: request-image variant or immutable generic-file attachment id. */
+  variantId: ImageVariantIdType | AttachmentId
   fileId: DeepSeekFileIdType
   bytes: number
   createdAt: number
@@ -148,7 +148,7 @@ export class DeepSeekUploadIndex {
    */
   async get(
     scope: DeepSeekFileScopeType,
-    variantId: ImageVariantIdType,
+    variantId: ImageVariantIdType | AttachmentId,
     now: number,
     refreshMarginMs: number,
   ): Promise<DeepSeekUploadRecord | undefined> {
@@ -197,7 +197,7 @@ export class DeepSeekUploadIndex {
    */
   async remove(
     scope: DeepSeekFileScopeType,
-    variantId: ImageVariantIdType,
+    variantId: ImageVariantIdType | AttachmentId,
     fileId: DeepSeekFileIdType,
   ): Promise<void> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })

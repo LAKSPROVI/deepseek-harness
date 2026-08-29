@@ -1,7 +1,7 @@
 // Sessions remain resident after creation so they continue consuming mux frames off-screen.
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { AttachmentIdType, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentIdType, FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type {
   HistoryEntry, IApiClient, MessageId, MuxFrame, PromptContentPart, QueueAction, RpcError,
@@ -219,21 +219,22 @@ export class Session implements SessionFace {
           },
         }
       } else {
-        if (content.some(part => part.type === 'image')) {
+        const textContent = content.flatMap(part => part.type === 'text'
+          ? [{ type: 'text' as const, text: part.text }]
+          : [])
+        if (textContent.length !== content.length) {
           result = {
             ok: false,
             error: {
               code: 'attachment-error',
-              message: 'Image input is unavailable for subagent continuations.',
-              details: { reason: 'SUBAGENT_IMAGE_UNSUPPORTED' },
+              message: 'Attachment input is unavailable for subagent continuations.',
+              details: { reason: 'SUBAGENT_ATTACHMENT_UNSUPPORTED' },
             },
           }
         } else {
           const routed = (await this.api.subagents.prompt({
             ...this.address,
-            content: content.flatMap(part => part.type === 'text'
-              ? [{ type: 'text' as const, text: part.text }]
-              : []),
+            content: textContent,
             clientTimeZone: resolvedClientTimeZone(),
           }, signal)).result
           result = routed.ok ? { ok: true, value: { accepted: true } } : routed
@@ -264,13 +265,16 @@ export class Session implements SessionFace {
   }
 
   /**
-   * Resolve one image referenced by this session into browser-consumable bytes.
+   * Resolve one attachment referenced by this session into browser-consumable bytes.
    * @param attachmentId - opaque id found in the folded session log.
-   * @returns the authenticated reference and decoded bytes.
+   * @returns the authenticated discriminated reference and decoded bytes.
    */
   async readAttachment(
     attachmentId: AttachmentIdType,
-  ): Promise<RpcResult<{ attachment: ImageAttachmentRef; data: Uint8Array }>> {
+  ): Promise<RpcResult<
+    | { type: 'image'; attachment: ImageAttachmentRef; data: Uint8Array }
+    | { type: 'file'; attachment: FileAttachmentRef; data: Uint8Array }
+  >> {
     try {
       const result = (await this.api.sessions.attachment({
         sessionId: this.sessionId,
@@ -279,9 +283,30 @@ export class Session implements SessionFace {
       if (!result.ok) return result
       const binary = atob(result.value.data)
       const data = Uint8Array.from(binary, char => char.charCodeAt(0))
-      return { ok: true, value: { attachment: result.value.attachment, data } }
+      return result.value.type === 'image'
+        ? { ok: true, value: { type: 'image', attachment: result.value.attachment, data } }
+        : { ok: true, value: { type: 'file', attachment: result.value.attachment, data } }
     } catch (error) {
       return transportError(error)
+    }
+  }
+
+  /** Resolve one image while rejecting a generic-file reference explicitly. */
+  async readImageAttachment(
+    attachmentId: AttachmentIdType,
+  ): Promise<RpcResult<{ attachment: ImageAttachmentRef; data: Uint8Array }>> {
+    const result = await this.readAttachment(attachmentId)
+    if (!result.ok) return result
+    if (result.value.type === 'image') {
+      return { ok: true, value: { attachment: result.value.attachment, data: result.value.data } }
+    }
+    return {
+      ok: false,
+      error: {
+        code: 'attachment-error',
+        message: 'The referenced attachment is not an image.',
+        details: { reason: 'ATTACHMENT_TYPE_MISMATCH' },
+      },
     }
   }
 

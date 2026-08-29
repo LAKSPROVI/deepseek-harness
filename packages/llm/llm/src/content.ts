@@ -1,8 +1,8 @@
 /** Content-block structure helpers. @module @deepseek-ai/dsh-llm/content */
 
-import type { ContentBlock } from './types.ts'
+import type { ContentBlock, ModelModality } from './types.ts'
 import type { Message } from './message.ts'
-import type { ImageAttachmentRef, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
 
 /** Model-facing stand-in for an image removed to fit a provider request bound. */
 export const OFFLOADED_IMAGE_TEXT
@@ -16,6 +16,16 @@ export const OFFLOADED_IMAGE_TEXT
 export function textOnlyImageText(ref: ImageAttachmentRef): string {
   const digest = String(ref.attachmentId).slice('sha256:'.length, 'sha256:'.length + 8)
   return `[image omitted because this model accepts text only; attachment sha256:${digest}]`
+}
+
+/**
+ * Stable metadata shown instead of bytes to a model that cannot accept one file.
+ * @param ref - durable opaque file reference omitted from native submission.
+ * @returns deterministic text preserving the file identity and metadata.
+ */
+export function textOnlyFileText(ref: FileAttachmentRef): string {
+  const name = ref.name === undefined ? 'unnamed' : JSON.stringify(ref.name)
+  return `[file not submitted because this model does not accept file input; attachment ${ref.attachmentId}; name ${name}; media type ${ref.mediaType}; ${ref.bytes} bytes]`
 }
 
 /**
@@ -38,6 +48,30 @@ export function requestImageHandleText(version: RequestImageAttachment): string 
 export function contentHasImage(content: readonly ContentBlock[]): boolean {
   return content.some(block => block.type === 'image'
     || (block.type === 'tool-result' && contentHasImage(block.content)))
+}
+
+/**
+ * True when typed model content contains a file block, including nested tool results.
+ * @param content - typed model content blocks.
+ * @returns whether any nested block is a generic file.
+ */
+export function contentHasFile(content: readonly ContentBlock[]): boolean {
+  return content.some(block => block.type === 'file'
+    || (block.type === 'tool-result' && contentHasFile(block.content)))
+}
+
+/**
+ * True when content contains any block whose native input modality is absent.
+ * @param content - typed model content blocks.
+ * @param modalities - exact route input modalities.
+ * @returns whether deterministic fallback projection is required.
+ */
+export function contentNeedsModalityFallback(
+  content: readonly ContentBlock[],
+  modalities: readonly ModelModality[],
+): boolean {
+  return (!modalities.includes('image') && contentHasImage(content))
+    || (!modalities.includes('file') && contentHasFile(content))
 }
 
 /** Base64 length of raw image bytes, including padding. */
@@ -105,17 +139,25 @@ function replaceOldestImages(
   return next ?? blocks as ContentBlock[]
 }
 
-/** Replace every image occurrence, including nested tool results, for a text-only model. */
-function replaceImagesForTextModel(blocks: readonly ContentBlock[]): ContentBlock[] {
+/** Replace unsupported native attachment occurrences without mutating durable messages. */
+function replaceUnsupportedModalities(
+  blocks: readonly ContentBlock[],
+  modalities: readonly ModelModality[],
+): ContentBlock[] {
   let next: ContentBlock[] | undefined
   for (const [index, block] of blocks.entries()) {
-    if (block.type === 'image') {
+    if (block.type === 'image' && !modalities.includes('image')) {
       next ??= blocks.slice(0, index)
       next.push({ type: 'text', text: textOnlyImageText(block.attachment) })
       continue
     }
+    if (block.type === 'file' && !modalities.includes('file')) {
+      next ??= blocks.slice(0, index)
+      next.push({ type: 'text', text: textOnlyFileText(block.attachment) })
+      continue
+    }
     if (block.type === 'tool-result') {
-      const content = replaceImagesForTextModel(block.content)
+      const content = replaceUnsupportedModalities(block.content, modalities)
       if (content !== block.content) {
         next ??= blocks.slice(0, index)
         next.push({ ...block, content })
@@ -128,16 +170,29 @@ function replaceImagesForTextModel(blocks: readonly ContentBlock[]): ContentBloc
 }
 
 /**
+ * Project unsupported durable attachments into deterministic text for one exact route.
+ * @param messages - complete request history.
+ * @param modalities - exact route input modalities.
+ * @returns original history when supported, otherwise shallow copies with stable placeholders.
+ */
+export function projectUnsupportedModalities(
+  messages: readonly Message[],
+  modalities: readonly ModelModality[],
+): readonly Message[] {
+  if (!messages.some(message => contentNeedsModalityFallback(message.content, modalities))) return messages
+  return messages.map((message) => {
+    const content = replaceUnsupportedModalities(message.content, modalities)
+    return content === message.content ? message : { ...message, content }
+  })
+}
+
+/**
  * Project durable image history into deterministic text for an exact text-only model.
  * @param messages - complete request history.
  * @returns the original list without images, otherwise shallow message copies with stable placeholders.
  */
 export function projectImagesForTextModel(messages: readonly Message[]): readonly Message[] {
-  if (!messages.some(message => contentHasImage(message.content))) return messages
-  return messages.map((message) => {
-    const content = replaceImagesForTextModel(message.content)
-    return content === message.content ? message : { ...message, content }
-  })
+  return projectUnsupportedModalities(messages, ['text', 'file'])
 }
 
 /**

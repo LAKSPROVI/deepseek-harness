@@ -24,7 +24,7 @@ import {
 } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type {
   SubprocessHandle,
@@ -61,6 +61,15 @@ const queryMock = vi.hoisted(() => vi.fn<QueryFactory>())
 
 const CLAUDE_AGENT_SDK_VERSION = '0.3.220'
 const CLAUDE_CODE_VERSION = '2.1.220'
+const fileBlock = {
+  type: 'file',
+  attachment: {
+    attachmentId: `sha256:${'f'.repeat(64)}`,
+    mediaType: 'text/plain',
+    bytes: 12,
+    name: 'notes.txt',
+  },
+} as unknown as Extract<ContentBlock, { type: 'file' }>
 const CLAUDE_PLATFORM_PACKAGES = [
   '@anthropic-ai/claude-agent-sdk-darwin-arm64',
   '@anthropic-ai/claude-agent-sdk-darwin-x64',
@@ -401,14 +410,15 @@ describe('task admission and package contracts', () => {
     expect(JSON.stringify(rows)).not.toContain('tool-subagent')
   })
 
-  it('preserves text sequences and rejects empty, blank, and non-text tasks', () => {
+  it('preserves text and file sequences and rejects empty, blank, and private tasks', () => {
     expect(textTask([
       { type: 'text', text: 'one' },
+      fileBlock,
       { type: 'text', text: 'two' },
-    ])).toBe('onetwo')
-    expect(() => textTask([])).toThrow('only text blocks')
+    ])).toBe(`one${textOnlyFileText(fileBlock.attachment)}two`)
+    expect(() => textTask([])).toThrow('only text or file blocks')
     expect(() => textTask([{ type: 'reasoning', text: 'hidden' }]))
-      .toThrow('only text blocks')
+      .toThrow('only text or file blocks')
     expect(() => textTask([{ type: 'text', text: ' \n ' }]))
       .toThrow('must not be empty')
   })

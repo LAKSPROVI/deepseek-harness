@@ -12,8 +12,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
-import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
-import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import { AttachmentError, admitEncodedFiles, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { createUserMessage, freezeMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
@@ -91,7 +91,9 @@ import type { ApprovalOutcome, ApprovalRequestId } from '@deepseek-ai/dsh-user-a
 // `ctx.get('approval')` without a value dependency on the seam (optional composition).
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { approvalResponsePayloadSchema } from './api/approvals.schema.ts'
-import { imageLimitsProjectionSchema, sessionListMetadataProjectionSchema } from './api/sessions.schema.ts'
+import {
+  fileLimitsProjectionSchema, imageLimitsProjectionSchema, sessionListMetadataProjectionSchema,
+} from './api/sessions.schema.ts'
 import { questionResponsePayloadSchema } from './api/questions.schema.ts'
 import type { ClientResponse, RpcError, RpcReceipt, RpcRequest, RpcResponse } from './api/rpc.ts'
 import { RpcId } from './api/rpc.ts'
@@ -125,67 +127,62 @@ export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
 /** Conversation message event types (the pagination counting unit). */
 const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
 
-/** Validate one prompt as a batch before publishing any durable image object. */
+/** Validate and persist every upload before publishing its owning message. */
 async function durablePromptContent(ctx: Context, content: readonly PromptContentPart[]): Promise<ContentBlock[]> {
   if (content.every(part => part.type === 'text')) {
     return content.map(part => ({ type: 'text', text: part.text }))
   }
-  const refs = await admitEncodedImages(ctx.attachments, content.filter(part => part.type === 'image'))
-  let next = 0
-  return content.map(part => part.type === 'text'
-    ? { type: 'text', text: part.text }
-    // admitEncodedImages returns one reference per image part in order.
-    : { type: 'image', attachment: refs[next++] as ImageAttachmentRef })
+  const files = content.filter(part => part.type === 'file')
+  const images = content.filter(part => part.type === 'image')
+  const fileRefs = files.length === 0 ? [] : await admitEncodedFiles(ctx.attachments, files)
+  const imageRefs = images.length === 0 ? [] : await admitEncodedImages(ctx.attachments, images)
+  let nextFile = 0
+  let nextImage = 0
+  return content.map((part): ContentBlock => {
+    switch (part.type) {
+      case 'text': return { type: 'text', text: part.text }
+      case 'image': return { type: 'image', attachment: imageRefs[nextImage++] as ImageAttachmentRef }
+      case 'file': return { type: 'file', attachment: fileRefs[nextFile++] as FileAttachmentRef }
+    }
+  })
 }
 
-/** Search durable content for an image reference, including nested tool results. */
-function imageBlockIn(content: unknown, match: (ref: ImageAttachmentRef) => boolean): ImageAttachmentRef | undefined {
-  if (!Array.isArray(content)) return undefined
-  for (const value of content) {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
-    const block = value as { type?: unknown; attachment?: unknown; content?: unknown }
-    if (block.type === 'image' && typeof block.attachment === 'object' && block.attachment !== null) {
-      const ref = block.attachment as ImageAttachmentRef
-      if (match(ref)) return ref
+/** One discriminated durable attachment reference found in logged JSON. */
+type LoggedAttachment =
+  | { type: 'image'; ref: ImageAttachmentRef }
+  | { type: 'file'; ref: FileAttachmentRef }
+
+/** Recursively search logged event data, including tool results and stream chunks. */
+function attachmentIn(value: unknown, attachmentId: string): LoggedAttachment | undefined {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = attachmentIn(item, attachmentId)
+      if (found !== undefined) return found
     }
-    if (block.type === 'tool-result') {
-      const nested = imageBlockIn(block.content, match)
-      if (nested !== undefined) return nested
+    return undefined
+  }
+  if (typeof value !== 'object' || value === null) return undefined
+  const record = value as Record<string, unknown>
+  if ((record['type'] === 'image' || record['type'] === 'file')
+    && typeof record['attachment'] === 'object' && record['attachment'] !== null) {
+    const ref = record['attachment'] as ImageAttachmentRef | FileAttachmentRef
+    if (String(ref.attachmentId) === attachmentId) {
+      return record['type'] === 'image'
+        ? { type: 'image', ref: ref as ImageAttachmentRef }
+        : { type: 'file', ref: ref as FileAttachmentRef }
     }
+  }
+  for (const child of Object.values(record)) {
+    const found = attachmentIn(child, attachmentId)
+    if (found !== undefined) return found
   }
   return undefined
 }
 
-/** Search every durable event carrier that can own model-visible content. */
-function imageInEvent(event: SessionEvent, match: (ref: ImageAttachmentRef) => boolean): ImageAttachmentRef | undefined {
-  const data = event.data as {
-    content?: unknown
-    message?: { content?: unknown }
-    inserted?: Array<{ content?: unknown }>
-    chunk?: { type?: unknown; block?: unknown }
-  }
-  const direct = imageBlockIn(data.content, match)
-  if (direct !== undefined) return direct
-  if (data.message !== undefined) {
-    const wrapped = imageBlockIn(data.message.content, match)
-    if (wrapped !== undefined) return wrapped
-  }
-  if (data.inserted !== undefined) {
-    for (const message of data.inserted) {
-      const inserted = imageBlockIn(message.content, match)
-      if (inserted !== undefined) return inserted
-    }
-  }
-  if (event.type === 'assistant/chunk' && data.chunk?.type === 'block-end') {
-    return imageBlockIn([data.chunk.block], match)
-  }
-  return undefined
-}
-
-/** Resolve the first reference matching one opaque id. */
-function referencedImage(events: readonly SessionEvent[], attachmentId: string): ImageAttachmentRef | undefined {
+/** Resolve the first logged image or file reference matching one opaque id. */
+function referencedAttachment(events: readonly SessionEvent[], attachmentId: string): LoggedAttachment | undefined {
   for (const event of events) {
-    const found = imageInEvent(event, ref => String(ref.attachmentId) === attachmentId)
+    const found = attachmentIn(event.data, attachmentId)
     if (found !== undefined) return found
   }
   return undefined
@@ -1071,12 +1068,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const pendingQuestions = new Map<RpcId, PendingQuestion>()
   const pendingApprovals = new Map<RpcId, PendingApproval>()
   const muxQueues = new Set<FrameQueue<RpcRequest<MuxFrame>>>()
-  const imageAdmissionChains = new WeakMap<Agent, Promise<void>>()
+  const attachmentAdmissionChains = new WeakMap<Agent, Promise<void>>()
 
-  /** Serialize image admission with model selection for one agent. */
-  function serializeImageAdmission<T>(agent: Agent, operation: () => Promise<T>): Promise<T> {
-    const result = (imageAdmissionChains.get(agent) ?? Promise.resolve()).then(operation)
-    imageAdmissionChains.set(agent, result.then(() => undefined, () => undefined))
+  /** Serialize attachment admission with model selection for one agent. */
+  function serializeAttachmentAdmission<T>(agent: Agent, operation: () => Promise<T>): Promise<T> {
+    const result = (attachmentAdmissionChains.get(agent) ?? Promise.resolve()).then(operation)
+    attachmentAdmissionChains.set(agent, result.then(() => undefined, () => undefined))
     return result
   }
 
@@ -1262,6 +1259,17 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       wire: { viewSchema: imageLimitsProjectionSchema, view: () => projectionCtx.attachments.imageLimits },
       stateVersion: 1,
     })
+    const fileLimits = projectionCtx.attachments.fileLimits
+    if (fileLimits !== undefined) {
+      projectionCtx.sessionProjections.register<'fileLimits', null>({
+        key: 'fileLimits',
+        stateSchema: zod.null(),
+        init: () => null,
+        apply: state => state,
+        wire: { viewSchema: fileLimitsProjectionSchema, view: () => fileLimits },
+        stateVersion: 1,
+      })
+    }
   })
 
   /** Project both durable inbox lists, optionally including the splice currently being emitted. */
@@ -2195,7 +2203,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const { sessionId, provider, model, reasoningEffort } = request.payload
         const found = await agentFor(sessionId)
         if ('error' in found) return err(request, found.error)
-        return serializeImageAdmission(found.agent, async () => {
+        return serializeAttachmentAdmission(found.agent, async () => {
           try {
             const resolved = await ctx.llm.resolveCallConfig({
               provider,
@@ -2380,6 +2388,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ...(canonicalTimeZone === undefined ? {} : { clientTimeZone: canonicalTimeZone }),
         }
         const hasImage = content.some(part => part.type === 'image')
+        const hasAttachment = content.some(part => part.type !== 'text')
         const admit = async (): Promise<RpcResponse<{ accepted: true }>> => {
           try {
             if (hasImage) {
@@ -2413,7 +2422,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }
           return ok(request, { accepted: true as const })
         }
-        return hasImage ? serializeImageAdmission(agent, admit) : admit()
+        return hasAttachment ? serializeAttachmentAdmission(agent, admit) : admit()
       },
 
       async attachment(request) {
@@ -2435,17 +2444,26 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
-        const ref = referencedImage(state.events, String(attachmentId))
-        if (ref === undefined) {
+        const logged = referencedAttachment(state.events, String(attachmentId))
+        if (logged === undefined) {
           return err(request, {
             code: 'attachment-error',
-            message: 'Image is not referenced by this session.',
+            message: 'Attachment is not referenced by this session.',
             details: { reason: 'ATTACHMENT_NOT_REFERENCED' },
           })
         }
         try {
-          const stored = await ctx.attachments.readImage(ref)
+          if (logged.type === 'image') {
+            const stored = await ctx.attachments.readImage(logged.ref)
+            return ok(request, {
+              type: 'image',
+              attachment: stored.ref,
+              data: Buffer.from(stored.data).toString('base64'),
+            })
+          }
+          const stored = await ctx.attachments.readFile(logged.ref)
           return ok(request, {
+            type: 'file',
             attachment: stored.ref,
             data: Buffer.from(stored.data).toString('base64'),
           })
@@ -2459,7 +2477,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }
           return err(request, {
             code: 'internal',
-            message: 'Unable to read image attachment.',
+            message: 'Unable to read attachment.',
             details: {},
           })
         }

@@ -323,12 +323,22 @@
     },
     {
       "doc": "docs/subsystems/commands.md",
+      "symbol": "EncodedCommandAttachment",
+      "source": "packages/interaction/commands/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/commands.md",
       "symbol": "CommandInputDescriptor",
       "source": "packages/interaction/commands/src/types.ts"
     },
     {
       "doc": "docs/subsystems/commands.md",
       "symbol": "CommandDefinition",
+      "source": "packages/interaction/commands/src/index.ts"
+    },
+    {
+      "doc": "docs/subsystems/commands.md",
+      "symbol": "CommandAttachmentBlock",
       "source": "packages/interaction/commands/src/index.ts"
     },
     {
@@ -899,6 +909,31 @@
       "doc": "docs/subsystems/approval.md",
       "symbol": "ApprovalRequest",
       "source": "packages/interaction/user-approval/src/index.ts"
+    },
+    {
+      "doc": "docs/subsystems/attachment.md",
+      "symbol": "FileAttachmentRef",
+      "source": "packages/attachment/attachment/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/attachment.md",
+      "symbol": "FileAttachmentLimits",
+      "source": "packages/attachment/attachment/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/attachment.md",
+      "symbol": "EncodedFileAttachment",
+      "source": "packages/attachment/attachment/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/attachment.md",
+      "symbol": "SaveFileAttachment",
+      "source": "packages/attachment/attachment/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/attachment.md",
+      "symbol": "StoredFileAttachment",
+      "source": "packages/attachment/attachment/src/types.ts"
     },
     {
       "doc": "docs/subsystems/attachment.md",

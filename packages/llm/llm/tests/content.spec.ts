@@ -7,6 +7,7 @@ import {
   offloadRequestImages,
   offloadRequestImagesWithPolicy,
   projectImagesForTextModel,
+  projectUnsupportedModalities,
 } from '../src/index.ts'
 import type { ContentBlock } from '../src/index.ts'
 
@@ -21,6 +22,18 @@ function image(bytes: number): ContentBlock {
       bytes,
       width: 1,
       height: 1,
+    },
+  }
+}
+
+function file(bytes = 7): ContentBlock {
+  return {
+    type: 'file',
+    attachment: {
+      attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
+      mediaType: 'application/pdf',
+      bytes,
+      name: 'brief.pdf',
     },
   }
 }
@@ -139,6 +152,50 @@ describe('offloadRequestImagesWithPolicy', () => {
     expect(projected[0]?.content).toEqual([
       { type: 'text', text: OFFLOADED_IMAGE_TEXT },
       image(100),
+    ])
+  })
+})
+
+describe('projectUnsupportedModalities', () => {
+  it('preserves files for a route that declares file input', () => {
+    const messages = [createUserMessage({ content: [file()], source })]
+    expect(projectUnsupportedModalities(messages, ['text', 'file'])).toBe(messages)
+  })
+
+  it('replaces direct and nested files with deterministic metadata text', () => {
+    const nested = {
+      type: 'tool-result' as const,
+      toolCallId: CallId('file-result'),
+      content: [file()],
+    }
+    const messages = [createUserMessage({ content: [file(), nested], source })]
+    const projected = projectUnsupportedModalities(messages, ['text'])
+    const fallback = `[file not submitted because this model does not accept file input; attachment sha256:${'b'.repeat(64)}; name "brief.pdf"; media type application/pdf; 7 bytes]`
+    expect(projected[0]?.content).toEqual([
+      { type: 'text', text: fallback },
+      { ...nested, content: [{ type: 'text', text: fallback }] },
+    ])
+    expect(messages[0]?.content).toEqual([file(), nested])
+  })
+
+  it('projects only the unsupported attachment modality', () => {
+    const messages = [createUserMessage({ content: [image(3), file()], source })]
+    expect(projectUnsupportedModalities(messages, ['text', 'image'])[0]?.content).toEqual([
+      image(3),
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('does not accept file input') }),
+    ])
+    expect(projectUnsupportedModalities(messages, ['text', 'file'])[0]?.content).toEqual([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('accepts text only') }),
+      file(),
+    ])
+  })
+
+  it('does not count interleaved files against image offload limits', () => {
+    const messages = [createUserMessage({ content: [image(3), file(300), image(3)], source })]
+    expect(offloadRequestImages(messages, 4)[0]?.content).toEqual([
+      { type: 'text', text: OFFLOADED_IMAGE_TEXT },
+      file(300),
+      image(3),
     ])
   })
 })

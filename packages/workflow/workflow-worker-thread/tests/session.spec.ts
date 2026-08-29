@@ -427,20 +427,29 @@ describe('runWorkerSession over an in-process MessageChannel', () => {
     host.close()
   })
 
-  it('non-text output blocks are filtered out of the text result', async () => {
+  it('projects file output deterministically while filtering other non-text blocks', async () => {
     const host = fakeHost({
       reply: () => ({
         output: [
           { type: 'text', text: 'first ' },
-          { type: 'tool_call', id: 'c1', name: 'x', arguments: {} } as never,
-          { type: 'text', text: 'second' },
+          { type: 'reasoning', text: 'private' },
+          {
+            type: 'file',
+            attachment: {
+              attachmentId: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as never,
+              mediaType: 'text/plain',
+              bytes: 12,
+              name: 'notes.txt',
+            },
+          },
+          { type: 'text', text: ' second' },
         ],
         stopReason: 'completed',
       }),
     })
     void runWorkerSession(host.port, init("return await agent('p')"))
     const result = await host.result()
-    expect(result.value).toBe('first second')
+    expect(result.value).toBe('first [file not submitted because this model does not accept file input; attachment sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; name "notes.txt"; media type text/plain; 12 bytes] second')
     host.close()
   })
 

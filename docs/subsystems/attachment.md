@@ -1,16 +1,74 @@
-# Durable Image Attachments
+# Durable Attachments
 
 English | [中文](attachment.zh.md)
 
-The attachment seam separates binary image ownership from the session log. A producer gives validated encoded bytes to [`ctx.attachments`](#ctxattachments--attachmentstore-abstract-seam); the service publishes an immutable content-addressed reference only after the object is durable. Session events and model-visible `ImageBlock`s contain that reference and metadata, never a browser object URL, host temporary path, provider URL, or base64 payload.
+The attachment seam separates binary ownership from the session log. A producer gives validated bytes to [`ctx.attachments`](#ctxattachments--attachmentstore-abstract-seam); the service publishes an immutable content-addressed reference only after the object is durable. Session events and model-visible `ImageBlock` or `FileBlock` values contain that reference and metadata, never a browser object URL, host temporary path, provider URL, or base64 payload.
 
-Unsent browser drafts may stay in memory and native clients may stage them in operating-system temporary storage. Once the host accepts a user message, its images move below `<DSH_HOME>/attachments/v1` before the user event is appended. Structured model image output follows the same persist-before-event rule.
+Unsent browser drafts may stay in memory and native clients may stage them in operating-system temporary storage. Once the host accepts a user message, its attachments move below `<DSH_HOME>/attachments/v1` before the user event is appended. Images use verified raster normalization and request variants; generic files preserve exact opaque bytes.
 
 Source: [`packages/attachment/attachment/src/types.ts`](../../packages/attachment/attachment/src/types.ts)
 
 ## Identity and verified metadata
 
 `AttachmentId` is a branded opaque string. The local backend currently emits `sha256:<digest>`, but consumers must neither parse that representation nor derive a filesystem path from it.
+
+```ts type-equiv
+/** Durable, serializable reference to one immutable opaque file. */
+interface FileAttachmentRef {
+  /** Opaque content-addressed identifier; never a filesystem path or bearer URL. */
+  attachmentId: AttachmentId
+  /** Normalized declared media type, or `application/octet-stream`. */
+  mediaType: string
+  /** Exact stored byte length. */
+  bytes: number
+  /** Optional sanitized display name; storage never interprets it as a path. */
+  name?: string
+}
+```
+
+```ts type-equiv
+/** Deployment-resolved limits for generic-file admission. */
+interface FileAttachmentLimits {
+  /** Maximum exact bytes accepted for one file. */
+  maxFileBytes: number
+  /** Maximum generic-file count accepted in one message. */
+  maxFilesPerMessage: number
+  /** Maximum aggregate generic-file bytes accepted in one message. */
+  maxMessageFileBytes: number
+}
+```
+
+```ts type-equiv
+/** Base64-encoded generic-file upload accompanying one wire request. */
+interface EncodedFileAttachment {
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Canonical base64 encoding of the exact file bytes. */
+  data: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+```
+
+```ts type-equiv
+/** Request to validate and durably commit one opaque file. */
+interface SaveFileAttachment {
+  /** Exact file bytes; providers must not execute, decode, or extract them. */
+  data: Uint8Array
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+```
+
+```ts type-equiv
+/** Stored opaque bytes returned after reference and digest verification. */
+interface StoredFileAttachment {
+  ref: FileAttachmentRef
+  data: Uint8Array
+}
+```
 
 ```ts type-equiv
 /** Raster image formats accepted by the version-one attachment path. */
@@ -142,6 +200,42 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 Immutable binary attachment service. Implementations validate bytes before publishing a reference.
 
 ```ts cordis-catalog
+/**
+ * Validate one opaque file without persisting it.
+ * @param input - exact bytes and untrusted display metadata.
+ * @returns completion after the complete file admission policy succeeds.
+ */
+validateFile(input: SaveFileAttachment): Promise<void>
+
+/**
+ * Validate one ordered file batch without persisting any member.
+ * @param inputs - opaque files in owning-message order.
+ * @returns completion after batch and per-file validation succeeds.
+ */
+async validateFiles(inputs: readonly SaveFileAttachment[]): Promise<void>
+
+/**
+ * Validate the complete ordered file batch before committing any member.
+ * @param inputs - opaque files in owning-message order.
+ * @returns durable references in the same order after every member succeeds.
+ */
+async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]>
+
+/**
+ * Validate and durably commit one opaque file without interpreting its bytes.
+ * @param input - exact bytes and untrusted display metadata.
+ * @returns the immutable content-addressed file reference.
+ */
+saveFile(input: SaveFileAttachment): Promise<FileAttachmentRef>
+
+/**
+ * Read one opaque file and verify its digest and exact byte length.
+ * @param ref - durable reference from trusted session state.
+ * @param signal - optional cancellation for backend read and verification work.
+ * @returns exact verified bytes and the supplied reference.
+ */
+readFile(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachment>
+
 /**
  * Validate one image without persisting it.
  * Batch callers validate every member before saving any member.

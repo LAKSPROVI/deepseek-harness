@@ -9,32 +9,35 @@ import type {
   ModelRetryNode, TurnErrorNode, UserMessageNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { JsonBlock, MessageText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
+import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps, MessageAttachment } from '../contract/slots.ts'
 import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'
 import css from './MessageItem.module.css'
 
-type UserImage = Extract<UserMessageNode['content'][number], { type: 'image' }>
+type UserAttachment = Extract<UserMessageNode['content'][number], { type: 'image' | 'file' }>
 
 function contentParts(content: readonly unknown[]): {
   text: string
-  images: { attachment: UserImage['attachment'] }[]
+  attachments: MessageAttachment[]
   rest: unknown[]
 } {
   const texts: string[] = []
-  const images: { attachment: UserImage['attachment'] }[] = []
+  const attachments: MessageAttachment[] = []
   const rest: unknown[] = []
   for (const block of content) {
     const b = block as { type?: string; text?: string; attachment?: unknown }
     if (b.type === 'text' && typeof b.text === 'string') texts.push(b.text)
     else if (b.type === 'image' && b.attachment !== undefined) {
-      images.push({ attachment: (b as UserImage).attachment })
-    }
-    else rest.push(block)
+      const attachment = (b as Extract<UserAttachment, { type: 'image' }>).attachment
+      attachments.push({ kind: 'image', attachment })
+    } else if (b.type === 'file' && b.attachment !== undefined) {
+      const attachment = (b as Extract<UserAttachment, { type: 'file' }>).attachment
+      attachments.push({ kind: 'file', attachment })
+    } else rest.push(block)
   }
-  return { text: texts.join(''), images, rest }
+  return { text: texts.join(''), attachments, rest }
 }
 
 function retrySeconds(milliseconds: number): number {
@@ -214,10 +217,10 @@ function projectUserText(text: string, sessionLabels: readonly string[]): ReactN
 
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
-  content, renderMessageImages, actions, pending = false, referenceLabels = [], t,
+  content, renderMessageAttachments, actions, pending = false, referenceLabels = [], t,
 }: {
   content: readonly unknown[]
-  renderMessageImages: ChatNodeOwnerProps['renderMessageImages']
+  renderMessageAttachments: ChatNodeOwnerProps['renderMessageAttachments']
   /** Optional IconActions (or similar) below the bubble; receives the joined text. */
   actions?: (text: string) => ReactNode
   /** Whether this is the Host-authoritative pre-admission steering projection. */
@@ -226,13 +229,13 @@ function UserStyleBubble({
   referenceLabels?: readonly string[]
   t: ChatViewSlotProps['t']
 }): ReactNode {
-  const { text, images, rest } = contentParts(content)
+  const { text, attachments, rest } = contentParts(content)
   const truncated = (total: number): string => t('json.truncated', { total })
   const showBubble = text !== '' || rest.length > 0
   return (
     <div className={css.userRow} data-pending-steering={pending || undefined} data-time-hover-root>
       <div className={css.userStack}>
-        {renderMessageImages({ images, align: 'end' })}
+        {renderMessageAttachments({ attachments, align: 'end' })}
         {showBubble && <div className={css.bubble}>
           {projectUserText(text, referenceLabels)}
           {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}
@@ -254,15 +257,15 @@ function UserStyleBubble({
  * @param props - Pending message content and conversation translator.
  * @returns the pending steering bubble.
  */
-export function PendingSteeringBubble({ content, renderMessageImages, t }: {
+export function PendingSteeringBubble({ content, renderMessageAttachments, t }: {
   content: readonly unknown[]
-  renderMessageImages: ChatNodeOwnerProps['renderMessageImages']
+  renderMessageAttachments: ChatNodeOwnerProps['renderMessageAttachments']
   t: ChatViewSlotProps['t']
 }): ReactNode {
   return (
     <UserStyleBubble
       content={content}
-      renderMessageImages={renderMessageImages}
+      renderMessageAttachments={renderMessageAttachments}
       pending
       t={t}
       actions={text => (
@@ -279,13 +282,13 @@ export function PendingSteeringBubble({ content, renderMessageImages, t }: {
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderMessageImages, t,
+  node, renderMessageAttachments, t,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
   return (
     <UserStyleBubble
       content={data.content}
-      renderMessageImages={renderMessageImages}
+      renderMessageAttachments={renderMessageAttachments}
       {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
       t={t}
       actions={text => (

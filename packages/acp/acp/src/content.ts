@@ -5,6 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { isImageAdmissionError } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef, ImageMediaType, SaveImageAttachment } from '@deepseek-ai/dsh-attachment'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { textOnlyFileText } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 
 /** Raster formats shared by ACP image blocks and the core attachment vocabulary. */
@@ -207,7 +208,8 @@ export async function admitAcpPrompt(
 /**
  * Translate one committed assistant block to ACP wire content.
  * Images are re-read and integrity-verified before inline base64 delivery;
- * unsupported core output blocks stay off the automation wire.
+ * files use the deterministic core text projection because ACP has no generic
+ * file block. Other core output blocks stay off the automation wire.
  * @param ctx - bridge context carrying the authoritative attachment store.
  * @param block - committed core assistant block.
  * @returns ACP text/image content, or undefined for non-output blocks.
@@ -218,6 +220,9 @@ export async function assistantBlockToAcp(
 ): Promise<AcpContentBlock | undefined> {
   if (block.type === 'text') {
     return block.text.length === 0 ? undefined : { type: 'text', text: block.text }
+  }
+  if (block.type === 'file') {
+    return { type: 'text', text: textOnlyFileText(block.attachment) }
   }
   if (block.type !== 'image') return undefined
   const attachments = ctx.get('attachments')

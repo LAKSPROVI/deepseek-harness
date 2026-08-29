@@ -39,13 +39,30 @@ export function messageImageLabels(t: TranslateNS<'conversation'>): MessageImage
 export function dropOverlayLabels(
   t: TranslateNS<'conversation'>,
   accepting: boolean,
-  limits?: { readonly count: number; readonly size: string },
+  limits?: {
+    readonly images?: { readonly count: number; readonly size: string } | undefined
+    readonly files?: { readonly count: number; readonly size: string } | undefined
+    readonly combined?: number | undefined
+  },
 ): DropOverlayLabels {
-  if (!accepting) return { title: t('image.dropBlocked') }
-  return {
-    title: t('image.dropTitle'),
-    desc: limits === undefined ? undefined : t('image.dropDesc', limits),
-  }
+  if (!accepting) return { title: t('attachment.dropBlocked') }
+  const images = limits?.images
+  const files = limits?.files
+  const desc = images !== undefined && files !== undefined
+    ? t('attachment.dropDescMixed', {
+      imageCount: images.count,
+      imageSize: images.size,
+      fileCount: files.count,
+      fileSize: files.size,
+    })
+    : images !== undefined
+      ? t('attachment.dropDescImages', { count: images.count, size: images.size })
+      : files !== undefined
+        ? t('attachment.dropDescFiles', { count: files.count, size: files.size })
+        : limits?.combined === undefined
+          ? undefined
+          : t('attachment.dropDesc', { count: limits.combined })
+  return { title: t('attachment.dropTitle'), desc }
 }
 
 /**

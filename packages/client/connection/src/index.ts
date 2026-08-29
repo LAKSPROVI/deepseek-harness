@@ -26,19 +26,19 @@ export { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
 /** Stable Cordis plugin name. */
 export const name = 'client-connection'
 
-/** Headroom for RPC JSON fields around aggregate base64 image payloads. */
+/** Headroom for RPC JSON fields around aggregate base64 attachment payloads. */
 const REQUEST_ENVELOPE_HEADROOM_BYTES = 1024 * 1024
 
-function assertImageBodyCapacity(ctx: Context, maxRequestBodyBytes: number): void {
+function assertAttachmentBodyCapacity(ctx: Context, maxRequestBodyBytes: number): void {
   const attachments = ctx.get('attachments')
   if (attachments === undefined) return
-  const requiredImageBodyBytes = Math.ceil(
-    attachments.imageLimits.maxMessageImageBytes * 4 / 3,
-  ) + REQUEST_ENVELOPE_HEADROOM_BYTES
-  if (maxRequestBodyBytes < requiredImageBodyBytes) {
+  const aggregateBytes = attachments.imageLimits.maxMessageImageBytes
+    + (attachments.fileLimits?.maxMessageFileBytes ?? 0)
+  const requiredBodyBytes = Math.ceil(aggregateBytes * 4 / 3) + REQUEST_ENVELOPE_HEADROOM_BYTES
+  if (maxRequestBodyBytes < requiredBodyBytes) {
     throw new Error(
       `client-connection maxRequestBodyBytes (${String(maxRequestBodyBytes)}) must be at least `
-      + `${String(requiredImageBodyBytes)} for the configured aggregate image limit`,
+      + `${String(requiredBodyBytes)} for the configured aggregate attachment limits`,
     )
   }
 }
@@ -134,7 +134,7 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
   // Config boundary: a malformed entry fails the load loudly here rather than
   // silently authorizing its hostname prefix at request time.
   for (const entry of trustedHosts) assertTrustedAuthority(entry)
-  if (ctx.get('apiProxy') !== undefined) assertImageBodyCapacity(ctx, maxRequestBodyBytes)
+  if (ctx.get('apiProxy') !== undefined) assertAttachmentBodyCapacity(ctx, maxRequestBodyBytes)
   const connection = new HostConnectionService(ctx, trustedHosts)
   const fetchHandler = connection.createSharedFetchHandler(API_PATH, {
     async fetch(request) {
@@ -172,7 +172,7 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
   }
   ctx.effect(() => ctx.webServer.register(route), 'client-connection: /api route')
   ctx.inject(['apiProxy'], (apiCtx) => {
-    assertImageBodyCapacity(apiCtx, maxRequestBodyBytes)
+    assertAttachmentBodyCapacity(apiCtx, maxRequestBodyBytes)
     const downlinks = new WebSocketDownlinks(apiCtx.apiProxy)
     const registerDownlink = (
       path: string,

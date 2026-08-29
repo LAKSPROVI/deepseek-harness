@@ -5,25 +5,53 @@ import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type {
+  FileAttachmentLimits,
+  FileAttachmentRef,
   ImageAttachmentLimits,
   ImageAttachmentRef,
   ImageRequestPolicy,
   RequestImageAttachment,
+  SaveFileAttachment,
   SaveImageAttachment,
+  StoredFileAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { NormalizationPolicy } from './normalization.ts'
 import { CompressionLimiter } from './compression-limiter.ts'
-import { commitPreparedImageFile, prepareImageFile, readImageFile, validateImageFile } from './store.ts'
+import {
+  commitPreparedFileAttachment,
+  commitPreparedImageFile,
+  prepareFileAttachment,
+  prepareImageFile,
+  readFileAttachment,
+  readImageFile,
+  validateImageFile,
+} from './store.ts'
 import { readRequestImageFile, requestImageVariantId } from './request-image.ts'
 
 export { canPassThroughNormalization, normalizeImage } from './normalization.ts'
 export type { NormalizedImage, NormalizationPolicy } from './normalization.ts'
-export { commitPreparedImageFile, prepareImageFile, readImageFile, saveImageFile, validateImageFile } from './store.ts'
-export type { PreparedImageFile } from './store.ts'
+export {
+  commitPreparedFileAttachment,
+  commitPreparedImageFile,
+  prepareFileAttachment,
+  prepareImageFile,
+  readFileAttachment,
+  readImageFile,
+  saveFileAttachment,
+  saveImageFile,
+  validateImageFile,
+} from './store.ts'
+export type { PreparedFileAttachment, PreparedImageFile } from './store.ts'
 export { readRequestImageFile, requestImageDimensions, requestImageVariantId } from './request-image.ts'
 
+/** Default maximum bytes for one submitted opaque file. */
+export const DEFAULT_MAX_FILE_BYTES = 20 * 1024 * 1024
+/** Default maximum opaque files in one message. */
+export const DEFAULT_MAX_FILES_PER_MESSAGE = 20
+/** Default maximum aggregate opaque-file bytes in one message. */
+export const DEFAULT_MAX_MESSAGE_FILE_BYTES = 200 * 1024 * 1024
 /** Default maximum encoded bytes for one submitted image; oversized sources are refused, not shrunk. */
 export const DEFAULT_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 /** Default maximum images in one prompt. */
@@ -51,6 +79,12 @@ export const MAX_IMAGE_COMPRESSION_CONCURRENCY = 8
 export interface Config {
   /** Explicit harness home; omitted follows `DSH_HOME`, then `~/.dsh`. */
   dshHome?: string
+  /** Maximum bytes accepted for one opaque file. Default: 20 MiB. */
+  maxFileBytes?: number
+  /** Maximum opaque-file count accepted in one submitted message. Default: 20. */
+  maxFilesPerMessage?: number
+  /** Maximum aggregate opaque-file bytes accepted in one submitted message. Default: 200 MiB. */
+  maxMessageFileBytes?: number
   /** Maximum encoded bytes accepted for one submitted image. Default: 20 MiB. */
   maxImageBytes?: number
   /** Maximum image count accepted in one submitted message. Default: 20. */
@@ -116,7 +150,6 @@ class SharedRequest<T> {
         signal.removeEventListener('abort', abort)
         release(false)
         // CompressionLimiter normalizes task rejections before this handler.
-        // oxlint-disable-next-line typescript/prefer-promise-reject-errors
         reject(error)
       })
     })
@@ -134,6 +167,9 @@ class SharedRequest<T> {
 export class LocalAttachmentStore extends AttachmentStore {
   static Config: z<Config> = z.object({
     dshHome: z.string(),
+    maxFileBytes: z.number().step(1).min(1).default(DEFAULT_MAX_FILE_BYTES),
+    maxFilesPerMessage: z.number().step(1).min(1).default(DEFAULT_MAX_FILES_PER_MESSAGE),
+    maxMessageFileBytes: z.number().step(1).min(1).default(DEFAULT_MAX_MESSAGE_FILE_BYTES),
     maxImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_IMAGE_BYTES),
     maxImagesPerMessage: z.number().step(1).min(1).default(DEFAULT_MAX_IMAGES_PER_MESSAGE),
     maxMessageImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_MESSAGE_IMAGE_BYTES),
@@ -147,6 +183,7 @@ export class LocalAttachmentStore extends AttachmentStore {
 
   /** Absolute versioned storage root. */
   readonly root: string
+  override readonly fileLimits: FileAttachmentLimits
   readonly imageLimits: ImageAttachmentLimits
   /** Resolved provider-independent normalization policy. */
   readonly normalizationPolicy: Readonly<NormalizationPolicy>
@@ -158,6 +195,11 @@ export class LocalAttachmentStore extends AttachmentStore {
   constructor(ctx: Context, config: Config) {
     super(ctx)
     this.root = resolve(join(resolveDshHome(config.dshHome), 'attachments', 'v1'))
+    this.fileLimits = Object.freeze({
+      maxFileBytes: config.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
+      maxFilesPerMessage: config.maxFilesPerMessage ?? DEFAULT_MAX_FILES_PER_MESSAGE,
+      maxMessageFileBytes: config.maxMessageFileBytes ?? DEFAULT_MAX_MESSAGE_FILE_BYTES,
+    })
     this.imageLimits = Object.freeze({
       maxImageBytes: config.maxImageBytes ?? DEFAULT_MAX_IMAGE_BYTES,
       maxImagesPerMessage: config.maxImagesPerMessage ?? DEFAULT_MAX_IMAGES_PER_MESSAGE,
@@ -180,6 +222,26 @@ export class LocalAttachmentStore extends AttachmentStore {
     }
     this.imageCompressionConcurrency = compressionConcurrency
     this.compression = new CompressionLimiter(compressionConcurrency)
+  }
+
+  override async validateFile(input: SaveFileAttachment): Promise<void> {
+    prepareFileAttachment(input, this.fileLimits)
+  }
+
+  override async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]> {
+    this.validateFileBatch(inputs)
+    const prepared = inputs.map(input => prepareFileAttachment(input, this.fileLimits))
+    const refs: FileAttachmentRef[] = []
+    for (const file of prepared) refs.push(await commitPreparedFileAttachment(this.root, file))
+    return refs
+  }
+
+  override async saveFile(input: SaveFileAttachment): Promise<FileAttachmentRef> {
+    return commitPreparedFileAttachment(this.root, prepareFileAttachment(input, this.fileLimits))
+  }
+
+  override readFile(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachment> {
+    return readFileAttachment(this.root, ref, signal)
   }
 
   async validateImage(input: SaveImageAttachment): Promise<void> {

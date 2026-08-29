@@ -561,7 +561,7 @@ describe('/plan', () => {
     const plainSteer = vi.fn()
     ;(plainAgent as unknown as { steer: typeof plainSteer }).steer = plainSteer
     expect(ctx.commands.list(plainAgent)).toEqual([
-      { name: 'plan', description: 'Enter or leave plan mode', input: { hint: '[off|message]', images: true } },
+      { name: 'plan', description: 'Enter or leave plan mode', input: { hint: '[off|message]', attachments: true } },
     ])
 
     const signal = new AbortController().signal
@@ -670,13 +670,13 @@ describe('/plan', () => {
       },
     })
     const signal = new AbortController().signal
-    const images = [{ mediaType: 'image/png' as const, data: 'AAAA' }]
+    const attachments = [{ type: 'image' as const, mediaType: 'image/png' as const, data: 'AAAA' }]
 
     const agent = await agentWithSession(ctx, 'imaged-plan-command')
     openTurn(agent.session)
     const steer = vi.fn()
     ;(agent as unknown as { steer: typeof steer }).steer = steer
-    const withMessage = await ctx.commands.execute(agent, '/plan sketch the layout', images, signal)
+    const withMessage = await ctx.commands.execute(agent, '/plan sketch the layout', attachments, signal)
     expect(withMessage?.result.kind).toBe('success')
     expect(steer).toHaveBeenCalledExactlyOnceWith({
       id: expect.any(String) as unknown,
@@ -692,7 +692,7 @@ describe('/plan', () => {
     openTurn(bareAgent.session)
     const bareSteer = vi.fn()
     ;(bareAgent as unknown as { steer: typeof bareSteer }).steer = bareSteer
-    expect((await ctx.commands.execute(bareAgent, '/plan', images, signal))?.result)
+    expect((await ctx.commands.execute(bareAgent, '/plan', attachments, signal))?.result)
       .toEqual({ kind: 'success', text: 'Entering plan mode (applies from the next step). Use /plan off to leave.' })
     expect(bareSteer).toHaveBeenCalledExactlyOnceWith({
       id: expect.any(String) as unknown,
@@ -705,7 +705,7 @@ describe('/plan', () => {
     const activeAgent = await agentWithSession(ctx, 'imaged-off-plan-command', { active: true })
     const offSteer = vi.fn()
     ;(activeAgent as unknown as { steer: typeof offSteer }).steer = offSteer
-    expect((await ctx.commands.execute(activeAgent, '/plan off', images, signal))?.result)
+    expect((await ctx.commands.execute(activeAgent, '/plan off', attachments, signal))?.result)
       .toEqual({ kind: 'error', text: 'Image attachments cannot accompany /plan off.' })
     expect(offSteer).not.toHaveBeenCalled()
     expect(ctx.planMode.get(activeAgent)).toEqual({ active: true })

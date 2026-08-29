@@ -5,6 +5,7 @@ import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -24,6 +25,15 @@ import { spawnSubprocess } from '@deepseek-ai/dsh-subprocess-local/src/spawn.ts'
  */
 
 const mockServer = fileURLToPath(new URL('./mock-acp-server.ts', import.meta.url))
+const fileBlock = {
+  type: 'file',
+  attachment: {
+    attachmentId: `sha256:${'f'.repeat(64)}`,
+    mediaType: 'text/plain',
+    bytes: 12,
+    name: 'notes.txt',
+  },
+} as unknown as Extract<ContentBlock, { type: 'file' }>
 
 /** A parent Agent stub. The ACP backend reads exactly one thing off it: the session header's cwd (the workspace its child inherits). */
 const fakeParent = { id: 'parent', session: { header: { cwd: process.cwd() } } } as unknown as Agent
@@ -94,11 +104,12 @@ describe('acpContentText / toAcpPrompt', () => {
     expect(acpContentText({ type: 'image', data: 'x', mimeType: 'image/png' })).toBe('')
   })
 
-  it('keeps text prompt blocks and drops non-text ones', () => {
-    expect(toAcpPrompt([{ type: 'text', text: 'a' }])).toEqual([{ type: 'text', text: 'a' }])
-    // A non-text harness block (e.g. reasoning) is dropped from the ACP prompt.
-    expect(toAcpPrompt([{ type: 'text', text: 'a' }, { type: 'reasoning', text: 'think' }]))
-      .toEqual([{ type: 'text', text: 'a' }])
+  it('keeps text, projects files, and drops private prompt blocks', () => {
+    expect(toAcpPrompt([{ type: 'text', text: 'a' }, fileBlock, { type: 'reasoning', text: 'think' }]))
+      .toEqual([
+        { type: 'text', text: 'a' },
+        { type: 'text', text: textOnlyFileText(fileBlock.attachment) },
+      ])
   })
 })
 

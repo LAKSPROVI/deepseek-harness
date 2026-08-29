@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createMessage, createUserMessage, textOnlyFileText } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
 import SessionStore from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
@@ -21,6 +21,12 @@ import {
 } from '../src/estimate.ts'
 
 const CONFIG = { provider: 'test', model: 'test-model' }
+const FILE_REF = {
+  attachmentId: 'sha256:0123456789abcdef' as never,
+  mediaType: 'application/pdf',
+  bytes: 42,
+  name: 'brief.pdf',
+} as const
 
 const TOOLS: ToolSchema[] = [{
   name: 'bash',
@@ -288,10 +294,15 @@ describe('shared estimator', () => {
     expect(estimateContent([{ type: 'text', text: 'abcd' }])).toBe(5)
     expect(estimateContent([{ type: 'reasoning', text: 'abcdefgh' }] as ContentBlock[])).toBe(6)
     expect(estimateContent([{ type: 'tool-call', id: 'c' as never, name: 'bash', arguments: '{"a":1}' }])).toBe(7)
+    const fileTokens = 4 + Math.ceil(textOnlyFileText(FILE_REF).length / 4)
+    expect(estimateContent([{ type: 'file', attachment: FILE_REF }])).toBe(fileTokens)
     expect(estimateContent([{
       type: 'tool-result', toolCallId: 'c' as never,
-      content: [{ type: 'text', text: 'abcd' }],
-    }])).toBe(9)
+      content: [
+        { type: 'text', text: 'abcd' },
+        { type: 'file', attachment: FILE_REF },
+      ],
+    }])).toBe(9 + fileTokens)
     const unknown = { type: 'mystery', payload: 'abc' } as unknown as ContentBlock
     expect(estimateContent([unknown])).toBe(4 + Math.ceil(JSON.stringify(unknown).length / 4))
   })

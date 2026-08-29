@@ -8,7 +8,7 @@ import * as yaml from 'js-yaml'
 import { describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import type {
@@ -66,6 +66,15 @@ vi.mock('node:fs', async (importOriginal) => {
 type JsonObject = Record<string, unknown>
 
 const CODEX_VERSION = '0.147.0'
+const fileBlock = {
+  type: 'file',
+  attachment: {
+    attachmentId: `sha256:${'f'.repeat(64)}`,
+    mediaType: 'text/plain',
+    bytes: 12,
+    name: 'notes.txt',
+  },
+} as unknown as Extract<ContentBlock, { type: 'file' }>
 const CODEX_PLATFORM_PACKAGES = [
   '@openai/codex-darwin-arm64',
   '@openai/codex-darwin-x64',
@@ -415,14 +424,15 @@ describe('task admission and package contracts', () => {
     expect(JSON.stringify(rows)).not.toContain('tool-subagent')
   })
 
-  it('accepts one or more text blocks and rejects empty or non-text tasks', () => {
+  it('accepts text and file blocks and rejects empty or private tasks', () => {
     expect(textTask([
       { type: 'text', text: 'one' },
+      fileBlock,
       { type: 'text', text: 'two' },
-    ])).toEqual(['one', 'two'])
-    expect(() => textTask([])).toThrow('only text blocks')
+    ])).toEqual(['one', textOnlyFileText(fileBlock.attachment), 'two'])
+    expect(() => textTask([])).toThrow('only text or file blocks')
     expect(() => textTask([{ type: 'reasoning', text: 'hidden' }]))
-      .toThrow('only text blocks')
+      .toThrow('only text or file blocks')
     expect(() => textTask([{ type: 'text', text: ' \n ' }]))
       .toThrow('must not be empty')
   })

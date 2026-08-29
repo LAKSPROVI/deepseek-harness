@@ -77,7 +77,7 @@ function editRangeOf(pending: PendingEdit | null, prevLength: number, nextLength
 export type InputBarProps = ComposerBarProps
 
 export function InputBar({
-  useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
+  useSession, useInput, inputActions, keyboard, addAttachments, removeAttachment, draftAttachments,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
@@ -102,8 +102,8 @@ export function InputBar({
   const live = input !== undefined && keyboard !== undefined && inputActions !== undefined
   const draft = input?.draft ?? ''
   const attachments = useMemo(
-    () => input === undefined || draftImages === undefined ? [] : draftImages(input.imageIds),
-    [draftImages, input?.imageIds],
+    () => input === undefined || draftAttachments === undefined ? [] : draftAttachments(input.attachmentIds),
+    [draftAttachments, input?.attachmentIds],
   )
   const empty = draft.trim() === '' && attachments.length === 0
   // Transient error banner (machine notices, image-intake rejections, and
@@ -119,6 +119,7 @@ export function InputBar({
   // The deployment's image-intake limits (absent while no attachment service
   // is composed — the pre-check below then defers entirely to the host).
   const imageLimits = useProjection('imageLimits')
+  const fileLimits = useProjection('fileLimits')
   // Prompt failures are ordinary failures (no create/attach transaction exists
   // anymore): the toast announces promptError, the draft stays in the machine,
   // and the user resubmits. A remount over a session whose machine still holds
@@ -136,7 +137,7 @@ export function InputBar({
     if (notice?.level === 'error') showToast(notice.text)
   }, [notice, showToast])
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  const imageInputRef = useRef<HTMLInputElement | null>(null)
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null)
   const cardRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
@@ -185,10 +186,10 @@ export function InputBar({
 
   useEffect(() => {
     if (input === undefined || inputActions === undefined) return
-    if (attachments.length !== input.imageIds.length) {
-      inputActions.pruneImages(attachments.map(attachment => attachment.id))
+    if (attachments.length !== input.attachmentIds.length) {
+      inputActions.pruneAttachments(attachments.map(attachment => attachment.id))
     }
-  }, [attachments, input?.imageIds, inputActions])
+  }, [attachments, input?.attachmentIds, inputActions])
 
   // A native Safari edit that shortens the draft may leave the previous
   // soft-wrap layout behind after the mirror shrinks. The native-change signal
@@ -242,7 +243,6 @@ export function InputBar({
   const revealSelectionFocus = (el: HTMLTextAreaElement): void => {
     // selectionStart/End are number|null in lib.dom; the type-aware lint program narrows them.
     const caret = el.selectionDirection === 'backward' ? el.selectionStart : el.selectionEnd
-    // oxlint-disable-next-line typescript/no-unnecessary-condition
     revealCaret(caret ?? el.value.length)
   }
 
@@ -311,12 +311,10 @@ export function InputBar({
   }, [])
 
   // selectionStart/End are number|null in lib.dom; the type-aware lint program narrows them.
-  /* oxlint-disable typescript/no-unnecessary-condition */
   const selectionOf = (el: HTMLTextAreaElement) => ({
     start: el.selectionStart ?? 0,
     end: el.selectionEnd ?? el.selectionStart ?? 0,
   })
-  /* oxlint-enable typescript/no-unnecessary-condition */
 
   // The machine's occurrence math needs the edit's real range, and a controlled
   // textarea's change event carries only the resulting string. `beforeinput`
@@ -361,7 +359,6 @@ export function InputBar({
     // IME guard so a composition-closing Shift+Enter still breaks the line.
     if (e.key === 'Enter' && e.shiftKey) return
     // keyCode 229 is the legacy IME-composition signal engines emit without isComposing.
-    // oxlint-disable-next-line typescript/no-deprecated
     const composing = composingRef.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229
     if (!composing && !machineBusy && !locked
       && (e.key === 'Backspace' || e.key === 'Delete')) {
@@ -445,7 +442,6 @@ export function InputBar({
     safariNativeShrinkRef.current = safari && next.length < draft.length
     keyboard.setDraft(next, editRangeOf(pending, draft.length, next.length))
     // selectionStart is number|null in lib.dom; the type-aware lint program narrows it.
-    // oxlint-disable-next-line typescript/no-unnecessary-condition
     keyboard.track(next, e.target.selectionStart ?? next.length)
   }
 
@@ -484,7 +480,7 @@ export function InputBar({
       .filter(item => item.kind === 'file')
       .map(item => item.getAsFile())
       .filter((file): file is File => file !== null)
-    if (files.length > 0) intakeImages(files)
+    if (files.length > 0) intakeAttachments(files)
     const text = e.clipboardData.getData('text/plain')
     if (text === '') {
       if (files.length > 0) e.preventDefault()
@@ -508,39 +504,51 @@ export function InputBar({
   // never enters the rail — no more submit-time failure rolling the rail
   // back. The host enforces the same limits at submit for callers that bypass
   // this composer.
-  const intakeImages = useCallback((files: readonly File[]): void => {
-    if (addImages === undefined || files.length === 0) return
+  const intakeAttachments = useCallback((files: readonly File[]): void => {
+    if (addAttachments === undefined || files.length === 0) return
+    const imageTypes = imageLimits?.mediaTypes as readonly string[] | undefined
+    const incomingImages = files.filter(file => imageTypes?.includes(file.type) === true)
+    const incomingFiles = files.filter(file => imageTypes?.includes(file.type) !== true)
+    const draftImages = attachments.filter(attachment => attachment.kind === 'image')
+    const draftFiles = attachments.filter(attachment => attachment.kind === 'file')
     const rejected = ((): string | null => {
       if (imageLimits !== undefined) {
-        // Format precedes limits (DeepSeek Chat's filter order): a batch with
-        // a non-image must announce the format problem, not a count or size
-        // it could never pass anyway — addImages rejects it authoritatively.
-        if (files.some(file => !(imageLimits.mediaTypes as readonly string[]).includes(file.type))) {
-          return addImages(files)
-        }
-        if (attachments.length + files.length > imageLimits.maxImagesPerMessage) {
+        if (draftImages.length + incomingImages.length > imageLimits.maxImagesPerMessage) {
           return t('image.tooMany', { count: imageLimits.maxImagesPerMessage })
         }
-        if (files.some(file => file.size > imageLimits.maxImageBytes)) {
+        if (incomingImages.some(file => file.size > imageLimits.maxImageBytes)) {
           return t('image.fileTooLarge', { size: imageSizeText(imageLimits.maxImageBytes) })
         }
-        const total = attachments.reduce((sum, attachment) => sum + attachment.file.size, 0)
-          + files.reduce((sum, file) => sum + file.size, 0)
+        const total = draftImages.reduce((sum, attachment) => sum + attachment.file.size, 0)
+          + incomingImages.reduce((sum, file) => sum + file.size, 0)
         if (total > imageLimits.maxMessageImageBytes) {
           return t('image.totalTooLarge', { size: imageSizeText(imageLimits.maxMessageImageBytes) })
         }
       }
-      return addImages(files)
+      if (fileLimits !== undefined) {
+        if (draftFiles.length + incomingFiles.length > fileLimits.maxFilesPerMessage) {
+          return t('file.tooMany', { count: fileLimits.maxFilesPerMessage })
+        }
+        if (incomingFiles.some(file => file.size > fileLimits.maxFileBytes)) {
+          return t('file.tooLarge', { size: imageSizeText(fileLimits.maxFileBytes) })
+        }
+        const total = draftFiles.reduce((sum, attachment) => sum + attachment.file.size, 0)
+          + incomingFiles.reduce((sum, file) => sum + file.size, 0)
+        if (total > fileLimits.maxMessageFileBytes) {
+          return t('file.totalTooLarge', { size: imageSizeText(fileLimits.maxMessageFileBytes) })
+        }
+      }
+      return addAttachments(files)
     })()
     if (rejected !== null) showToast(rejected)
-  }, [addImages, attachments, imageLimits, showToast, t])
+  }, [addAttachments, attachments, fileLimits, imageLimits, showToast, t])
 
-  const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
-  const onPickImages = (e: ChangeEvent<HTMLInputElement>): void => {
+  const canAcceptDrop = !locked && !machineBusy && addAttachments !== undefined
+  const onPickAttachments = (e: ChangeEvent<HTMLInputElement>): void => {
     const files = Array.from(e.currentTarget.files ?? [])
     // Clearing lets the browser emit change when the same file is picked again.
     e.currentTarget.value = ''
-    intakeImages(files)
+    intakeAttachments(files)
   }
 
   const onSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>): void => {
@@ -717,11 +725,18 @@ export function InputBar({
         {renderSlot('conversation.input.attachments', {
           attachments,
           canAcceptDrop,
-          onAddImages: intakeImages,
-          onRemoveImage: (id) => { removeImage?.(id) },
-          dropLimits: imageLimits === undefined ? undefined : {
-            count: imageLimits.maxImagesPerMessage,
-            size: imageSizeText(imageLimits.maxImageBytes),
+          intakeAttachments,
+          onRemoveAttachment: (id) => { removeAttachment?.(id) },
+          dropLimits: imageLimits === undefined && fileLimits === undefined ? undefined : {
+            images: imageLimits === undefined ? undefined : {
+              count: imageLimits.maxImagesPerMessage,
+              size: imageSizeText(imageLimits.maxImageBytes),
+            },
+            files: fileLimits === undefined ? undefined : {
+              count: fileLimits.maxFilesPerMessage,
+              size: imageSizeText(fileLimits.maxFileBytes),
+            },
+            combined: (imageLimits?.maxImagesPerMessage ?? 0) + (fileLimits?.maxFilesPerMessage ?? 0),
           },
         })}
         {/* One scrollport, two text layers. The hidden mirror renders draft+'\n' and stretches the
@@ -791,14 +806,14 @@ export function InputBar({
               </button>
             </Tooltip>
             <input
-              ref={imageInputRef}
+              ref={attachmentInputRef}
               className={css.imageInput}
               type="file"
               accept="image/png,image/jpeg,image/webp,image/gif"
               multiple
               tabIndex={-1}
               aria-hidden
-              onChange={onPickImages}
+              onChange={onPickAttachments}
             />
             <Tooltip label={t('image.add')} side="top" delayMs={500}>
               <button
@@ -807,7 +822,7 @@ export function InputBar({
                 aria-label={t('image.add')}
                 disabled={!canAcceptDrop}
                 onMouseDown={keepFocus}
-                onClick={() => { imageInputRef.current?.click() }}
+                onClick={() => { attachmentInputRef.current?.click() }}
               >
                 <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
                   <path d="M2.5 3.5h11v9h-11zM4.5 10l2.2-2.2 1.8 1.8 1.2-1.2 1.8 1.8M10.7 6.2h.1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />

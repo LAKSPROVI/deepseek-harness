@@ -1,7 +1,6 @@
 /** OpenAI-compatible DeepSeek Files API transport. @module dsh-llm-deepseek/files-api */
 
 import { attributionHeaders, LlmError } from '@deepseek-ai/dsh-llm'
-import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { DeepSeekFileId } from './file-id.ts'
 import type { DeepSeekFileId as DeepSeekFileIdType } from './file-id.ts'
 
@@ -175,7 +174,7 @@ export class DeepSeekFilesClient {
    */
   async upload(input: {
     data: Uint8Array
-    mediaType: ImageMediaType
+    mediaType: string
     filename: string
     expiresAfterSeconds: number
     signal?: AbortSignal
