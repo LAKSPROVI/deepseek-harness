@@ -18,7 +18,7 @@ issue #2248 的第二步对齐，接在[附件展示 note](2026-08-11-web-attach
 
 **历史缩略图（DeepSeek Chat 规则）。** 一条消息仅有的一张图长边 240px、展示比例钳制在 [0.25, 4]，`cover` 裁切，特别高的图锚定顶部、特别宽的锚定左侧，从不放大；多张图渲染为固定 64px 方块，单个可换行的横排（10px 间距，用户消息右对齐）。assistant 连续的 `image` 块合并进同一个画廊，平铺而不是各占一行。
 
-**上限对齐并投影。** 图片输入默认值是每条消息 20 张、每个源文件 20 MiB、图片源文件总量 200 MiB、每张图片 6400 万解码像素，以及源文件任一边 8192px。通用文件独立使用每条消息 20 个、每个 20 MiB、总计 200 MiB 的默认值。附件后端另行生成长边 2048px、独立安全上限 4 MiB 的图片主版本；不透明文件保留精确字节。模型请求使用各路由自己的模态、像素和编码字节预算，因此源文件准入不采用提供方请求限制。HTTP 载体使用 `DEFAULT_MAX_REQUEST_BODY_BYTES = 300 MiB`，满足 base64 与请求封装扩张后的加载时容量断言。两套策略通过每次启动恒定的 `imageLimits` 与条件式 `fileLimits` 会话投影到达客户端，由 **apiproxy** 而非 attachment Service Definition 注册；缺少 `fileLimits` 表示部署只支持图片。`dsh-llm` 依赖 `dsh-attachment`，而 `dsh-session-projection` 经 `dsh-session` 到达 `dsh-llm`，因此在 seam 包注册投影会形成 project-reference 环。附件存储仍对完整批次的数量、单项大小、总量、媒体类型与完整性检查负责。`SessionProjectionMap` 继续位于 proxy 的 sessions 协议文件中，客户端通过载体类型再导出使用它。
+**上限对齐并投影。** 图片输入默认值是每条消息 20 张、每个源文件 20 MiB、图片源文件总量 200 MiB、每张图片 6400 万解码像素，以及源文件任一边 8192px。通用文件独立使用每条消息 20 个、每个 20 MiB、总计 200 MiB 的默认值。附件后端另行生成长边 2048px、独立安全上限 4 MiB 的图片主版本；不透明文件保留精确字节。模型请求使用各路由自己的模态、像素和编码字节预算，因此源文件准入不采用提供方请求限制。HTTP 载体使用 `DEFAULT_MAX_REQUEST_BODY_BYTES = 600 MiB`，满足图片 200 MiB 与文件 200 MiB 默认总量之和经 base64 与请求封装扩张后的加载时容量断言。两套策略通过每次启动恒定的 `imageLimits` 与条件式 `fileLimits` 会话投影到达客户端，由 **apiproxy** 而非 attachment Service Definition 注册；缺少 `fileLimits` 表示部署只支持图片。`dsh-llm` 依赖 `dsh-attachment`，而 `dsh-session-projection` 经 `dsh-session` 到达 `dsh-llm`，因此在 seam 包注册投影会形成 project-reference 环。附件存储仍对完整批次的数量、单项大小、总量、媒体类型与完整性检查负责。`SessionProjectionMap` 继续位于 proxy 的 sessions 协议文件中，客户端通过载体类型再导出使用它。
 
 **加入预检与错误文案。** 文件选择、粘贴与拖放汇合到同一条 `intakeAttachments` 路径，分类受支持光栅图片与不透明文件、保留混合顺序，并在加入草稿前按各自投影检查每种模态的数量、单项字节和总字节。违反限制的模态批次会被整体拒绝，并立刻显示点名上限的横幅——不再有提交时回滚。Host 检查仍是绕过 composer 调用方的权威结果。用户可解决的原因使用点明出路的产品句子；base64 损坏、引用丢失与读取失败则折叠为一条保留原因码的发送失败句子。非附件错误继续显示原始消息与代码。
 
@@ -34,4 +34,4 @@ issue #2248 的第二步对齐，接在[附件展示 note](2026-08-11-web-attach
 
 ## 后果
 
-工具栏选择器和窗口任意位置的拖放都会进入附件栏，超限输入在手势发生时就以点名上限的文案失败，历史图片像 DeepSeek Chat 一样平铺。300 MiB 的载体默认值仍是单请求驻留内存上界，因为桥会整体缓冲请求体。fixture 传输镜像默认投影；覆盖限制的部署会与 fixture 模式文案分叉，对 keyless 演示通道可接受。通用非图片文件卡在[通用文件决策](2026-08-29-opaque-generic-file-attachments.zh.md)下保持惰性且仅供下载。画廊箭头导航与灯箱缩放／下载仍然推迟（#2248）。
+工具栏选择器和窗口任意位置的拖放都会进入附件栏，超限输入在手势发生时就以点名上限的文案失败，历史图片像 DeepSeek Chat 一样平铺。600 MiB 的载体默认值仍是单请求驻留内存上界，因为桥会整体缓冲请求体。fixture 传输镜像默认投影；覆盖限制的部署会与 fixture 模式文案分叉，对 keyless 演示通道可接受。通用非图片文件卡在[通用文件决策](2026-08-29-opaque-generic-file-attachments.zh.md)下保持惰性且仅供下载。画廊箭头导航与灯箱缩放／下载仍然推迟（#2248）。

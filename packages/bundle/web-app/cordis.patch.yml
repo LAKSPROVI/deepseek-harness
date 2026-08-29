@@ -178,7 +178,10 @@
     # webserver under /api; browser half is the fetch/SSE client.
     - id: connection
       name: '@deepseek-ai/dsh-client-connection'
-      inject: [webRuntime]
+      # The HTTP route can exist before the API gateway, but its WebSocket
+      # downlinks require that gateway. Delay the whole Web row so both routes
+      # are present when the browser receives its boot manifest.
+      inject: [webRuntime, apiProxy]
       config:
         # LAN literals derived from the active bind plus --trusted-host extras.
         # A deployment adding authorities keeps this expression and concatenates

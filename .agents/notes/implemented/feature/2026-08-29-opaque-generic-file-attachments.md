@@ -58,7 +58,7 @@ Generic files carry their own validated deployment policy in `LocalAttachmentSto
 | `maxFilesPerMessage` | 20 | Generic files accepted in one message, counted separately from images. |
 | `maxFileBytes` | 20 MiB | Exact bytes accepted for one file. |
 | `maxMessageFileBytes` | 200 MiB | Aggregate generic-file bytes accepted in one message. |
-| `maxRequestBodyBytes` | 300 MiB | HTTP body the client connection carrier will buffer for one request. |
+| `maxRequestBodyBytes` | 600 MiB | HTTP body the client connection carrier will buffer for one request. |
 
 Uploads still travel as base64 inside the ordinary JSON RPC request, so the carrier default is a capacity guard rather than a taste: the connection asserts at load that its body budget still exceeds the combined image and file aggregates after 4/3 base64 expansion plus envelope overhead, and refuses to start when it does not. The composer additionally pre-checks count, per-file bytes, and aggregate bytes against the `fileLimits` session projection so an over-limit batch is refused at the gesture, but that check is feedback; the Host enforces the same bounds for every caller that bypasses the composer.
 

@@ -58,7 +58,7 @@ Status: implemented
 | `maxFilesPerMessage` | 20 | 单条消息接受的通用文件数量，与图片分开计数。 |
 | `maxFileBytes` | 20 MiB | 单个文件接受的精确字节数。 |
 | `maxMessageFileBytes` | 200 MiB | 单条消息接受的通用文件总字节数。 |
-| `maxRequestBodyBytes` | 300 MiB | 客户端连接承载层为一次请求缓冲的 HTTP 请求体。 |
+| `maxRequestBodyBytes` | 600 MiB | 客户端连接承载层为一次请求缓冲的 HTTP 请求体。 |
 
 上传仍以 base64 置于普通 JSON RPC 请求内传输，因此承载层默认值是一道容量保护而非偏好：连接在加载时断言其请求体预算在 4/3 的 base64 膨胀加信封开销之后仍超过图片与文件总量之和，不满足时拒绝启动。输入框另外会依据 `fileLimits` 会话投影预检数量、单文件字节与总字节，使超限批次在手势当下即被拒绝；但该检查只是反馈，Host 对每个绕过输入框的调用方执行同样的边界。
 

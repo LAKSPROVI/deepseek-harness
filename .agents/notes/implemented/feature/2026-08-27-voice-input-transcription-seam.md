@@ -37,7 +37,7 @@ Audio bytes exist for the duration of one call and become durable data nowhere: 
 
 ### Audio travels base64 over the existing RPC
 
-The Typert RPC wire is JSON-only: one plain-object `args` field per call, with no binary channel. Audio therefore travels base64-encoded inside the ordinary request, mirroring how image attachments already reach the Host. The cost is the 4/3 expansion, which the 300 MiB default request-body budget absorbs at the configured ceiling.
+The Typert RPC wire is JSON-only: one plain-object `args` field per call, with no binary channel. Audio therefore travels base64-encoded inside the ordinary request, mirroring how image attachments already reach the Host. The cost is the 4/3 expansion, which the 600 MiB default request-body budget absorbs at the configured ceiling.
 
 The browser encodes in 0x8000-byte chunks. Spreading an audio-sized buffer into `String.fromCharCode` exceeds the argument limit and throws, so the chunked loop is required rather than defensive. The Host validates the upload against a canonical base64 pattern before decoding, because `Buffer.from` silently skips characters outside the alphabet — a corrupted upload would otherwise decode into plausible-looking audio and fail deep inside the provider with an opaque message.
 

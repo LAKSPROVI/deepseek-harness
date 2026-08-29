@@ -436,7 +436,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
-        signature: 'validateFile(input: SaveFileAttachment): Promise<void>',
+        signature: 'async validateFile(input: SaveFileAttachment): Promise<void>',
         description: 'Validate one opaque file without persisting it.',
         parameters: [{ name: 'input', description: 'exact bytes and untrusted display metadata.' }],
         returns: 'completion after the complete file admission policy succeeds.',

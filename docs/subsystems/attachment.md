@@ -205,7 +205,7 @@ Immutable binary attachment service. Implementations validate bytes before publi
  * @param input - exact bytes and untrusted display metadata.
  * @returns completion after the complete file admission policy succeeds.
  */
-validateFile(input: SaveFileAttachment): Promise<void>
+async validateFile(input: SaveFileAttachment): Promise<void>
 
 /**
  * Validate one ordered file batch without persisting any member.

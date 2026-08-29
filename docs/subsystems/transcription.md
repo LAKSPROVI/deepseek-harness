@@ -218,7 +218,7 @@ A provider's `available()` is a cheap local check — credential presence, parse
 
 ## The voiceInput Remote contract
 
-The Typert RPC wire carries JSON only, with no binary channel, so audio crosses it base64-encoded inside the ordinary request at a 4/3 expansion. The 300 MiB default request-body budget absorbs that expansion at the default ceiling.
+The Typert RPC wire carries JSON only, with no binary channel, so audio crosses it base64-encoded inside the ordinary request at a 4/3 expansion. The 600 MiB default request-body budget absorbs that expansion at the default ceiling.
 
 The Host validates the upload against a canonical base64 pattern before decoding it. `Buffer.from` silently skips characters outside the alphabet, so an unvalidated corrupt upload would decode into plausible-looking audio and fail deep inside the provider with an opaque message.
 

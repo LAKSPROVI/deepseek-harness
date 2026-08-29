@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-27-voice-input-transcription-seam.md
-2026-08-27-voice-input-transcription-seam.md: 4bbd007b2326009c6475726fb6c7e54a01b5c964
-2026-08-27-voice-input-transcription-seam.zh.md: 8fa8fd06d2739a041185531bc719ef09b2398ef3
+2026-08-27-voice-input-transcription-seam.md: d39013285dbf8c17cf4575529f1ff8af7f6c03c8
+2026-08-27-voice-input-transcription-seam.zh.md: 3c35b38bb1bbae85918708e5197852e7c4af0758

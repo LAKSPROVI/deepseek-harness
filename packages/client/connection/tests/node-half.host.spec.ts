@@ -91,12 +91,12 @@ async function mounted(config?: { trustedHosts?: string[] }): Promise<{
 }
 
 describe('connection node half', () => {
-  it('reserves enough default carrier capacity for the 200 MiB image batch', () => {
-    expect(DEFAULT_MAX_REQUEST_BODY_BYTES).toBe(300 * 1024 * 1024)
-    expect(DEFAULT_MAX_REQUEST_BODY_BYTES).toBeGreaterThan(Math.ceil(200 * 1024 * 1024 * 4 / 3) + 1024 * 1024)
+  it('reserves enough default carrier capacity for combined image and file batches', () => {
+    expect(DEFAULT_MAX_REQUEST_BODY_BYTES).toBe(600 * 1024 * 1024)
+    expect(DEFAULT_MAX_REQUEST_BODY_BYTES).toBeGreaterThan(Math.ceil(400 * 1024 * 1024 * 4 / 3) + 1024 * 1024)
   })
 
-  it('fails loud when the carrier cap cannot hold the configured image batch', () => {
+  it('fails loud when the carrier cap cannot hold the configured attachment batch', () => {
     const ctx = new Context()
     const routes: WebRoute[] = []
     ctx.provide('webServer', fakeHttpServer(routes, []) as WebServer)
