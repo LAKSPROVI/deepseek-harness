@@ -809,17 +809,17 @@ export function InputBar({
               ref={attachmentInputRef}
               className={css.imageInput}
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
+              accept={fileLimits === undefined ? 'image/png,image/jpeg,image/webp,image/gif' : undefined}
               multiple
               tabIndex={-1}
               aria-hidden
               onChange={onPickAttachments}
             />
-            <Tooltip label={t('image.add')} side="top" delayMs={500}>
+            <Tooltip label={t('attachment.add')} side="top" delayMs={500}>
               <button
                 type="button"
                 className={css.add}
-                aria-label={t('image.add')}
+                aria-label={t('attachment.add')}
                 disabled={!canAcceptDrop}
                 onMouseDown={keepFocus}
                 onClick={() => { attachmentInputRef.current?.click() }}

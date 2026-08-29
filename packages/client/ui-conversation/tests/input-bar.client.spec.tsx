@@ -68,6 +68,12 @@ interface BenchOptions {
     maxImageDimension: number
     mediaTypes: readonly ('image/png' | 'image/jpeg' | 'image/webp' | 'image/gif')[]
   }
+  /** The `fileLimits` projection value (absent = image-only provider). */
+  fileLimits?: {
+    maxFileBytes: number
+    maxFilesPerMessage: number
+    maxMessageFileBytes: number
+  }
   draft?: string
   running?: boolean
   subagent?: Exclude<ConversationSnapshot['subagent'], null>
@@ -166,7 +172,9 @@ function bench(over?: BenchOptions) {
     useProjection: ((key: string, selector?: (v: unknown) => unknown) =>
       (selector ?? (v => v))(key === 'permissions'
         ? over?.permissions
-        : key === 'plan' ? over?.plan : key === 'imageLimits' ? over?.imageLimits : undefined)),
+        : key === 'plan' ? over?.plan
+          : key === 'imageLimits' ? over?.imageLimits
+            : key === 'fileLimits' ? over?.fileLimits : undefined)),
     useInput: bindSnapshotSelector(shell.state),
     inputActions: shell.actions,
     keyboard: shell,
@@ -234,23 +242,32 @@ function attachmentOwner(slotCalls: readonly { key: string; owner: unknown }[]):
 }
 
 describe('image draft rail', () => {
-  it('opens the image picker and sends selected files through the shared intake path', () => {
-    const addImages = vi.fn(() => null)
-    const result = bench({ addAttachments: addImages })
+  it('opens an unrestricted picker when the provider supports generic files', () => {
+    const addAttachments = vi.fn(() => null)
+    const result = bench({
+      addAttachments,
+      fileLimits: { maxFileBytes: 1024, maxFilesPerMessage: 4, maxMessageFileBytes: 4096 },
+    })
     const input = result.view.container.querySelector<HTMLInputElement>('input[type="file"]')!
     const open = vi.spyOn(input, 'click')
-    const image = new File([Uint8Array.of(1, 2, 3)], 'pixel.png', { type: 'image/png' })
+    const file = new File(['<svg/>'], 'diagram.svg', { type: 'image/svg+xml' })
 
-    fireEvent.click(result.view.getByRole('button', { name: '添加图片' }))
+    fireEvent.click(result.view.getByRole('button', { name: '添加附件' }))
     expect(open).toHaveBeenCalledOnce()
-    expect(input.accept).toBe('image/png,image/jpeg,image/webp,image/gif')
+    expect(input.accept).toBe('')
     expect(input.multiple).toBe(true)
 
-    fireEvent.change(input, { target: { files: [image] } })
-    fireEvent.change(input, { target: { files: [image] } })
-    expect(addImages).toHaveBeenNthCalledWith(1, [image])
-    expect(addImages).toHaveBeenNthCalledWith(2, [image])
+    fireEvent.change(input, { target: { files: [file] } })
+    expect(addAttachments).toHaveBeenCalledWith([file])
     expect(input.value).toBe('')
+  })
+
+  it('keeps the raster filter when the provider is image-only', () => {
+    const result = bench({ addAttachments: vi.fn(() => null) })
+    const input = result.view.container.querySelector<HTMLInputElement>('input[type="file"]')!
+
+    fireEvent.click(result.view.getByRole('button', { name: '添加附件' }))
+    expect(input.accept).toBe('image/png,image/jpeg,image/webp,image/gif')
   })
 
   it('collects clipboard files while preserving text from a mixed paste', () => {
