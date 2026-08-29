@@ -36,6 +36,14 @@ export interface EncodedFileAttachment {
   name?: string
 }
 
+/** Session-scoped proof that a raw upload produced one immutable file. */
+export interface UploadedFileAttachment {
+  /** Opaque integrity proof over the scope and complete attachment reference. */
+  uploadId: string
+  /** Exact reference authenticated by `uploadId`; callers cannot replace its metadata. */
+  attachment: FileAttachmentRef
+}
+
 /** Request to validate and durably commit one opaque file. */
 export interface SaveFileAttachment {
   /** Exact file bytes; providers must not execute, decode, or extract them. */
@@ -46,10 +54,29 @@ export interface SaveFileAttachment {
   name?: string
 }
 
+/** Streaming request to validate and durably commit one opaque file. */
+export interface SaveFileAttachmentStream {
+  /** Exact file bytes in producer order; Node.js `Readable` satisfies this interface. */
+  data: AsyncIterable<Uint8Array>
+  /** Optional exact byte count checked before publication. */
+  expectedBytes?: number
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+
 /** Stored opaque bytes returned after reference and digest verification. */
 export interface StoredFileAttachment {
   ref: FileAttachmentRef
   data: Uint8Array
+}
+
+/** Single-use verified stream over one stored opaque file. */
+export interface StoredFileAttachmentStream {
+  ref: FileAttachmentRef
+  /** Bytes are integrity-verified incrementally; corruption rejects iteration before successful completion. */
+  data: AsyncIterable<Uint8Array>
 }
 
 /** Raster image formats accepted by the version-one attachment path. */

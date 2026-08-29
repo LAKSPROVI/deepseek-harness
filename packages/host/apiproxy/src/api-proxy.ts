@@ -128,21 +128,37 @@ export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
 const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
 
 /** Validate and persist every upload before publishing its owning message. */
-async function durablePromptContent(ctx: Context, content: readonly PromptContentPart[]): Promise<ContentBlock[]> {
+async function durablePromptContent(
+  ctx: Context,
+  scope: string,
+  content: readonly PromptContentPart[],
+): Promise<ContentBlock[]> {
   if (content.every(part => part.type === 'text')) {
     return content.map(part => ({ type: 'text', text: part.text }))
   }
-  const files = content.filter(part => part.type === 'file')
   const images = content.filter(part => part.type === 'image')
-  const fileRefs = files.length === 0 ? [] : await admitEncodedFiles(ctx.attachments, files)
-  const imageRefs = images.length === 0 ? [] : await admitEncodedImages(ctx.attachments, images)
-  let nextFile = 0
+  const encodedFiles = content.filter(part => part.type === 'file' && 'data' in part)
+  const uploadedFiles = content.filter(part => part.type === 'file' && 'uploadId' in part)
+  const [imageRefs, encodedRefs, uploadedRefs] = await Promise.all([
+    images.length === 0 ? [] : admitEncodedImages(ctx.attachments, images),
+    encodedFiles.length === 0 ? [] : admitEncodedFiles(ctx.attachments, encodedFiles),
+    uploadedFiles.length === 0 ? [] : ctx.attachments.authorizeUploadedFiles(scope, uploadedFiles),
+  ])
+  const fileRefs = [...encodedRefs, ...uploadedRefs]
+  if (fileRefs.length > 0) ctx.attachments.validateFileReferences(fileRefs)
   let nextImage = 0
+  let nextEncoded = 0
+  let nextUploaded = 0
   return content.map((part): ContentBlock => {
-    switch (part.type) {
-      case 'text': return { type: 'text', text: part.text }
-      case 'image': return { type: 'image', attachment: imageRefs[nextImage++] as ImageAttachmentRef }
-      case 'file': return { type: 'file', attachment: fileRefs[nextFile++] as FileAttachmentRef }
+    if (part.type === 'text') return { type: 'text', text: part.text }
+    if (part.type === 'image') {
+      return { type: 'image', attachment: imageRefs[nextImage++] as ImageAttachmentRef }
+    }
+    return {
+      type: 'file',
+      attachment: 'data' in part
+        ? encodedRefs[nextEncoded++] as FileAttachmentRef
+        : uploadedRefs[nextUploaded++] as FileAttachmentRef,
     }
   })
 }
@@ -152,40 +168,76 @@ type LoggedAttachment =
   | { type: 'image'; ref: ImageAttachmentRef }
   | { type: 'file'; ref: FileAttachmentRef }
 
-/** Recursively search logged event data, including tool results and stream chunks. */
-function attachmentIn(value: unknown, attachmentId: string): LoggedAttachment | undefined {
+/** Resolve an attachment only from authoritative model-visible user-message content. */
+function referencedAttachment(events: readonly SessionEvent[], attachmentId: string): LoggedAttachment | undefined {
+  for (const event of events) {
+    if (event.type !== 'user/message') continue
+    for (const block of event.data.content) {
+      if (block.type === 'image' && String(block.attachment.attachmentId) === attachmentId) {
+        return { type: 'image', ref: block.attachment }
+      }
+      if (block.type === 'file' && String(block.attachment.attachmentId) === attachmentId) {
+        return { type: 'file', ref: block.attachment }
+      }
+    }
+  }
+  return undefined
+}
+
+/** Recursively resolve only a legacy image occurrence from durable event data. */
+function referencedImageIn(value: unknown, attachmentId: string): ImageAttachmentRef | undefined {
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found = attachmentIn(item, attachmentId)
+      const found = referencedImageIn(item, attachmentId)
       if (found !== undefined) return found
     }
     return undefined
   }
   if (typeof value !== 'object' || value === null) return undefined
   const record = value as Record<string, unknown>
-  if ((record['type'] === 'image' || record['type'] === 'file')
-    && typeof record['attachment'] === 'object' && record['attachment'] !== null) {
-    const ref = record['attachment'] as ImageAttachmentRef | FileAttachmentRef
-    if (String(ref.attachmentId) === attachmentId) {
-      return record['type'] === 'image'
-        ? { type: 'image', ref: ref as ImageAttachmentRef }
-        : { type: 'file', ref: ref as FileAttachmentRef }
-    }
+  if (record['type'] === 'image' && typeof record['attachment'] === 'object' && record['attachment'] !== null) {
+    const ref = record['attachment'] as ImageAttachmentRef
+    if (String(ref.attachmentId) === attachmentId) return ref
   }
   for (const child of Object.values(record)) {
-    const found = attachmentIn(child, attachmentId)
+    const found = referencedImageIn(child, attachmentId)
     if (found !== undefined) return found
   }
   return undefined
 }
 
-/** Resolve the first logged image or file reference matching one opaque id. */
-function referencedAttachment(events: readonly SessionEvent[], attachmentId: string): LoggedAttachment | undefined {
+/** Resolve a legacy image occurrence without admitting arbitrary generic-file metadata. */
+function referencedLegacyImage(events: readonly SessionEvent[], attachmentId: string): LoggedAttachment | undefined {
   for (const event of events) {
-    const found = attachmentIn(event.data, attachmentId)
-    if (found !== undefined) return found
+    const ref = referencedImageIn(event.data, attachmentId)
+    if (ref !== undefined) return { type: 'image', ref }
   }
   return undefined
+}
+
+/** Adapt an attachment byte iterator to a cancellable Fetch response body. */
+function attachmentResponseBody(
+  data: AsyncIterable<Uint8Array>,
+  signal: AbortSignal,
+): ReadableStream<Uint8Array> {
+  const iterator = data[Symbol.asyncIterator]()
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      signal.throwIfAborted()
+      const next = await iterator.next()
+      if (next.done) controller.close()
+      else controller.enqueue(next.value)
+    },
+    async cancel(reason) {
+      await iterator.return?.(reason)
+    },
+  })
+}
+
+/** Forced-download header with a fixed ASCII fallback and encoded display name. */
+function fileDisposition(name: string | undefined): string {
+  if (name === undefined) return 'attachment; filename="attachment"'
+  return `attachment; filename="attachment"; filename*=UTF-8''${encodeURIComponent(name)}`
 }
 
 /** Strict browser-zone profile: UTC or an IANA Area/Location-style identifier. */
@@ -2402,7 +2454,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 })
               }
             }
-            const durable = await durablePromptContent(ctx, content)
+            const durable = await durablePromptContent(ctx, String(sessionId), content)
             const message: UserMessage = createUserMessage({ content: durable, source })
             if (mode === 'steer') agent.steer(message)
             else agent.followup(message)
@@ -2445,6 +2497,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         }
         const logged = referencedAttachment(state.events, String(attachmentId))
+          ?? referencedLegacyImage(state.events, String(attachmentId))
         if (logged === undefined) {
           return err(request, {
             code: 'attachment-error',
@@ -3553,6 +3606,65 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     },
 
     downloads: {
+      async fileUpload(request, signal) {
+        try {
+          await readSessionState(request.sessionId)
+        } catch (error: unknown) {
+          if (error instanceof SessionNotFound) return new Response('session not found', { status: 404 })
+          return new Response('session authorization unavailable', { status: 500 })
+        }
+        try {
+          const receipt = await ctx.attachments.saveFileStream(
+            String(request.sessionId),
+            {
+              data: request.body,
+              expectedBytes: request.expectedBytes,
+              ...(request.mediaType === undefined ? {} : { mediaType: request.mediaType }),
+              ...(request.name === undefined ? {} : { name: request.name }),
+            },
+            signal,
+          )
+          return Response.json(receipt, { status: 201 })
+        } catch (error: unknown) {
+          signal.throwIfAborted()
+          if (error instanceof AttachmentError) {
+            const status = error.code === 'FILE_TOO_LARGE' || error.code === 'FILES_TOO_LARGE' ? 413 : 400
+            return new Response(error.message, { status })
+          }
+          return new Response('file upload failed', { status: 500 })
+        }
+      },
+
+      async fileDownload(request, signal) {
+        let state: SessionReadState
+        try {
+          state = await readSessionState(request.sessionId)
+        } catch (error: unknown) {
+          if (error instanceof SessionNotFound) return new Response('session not found', { status: 404 })
+          return new Response('attachment authorization unavailable', { status: 500 })
+        }
+        const logged = referencedAttachment(state.events, request.attachmentId)
+        if (logged === undefined || logged.type !== 'file') {
+          return new Response('attachment is not referenced by this session', { status: 404 })
+        }
+        try {
+          const stored = await ctx.attachments.readFileStream(logged.ref, signal)
+          return new Response(attachmentResponseBody(stored.data, signal), {
+            headers: {
+              'content-type': 'application/octet-stream',
+              'content-length': String(stored.ref.bytes),
+              'content-disposition': fileDisposition(stored.ref.name),
+              'x-content-type-options': 'nosniff',
+              'cache-control': 'private, no-store',
+            },
+          })
+        } catch (error: unknown) {
+          signal.throwIfAborted()
+          if (error instanceof AttachmentError) return new Response(error.message, { status: 404 })
+          return new Response('file download failed', { status: 500 })
+        }
+      },
+
       async sessionLog(request, signal) {
         // Clean error path first: missing services answer 500 and a missing
         // root artifact 404 before any zip byte is produced. The root content

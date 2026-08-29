@@ -7,7 +7,7 @@
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type {
   AttachmentIdType, EncodedFileAttachment, FileAttachmentLimits, FileAttachmentRef,
-  ImageAttachmentLimits, ImageAttachmentRef, ImageMediaType,
+  ImageAttachmentLimits, ImageAttachmentRef, ImageMediaType, UploadedFileAttachment,
 } from '@deepseek-ai/dsh-attachment'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
 import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
@@ -97,7 +97,7 @@ export interface SessionProjectionsBlock {
 export type PromptContentPart =
   | { type: 'text'; text: string }
   | { type: 'image'; mediaType: ImageMediaType; data: string; name?: string }
-  | ({ type: 'file' } & EncodedFileAttachment)
+  | ({ type: 'file' } & (EncodedFileAttachment | UploadedFileAttachment))
 
 /** Authenticated attachment bytes returned after session-log authorization. */
 export type SessionAttachmentValue =

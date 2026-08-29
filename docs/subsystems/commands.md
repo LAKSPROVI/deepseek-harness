@@ -14,7 +14,7 @@ The service exposes one optional unstructured-input descriptor: a hint plus an a
 /** One encoded composer attachment in the exact submitted position. */
 type EncodedCommandAttachment =
   | ({ readonly type: 'image' } & EncodedImageAttachment)
-  | ({ readonly type: 'file' } & EncodedFileAttachment)
+  | ({ readonly type: 'file' } & (EncodedFileAttachment | UploadedFileAttachment))
 ```
 
 ```ts type-equiv

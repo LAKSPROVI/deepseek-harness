@@ -2528,6 +2528,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         const userText = content.map(b => (b.type === 'text' ? b.text : '')).join('')
         const durable: ContentBlock[] = content.map((block) => {
           if (block.type === 'text') return block
+          if (block.type === 'file' && !('data' in block)) {
+            throw new Error('fixture transport does not accept raw-upload receipts')
+          }
           const attachmentId = `fixture:${randomUuid()}` as AttachmentIdType
           const bytes = Math.max(
             1,
@@ -3125,6 +3128,8 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     // hands GET /api/session.export to the native download manager, so this
     // stub is never reached through the fixture's dispatch.
     downloads: {
+      fileUpload: () => Promise.resolve(new Response('fixture mode does not serve raw file upload', { status: 404 })),
+      fileDownload: () => Promise.resolve(new Response('fixture mode does not serve raw file download', { status: 404 })),
       sessionLog: () => Promise.resolve(new Response('fixture mode does not serve session export', { status: 404 })),
     },
   }

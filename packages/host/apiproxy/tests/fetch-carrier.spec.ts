@@ -290,6 +290,12 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       return message.rpcId === 'known' ? { accepted: true } : { accepted: false, reason: 'not-pending' }
     },
     downloads: {
+      async fileUpload() {
+        return new Response('stub', { status: 404 })
+      },
+      async fileDownload() {
+        return new Response('stub', { status: 404 })
+      },
       async sessionLog() {
         return new Response('stub', { status: 404 })
       },

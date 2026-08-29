@@ -51,6 +51,16 @@ interface EncodedFileAttachment {
 ```
 
 ```ts type-equiv
+/** Session-scoped proof that a raw upload produced one immutable file. */
+interface UploadedFileAttachment {
+  /** Opaque integrity proof over the scope and complete attachment reference. */
+  uploadId: string
+  /** Exact reference authenticated by `uploadId`; callers cannot replace its metadata. */
+  attachment: FileAttachmentRef
+}
+```
+
+```ts type-equiv
 /** Request to validate and durably commit one opaque file. */
 interface SaveFileAttachment {
   /** Exact file bytes; providers must not execute, decode, or extract them. */
@@ -63,10 +73,33 @@ interface SaveFileAttachment {
 ```
 
 ```ts type-equiv
+/** Streaming request to validate and durably commit one opaque file. */
+interface SaveFileAttachmentStream {
+  /** Exact file bytes in producer order; Node.js `Readable` satisfies this interface. */
+  data: AsyncIterable<Uint8Array>
+  /** Optional exact byte count checked before publication. */
+  expectedBytes?: number
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+```
+
+```ts type-equiv
 /** Stored opaque bytes returned after reference and digest verification. */
 interface StoredFileAttachment {
   ref: FileAttachmentRef
   data: Uint8Array
+}
+```
+
+```ts type-equiv
+/** Single-use verified stream over one stored opaque file. */
+interface StoredFileAttachmentStream {
+  ref: FileAttachmentRef
+  /** Bytes are integrity-verified incrementally; corruption rejects iteration before successful completion. */
+  data: AsyncIterable<Uint8Array>
 }
 ```
 
@@ -205,7 +238,13 @@ Immutable binary attachment service. Implementations validate bytes before publi
  * @param input - exact bytes and untrusted display metadata.
  * @returns completion after the complete file admission policy succeeds.
  */
-async validateFile(input: SaveFileAttachment): Promise<void>
+validateFile(input: SaveFileAttachment): Promise<void>
+
+/**
+ * Validate count, individual bytes, and aggregate bytes for durable file references.
+ * @param refs - complete ordered file-reference batch.
+ */
+validateFileReferences(refs: readonly FileAttachmentRef[]): void
 
 /**
  * Validate one ordered file batch without persisting any member.
@@ -235,6 +274,39 @@ saveFile(input: SaveFileAttachment): Promise<FileAttachmentRef>
  * @returns exact verified bytes and the supplied reference.
  */
 readFile(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachment>
+
+/**
+ * Stream one opaque file into durable storage and bind its receipt to an owning scope.
+ * @param scope - opaque owner identity that must accompany later admission.
+ * @param input - ordered byte source and untrusted display metadata.
+ * @param signal - optional cancellation for source consumption, staging, and publication.
+ * @returns a scoped proof and immutable reference after complete publication.
+ */
+saveFileStream( scope: string, input: SaveFileAttachmentStream, signal?: AbortSignal, ): Promise<UploadedFileAttachment>
+
+/**
+ * Verify a raw-upload receipt for its exact owner and immutable metadata.
+ * @param scope - opaque owner identity supplied when the upload was created.
+ * @param upload - proof and reference returned by `saveFileStream`.
+ * @returns the authenticated immutable reference.
+ */
+authorizeUploadedFile(scope: string, upload: UploadedFileAttachment): Promise<FileAttachmentRef>
+
+/**
+ * Verify an ordered receipt batch and enforce complete message limits.
+ * @param scope - opaque owner identity shared by every receipt.
+ * @param uploads - ordered raw-upload receipts.
+ * @returns authenticated references in the same order.
+ */
+async authorizeUploadedFiles( scope: string, uploads: readonly UploadedFileAttachment[], ): Promise<readonly FileAttachmentRef[]>
+
+/**
+ * Open a single-use verified byte stream without materializing the complete file.
+ * @param ref - durable reference from trusted session state.
+ * @param signal - optional cancellation observed during iteration.
+ * @returns the reference and byte source; integrity failures reject iteration.
+ */
+readFileStream(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachmentStream>
 
 /**
  * Validate one image without persisting it.

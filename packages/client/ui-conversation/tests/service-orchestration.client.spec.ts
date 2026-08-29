@@ -13,8 +13,15 @@ import { InputHub } from '../src/client/input/hub.ts'
 import { ConversationController } from '../src/client/service.ts'
 import { zh } from '../src/client/locales.ts'
 
-async function bench(readAttachment?: SessionFace['readAttachment']) {
+async function bench(
+  readAttachment?: SessionFace['readAttachment'],
+  fileTransfer?: {
+    upload(sessionId: string, file: File, signal?: AbortSignal): Promise<unknown>
+    downloadUrl(sessionId: string, attachment: unknown): string
+  },
+) {
   const runtime = await SlotTestRuntime.create()
+  if (fileTransfer !== undefined) runtime.provide('connection', { fileTransfer } as never)
   const prompt = vi.fn(() => Promise.resolve({ ok: true as const, value: { accepted: true as const } }))
   const updateQueue = vi.fn(() => Promise.resolve({ ok: true as const, value: { accepted: true as const } }))
   const cancel = vi.fn(() => Promise.resolve({ ok: true as const, value: { accepted: true as const } }))
@@ -116,6 +123,33 @@ describe('ConversationController', () => {
     expect(svg?.kind).toBe('file')
     expect(created).toHaveBeenCalledOnce()
     created.mockRestore()
+    await b.runtime.dispose()
+  })
+
+  it('reuses one raw upload receipt across retries and downloads files without base64 materialization', async () => {
+    const ref = {
+      attachmentId: AttachmentId('sha256:file'), mediaType: 'application/octet-stream', bytes: 3, name: 'a.bin',
+    }
+    const upload = vi.fn(() => Promise.resolve({ uploadId: 'receipt', attachment: ref }))
+    const downloadUrl = vi.fn(() => '/api/session.file?sessionId=s1&attachmentId=sha256%3Afile')
+    const readAttachment = vi.fn(() => Promise.reject(new Error('generic file must bypass RPC bytes')))
+    const b = await bench(readAttachment, { upload, downloadUrl })
+    const [attachment] = b.root.createDraftAttachments([
+      new File([Uint8Array.of(1, 2, 3)], 'a.bin', { type: 'application/octet-stream' }),
+    ])
+    if (attachment === undefined) throw new Error('draft attachment missing')
+    const arrayBuffer = vi.spyOn(attachment.file, 'arrayBuffer')
+    const sessionId = b.runtime.sessions.behavior('s1').sessionId
+
+    const first = await b.root.serializeDraftAttachments(sessionId, [attachment.id])
+    const second = await b.root.serializeDraftAttachments(sessionId, [attachment.id])
+    expect(first).toEqual([{ type: 'file', uploadId: 'receipt', attachment: ref }])
+    expect(second).toEqual(first)
+    expect(upload).toHaveBeenCalledOnce()
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    await expect(b.root.resolveAttachment(sessionId, ref)).resolves.toContain('/api/session.file')
+    expect(downloadUrl).toHaveBeenCalledOnce()
+    expect(readAttachment).not.toHaveBeenCalled()
     await b.runtime.dispose()
   })
 

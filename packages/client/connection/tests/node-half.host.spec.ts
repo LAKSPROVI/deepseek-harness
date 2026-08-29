@@ -123,8 +123,9 @@ describe('connection node half', () => {
 
   it('registers one HTTP route plus one upgrade route per downlink and removes all three with the fiber', async () => {
     const { routes, upgrades, dispose } = await mounted()
-    expect(routes).toHaveLength(1)
+    expect(routes).toHaveLength(2)
     expect(routes[0]).toMatchObject({ kind: 'prefix', path: API_PATH })
+    expect(routes[1]).toMatchObject({ kind: 'exact', path: '/api/session.file' })
     expect(upgrades.map(route => route.path)).toEqual([MUX_EVENTS_PATH, HOST_EVENTS_PATH])
     await dispose()
     expect(routes).toHaveLength(0)
@@ -225,8 +226,9 @@ describe('connection node half', () => {
     ctx.provide('webServer', fakeHttpServer(routes, []) as WebServer)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(routes).toHaveLength(1)
+    expect(routes).toHaveLength(2)
     expect(routes[0]).toMatchObject({ kind: 'prefix', path: API_PATH })
+    expect(routes[1]).toMatchObject({ kind: 'exact', path: '/api/session.file' })
 
     const connection = ctx.get('connection') as HostConnectionHandle
     const calls: unknown[] = []
@@ -260,7 +262,7 @@ describe('connection node half', () => {
       authority: 'trusted-host',
     })).toThrow(/duplicate route/)
     await remove()
-    expect(routes.map(candidate => candidate.path)).toEqual([API_PATH])
+    expect(routes.map(candidate => candidate.path)).toEqual([API_PATH, '/api/session.file'])
     await fiber.dispose()
     expect(routes).toHaveLength(0)
   })

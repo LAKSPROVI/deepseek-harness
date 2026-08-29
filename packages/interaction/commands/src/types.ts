@@ -7,13 +7,15 @@
  * @module @deepseek-ai/dsh-commands/types
  */
 
-import type { EncodedFileAttachment, EncodedImageAttachment } from '@deepseek-ai/dsh-attachment/types'
+import type {
+  EncodedFileAttachment, EncodedImageAttachment, UploadedFileAttachment,
+} from '@deepseek-ai/dsh-attachment/types'
 import type { CommandId } from './brand.ts'
 
 /** One encoded composer attachment in the exact submitted position. */
 export type EncodedCommandAttachment =
   | ({ readonly type: 'image' } & EncodedImageAttachment)
-  | ({ readonly type: 'file' } & EncodedFileAttachment)
+  | ({ readonly type: 'file' } & (EncodedFileAttachment | UploadedFileAttachment))
 
 /** Immutable metadata for a command's optional unstructured input. */
 export interface CommandInputDescriptor {

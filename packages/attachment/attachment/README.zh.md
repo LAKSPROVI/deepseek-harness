@@ -6,9 +6,9 @@
 
 未发送的输入区附件仍是由浏览器持有的临时草稿。`validateImage` 运行完整准入策略但不执行持久化。`saveImages` 负责批次图片数量和总字节限制，在发布任何成员前准备全部规范化附件，然后按顺序提交，并且只在完整批次成功后返回引用。后续存储失败不会返回部分引用，但较早写入的不可变内容寻址对象可能保持不可达，直至具备按引用感知的垃圾回收。`saveImage` 会在发布任何模型可见的会话事件前提交一张已接受的图片，并直接返回 `ImageAttachmentRef`。规范化过程缩小图片时，引用会通过 `originalDimensions` 记录应用方向后的输入尺寸。`readImage` 根据已记录的元数据校验规范化附件。`readImageRequest` 确定性派生路由所需的请求版本，其身份覆盖附件 ID、变换策略版本、像素和字节预算及编码参数。调用方通过 `Promise.all(refs.map(...))` 组合有序批次，本地实现仍通过实例级限流器、缓存和 singleflight 限制压缩并发。调用方可以取消读取和投影；实现保留取消结果，不把它转换为存储失败。
 
-通用文件走同一条持久化路径，且不对内容做任何解释。`FileAttachmentRef` 携带不透明的内容寻址 `attachmentId`、规范化后的 `mediaType`、精确的 `bytes`，以及可选的净化后 `name`；该名称是展示用元数据，存储绝不会把它解析为路径。`fileLimits` 是按部署解析的通用文件策略，在仅支持图片的提供方上为 `undefined`，此时 `validateFile`、`saveFile`、`saveFiles` 和 `readFile` 都会以 `FILE_ATTACHMENTS_UNSUPPORTED` 拒绝。`saveFiles` 在任何写入前强制执行文件数量、单文件字节和总字节限制，然后按顺序提交，并且只在完整批次成功后返回引用。`readFile` 在返回字节前校验引用、精确字节长度和内容摘要。声明的媒体类型缺失或无法解析为合法 type/subtype 时，一律归为 `application/octet-stream`。本服务边界不会对文件字节做解码、解压提取、转码或执行，因此文件的存储表示就是提交时的确切字节。`AttachmentError.code` 使用封闭的 `AttachmentErrorCode` 字符串联合类型。其 `ImageAdmissionErrorCode` 与 `FileAdmissionErrorCode` 子集分别标记可由调用方修正的图片和文件输入失败；`isImageAdmissionError` 与 `isFileAdmissionError` 在运行时识别这些子集，使每个协议适配器可以映射自己的错误词汇。
+通用文件走同一条持久化路径，且不解释内容。`FileAttachmentRef` 携带不透明的内容寻址 `attachmentId`、规范化后的 `mediaType`、精确 `bytes` 和可选的净化后 `name`；存储绝不会把展示名称解析为路径。提供方只支持图片时，`fileLimits` 为 `undefined`，所有文件操作以 `FILE_ATTACHMENTS_UNSUPPORTED` 拒绝。`saveFiles` 保留有界的内存兼容路径。`saveFileStream(scope, input)` 递增执行限额、摘要、暂存、同步与发布，然后返回 `UploadedFileAttachment` receipt，证明完整引用属于该 scope。prompt 与命令准入在记录引用前调用 `authorizeUploadedFiles`。`readFileStream` 在迭代期间校验摘要与长度，不物化完整对象。媒体类型缺失或格式错误时归为 `application/octet-stream`；任何方法都不会解码、解压提取、转码或执行文件字节。`AttachmentError.code` 使用封闭联合，其准入子集供协议适配器映射可由调用方修正的失败。
 
-`admitEncodedImages(attachments, images)` 与 `admitEncodedFiles(attachments, files)` 是每个接受浏览器上传的 RPC 端点（会话 prompt 端点与命令执行器）共用的 wire 入口：两者都对每个成员强制执行规范 base64，随后把批量准入——限额、校验、有序提交——分别委托给 `saveImages` 或 `saveFiles`。base64 上传形式为 `EncodedImageAttachment` 和 `EncodedFileAttachment`，从 `@deepseek-ai/dsh-attachment/types` 导出，供 wire 契约引用。
+`admitEncodedImages` 与 `admitEncodedFiles` 仍是图片及缺少原始文件传输能力的 carrier 所用的规范 base64 入口。served Web 会先通过流式路径上传通用文件，再只提交 `UploadedFileAttachment`；prompt 与命令准入可把 receipt 与 legacy 编码文件合并，校验完整引用批次并保持提交顺序。图片继续使用 base64 路径。
 
 ## 模型体验
 

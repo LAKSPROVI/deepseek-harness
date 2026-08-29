@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -36,9 +36,9 @@ describe('local generic-file storage', () => {
   it('resolves every omitted generic-file limit explicitly', async () => {
     const store = await service()
 
-    expect(DEFAULT_MAX_FILE_BYTES).toBe(20 * 1024 * 1024)
+    expect(DEFAULT_MAX_FILE_BYTES).toBe(1024 * 1024 * 1024)
     expect(DEFAULT_MAX_FILES_PER_MESSAGE).toBe(20)
-    expect(DEFAULT_MAX_MESSAGE_FILE_BYTES).toBe(200 * 1024 * 1024)
+    expect(DEFAULT_MAX_MESSAGE_FILE_BYTES).toBe(1024 * 1024 * 1024)
     expect(store.fileLimits).toEqual({
       maxFileBytes: DEFAULT_MAX_FILE_BYTES,
       maxFilesPerMessage: DEFAULT_MAX_FILES_PER_MESSAGE,
@@ -160,6 +160,10 @@ describe('local generic-file storage', () => {
       .rejects.toMatchObject({ code: 'ATTACHMENT_CORRUPT' })
     await expect(store.readFile({ ...ref, attachmentId: 'not-a-digest' as never }))
       .rejects.toMatchObject({ code: 'INVALID_ATTACHMENT_REF' })
+    for (const malformedBytes of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(store.readFile({ ...ref, bytes: malformedBytes }))
+        .rejects.toMatchObject({ code: 'INVALID_ATTACHMENT_REF' })
+    }
 
     const missing = await service()
     await expect(missing.readFile(ref)).rejects.toMatchObject({ code: 'ATTACHMENT_NOT_FOUND' })
@@ -170,6 +174,48 @@ describe('local generic-file storage', () => {
     const unreadable = await service()
     await mkdir(objectOf(unreadable, String(ref.attachmentId)), { recursive: true })
     await expect(unreadable.readFile(ref)).rejects.toMatchObject({ code: 'ATTACHMENT_READ_FAILED' })
+  })
+
+  it('streams exact limits, rejects overflow and size mismatch, and leaves no staging files', async () => {
+    const store = await service({ maxFileBytes: 4, maxMessageFileBytes: 4 })
+    const source = async function* (...chunks: Uint8Array[]): AsyncGenerator<Uint8Array> {
+      yield* chunks
+    }
+
+    const upload = await store.saveFileStream('session-a', {
+      data: source(bytes(1, 2), bytes(3, 4)), expectedBytes: 4, name: 'exact.bin',
+    })
+    expect(upload.attachment.bytes).toBe(4)
+    const readChunks: Uint8Array[] = []
+    for await (const chunk of (await store.readFileStream(upload.attachment)).data) readChunks.push(chunk)
+    expect(readChunks).toEqual([bytes(1, 2, 3, 4)])
+
+    await expect(store.saveFileStream('session-a', {
+      data: source(bytes(1, 2, 3), bytes(4, 5)), expectedBytes: 5,
+    })).rejects.toMatchObject({ code: 'FILE_TOO_LARGE' })
+    await expect(store.saveFileStream('session-a', {
+      data: source(bytes(1, 2, 3)), expectedBytes: 4,
+    })).rejects.toMatchObject({ code: 'FILE_SIZE_MISMATCH' })
+    await expect(readdir(join(store.root, 'tmp'))).resolves.toEqual([])
+  })
+
+  it('deduplicates streamed bytes and authenticates receipts only for their exact session and metadata', async () => {
+    const store = await service({ maxFileBytes: 8, maxMessageFileBytes: 8 })
+    const stream = async function* (): AsyncGenerator<Uint8Array> { yield bytes(7, 8, 9) }
+    const first = await store.saveFileStream('session-a', {
+      data: stream(), expectedBytes: 3, mediaType: 'application/pdf', name: 'one.pdf',
+    })
+    const second = await store.saveFileStream('session-a', {
+      data: stream(), expectedBytes: 3, mediaType: 'text/plain', name: 'two.txt',
+    })
+
+    expect(second.attachment.attachmentId).toBe(first.attachment.attachmentId)
+    await expect(store.authorizeUploadedFile('session-a', first)).resolves.toEqual(first.attachment)
+    await expect(store.authorizeUploadedFile('session-b', first))
+      .rejects.toMatchObject({ code: 'INVALID_ATTACHMENT_REF' })
+    await expect(store.authorizeUploadedFile('session-a', {
+      ...first, attachment: { ...first.attachment, name: 'forged.pdf' },
+    })).rejects.toMatchObject({ code: 'INVALID_ATTACHMENT_REF' })
   })
 
   it('preserves the caller cancellation reason on read', async () => {

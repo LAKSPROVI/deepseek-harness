@@ -436,10 +436,15 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
-        signature: 'async validateFile(input: SaveFileAttachment): Promise<void>',
+        signature: 'validateFile(input: SaveFileAttachment): Promise<void>',
         description: 'Validate one opaque file without persisting it.',
         parameters: [{ name: 'input', description: 'exact bytes and untrusted display metadata.' }],
         returns: 'completion after the complete file admission policy succeeds.',
+      },
+      {
+        signature: 'validateFileReferences(refs: readonly FileAttachmentRef[]): void',
+        description: 'Validate count, individual bytes, and aggregate bytes for durable file references.',
+        parameters: [{ name: 'refs', description: 'complete ordered file-reference batch.' }],
       },
       {
         signature: 'async validateFiles(inputs: readonly SaveFileAttachment[]): Promise<void>',
@@ -464,6 +469,30 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read one opaque file and verify its digest and exact byte length.',
         parameters: [{ name: 'ref', description: 'durable reference from trusted session state.' }, { name: 'signal', description: 'optional cancellation for backend read and verification work.' }],
         returns: 'exact verified bytes and the supplied reference.',
+      },
+      {
+        signature: 'saveFileStream( scope: string, input: SaveFileAttachmentStream, signal?: AbortSignal, ): Promise<UploadedFileAttachment>',
+        description: 'Stream one opaque file into durable storage and bind its receipt to an owning scope.',
+        parameters: [{ name: 'scope', description: 'opaque owner identity that must accompany later admission.' }, { name: 'input', description: 'ordered byte source and untrusted display metadata.' }, { name: 'signal', description: 'optional cancellation for source consumption, staging, and publication.' }],
+        returns: 'a scoped proof and immutable reference after complete publication.',
+      },
+      {
+        signature: 'authorizeUploadedFile(scope: string, upload: UploadedFileAttachment): Promise<FileAttachmentRef>',
+        description: 'Verify a raw-upload receipt for its exact owner and immutable metadata.',
+        parameters: [{ name: 'scope', description: 'opaque owner identity supplied when the upload was created.' }, { name: 'upload', description: 'proof and reference returned by `saveFileStream`.' }],
+        returns: 'the authenticated immutable reference.',
+      },
+      {
+        signature: 'async authorizeUploadedFiles( scope: string, uploads: readonly UploadedFileAttachment[], ): Promise<readonly FileAttachmentRef[]>',
+        description: 'Verify an ordered receipt batch and enforce complete message limits.',
+        parameters: [{ name: 'scope', description: 'opaque owner identity shared by every receipt.' }, { name: 'uploads', description: 'ordered raw-upload receipts.' }],
+        returns: 'authenticated references in the same order.',
+      },
+      {
+        signature: 'readFileStream(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachmentStream>',
+        description: 'Open a single-use verified byte stream without materializing the complete file.',
+        parameters: [{ name: 'ref', description: 'durable reference from trusted session state.' }, { name: 'signal', description: 'optional cancellation observed during iteration.' }],
+        returns: 'the reference and byte source; integrity failures reject iteration.',
       },
       {
         signature: 'abstract validateImage(input: SaveImageAttachment): Promise<void>',
@@ -3370,7 +3399,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'DownloadsApi',
-    declaration: 'export interface DownloadsApi {\n    sessionLog(request: {\n        sessionId: SessionId;\n        includeDescendants?: boolean;\n    }, signal: AbortSignal): Promise<Response>;\n}',
+    declaration: 'export interface DownloadsApi {\n    fileUpload(request: {\n        sessionId: SessionId;\n        body: AsyncIterable<Uint8Array>;\n        expectedBytes: number;\n        mediaType?: string;\n        name?: string;\n    }, signal: AbortSignal): Promise<Response>;\n    fileDownload(request: {\n        sessionId: SessionId;\n        attachmentId: string;\n    }, signal: AbortSignal): Promise<Response>;\n    sessionLog(request: {\n        sessionId: SessionId;\n        includeDescendants?: boolean;\n    }, signal: AbortSignal): Promise<Response>;\n}',
   },
   {
     name: 'DshEnvironment',
@@ -3402,7 +3431,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'EncodedCommandAttachment',
-    declaration: 'export type EncodedCommandAttachment = ({\n    readonly type: \'image\';\n} & EncodedImageAttachment) | ({\n    readonly type: \'file\';\n} & EncodedFileAttachment);',
+    declaration: 'export type EncodedCommandAttachment = ({\n    readonly type: \'image\';\n} & EncodedImageAttachment) | ({\n    readonly type: \'file\';\n} & (EncodedFileAttachment | UploadedFileAttachment));',
   },
   {
     name: 'EncodedFileAttachment',
@@ -4113,6 +4142,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SaveFileAttachment {\n    data: Uint8Array;\n    mediaType?: string;\n    name?: string;\n}',
   },
   {
+    name: 'SaveFileAttachmentStream',
+    declaration: 'export interface SaveFileAttachmentStream {\n    data: AsyncIterable<Uint8Array>;\n    expectedBytes?: number;\n    mediaType?: string;\n    name?: string;\n}',
+  },
+  {
     name: 'SaveImageAttachment',
     declaration: 'export interface SaveImageAttachment {\n    data: Uint8Array;\n    mediaType: ImageMediaType;\n    name?: string;\n}',
   },
@@ -4551,6 +4584,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'StoredFileAttachment',
     declaration: 'export interface StoredFileAttachment {\n    ref: FileAttachmentRef;\n    data: Uint8Array;\n}',
+  },
+  {
+    name: 'StoredFileAttachmentStream',
+    declaration: 'export interface StoredFileAttachmentStream {\n    ref: FileAttachmentRef;\n    data: AsyncIterable<Uint8Array>;\n}',
   },
   {
     name: 'StoredImageAttachment',
@@ -5043,6 +5080,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
+  },
+  {
+    name: 'UploadedFileAttachment',
+    declaration: 'export interface UploadedFileAttachment {\n    uploadId: string;\n    attachment: FileAttachmentRef;\n}',
   },
   {
     name: 'UserMessage',

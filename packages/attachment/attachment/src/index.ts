@@ -10,9 +10,12 @@ import type {
   ImageRequestPolicy,
   RequestImageAttachment,
   SaveFileAttachment,
+  SaveFileAttachmentStream,
   SaveImageAttachment,
   StoredFileAttachment,
+  StoredFileAttachmentStream,
   StoredImageAttachment,
+  UploadedFileAttachment,
 } from './types.ts'
 
 export { AttachmentId, ImageVariantId } from './brand.ts'
@@ -31,9 +34,12 @@ export type {
   ImageMediaType,
   RequestImageAttachment,
   SaveFileAttachment,
+  SaveFileAttachmentStream,
   SaveImageAttachment,
   StoredFileAttachment,
+  StoredFileAttachmentStream,
   StoredImageAttachment,
+  UploadedFileAttachment,
 } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -59,12 +65,39 @@ export abstract class AttachmentStore extends Service {
    * @param input - exact bytes and untrusted display metadata.
    * @returns completion after the complete file admission policy succeeds.
    */
-  async validateFile(input: SaveFileAttachment): Promise<void> {
+  validateFile(input: SaveFileAttachment): Promise<void> {
     void input
-    throw new AttachmentError(
-      'The mounted attachment provider does not support generic files.',
+    return Promise.reject(new AttachmentError(
+      'Generic-file validation requires a generic-file attachment provider.',
       'FILE_ATTACHMENTS_UNSUPPORTED',
-    )
+    ))
+  }
+
+  /**
+   * Validate count, individual bytes, and aggregate bytes for durable file references.
+   * @param refs - complete ordered file-reference batch.
+   */
+  validateFileReferences(refs: readonly FileAttachmentRef[]): void {
+    const limits = this.fileLimits
+    if (limits === undefined) {
+      throw new AttachmentError(
+        'The mounted attachment provider does not support generic files.',
+        'FILE_ATTACHMENTS_UNSUPPORTED',
+      )
+    }
+    if (refs.length > limits.maxFilesPerMessage) {
+      throw new AttachmentError('File batch exceeds the configured file-count limit.', 'TOO_MANY_FILES')
+    }
+    let totalBytes = 0
+    for (const ref of refs) {
+      if (!Number.isSafeInteger(ref.bytes) || ref.bytes < 0 || ref.bytes > limits.maxFileBytes) {
+        throw new AttachmentError('File exceeds the configured byte limit.', 'FILE_TOO_LARGE')
+      }
+      totalBytes += ref.bytes
+      if (!Number.isSafeInteger(totalBytes) || totalBytes > limits.maxMessageFileBytes) {
+        throw new AttachmentError('File batch exceeds the configured aggregate file-byte limit.', 'FILES_TOO_LARGE')
+      }
+    }
   }
 
   /** Validate generic-file count, aggregate bytes, and each exact byte length before writes. */
@@ -137,6 +170,69 @@ export abstract class AttachmentStore extends Service {
     void ref
     return Promise.reject(new AttachmentError(
       'The mounted attachment provider does not support generic files.',
+      'FILE_ATTACHMENTS_UNSUPPORTED',
+    ))
+  }
+
+  /**
+   * Stream one opaque file into durable storage and bind its receipt to an owning scope.
+   * @param scope - opaque owner identity that must accompany later admission.
+   * @param input - ordered byte source and untrusted display metadata.
+   * @param signal - optional cancellation for source consumption, staging, and publication.
+   * @returns a scoped proof and immutable reference after complete publication.
+   */
+  saveFileStream(
+    scope: string,
+    input: SaveFileAttachmentStream,
+    signal?: AbortSignal,
+  ): Promise<UploadedFileAttachment> {
+    signal?.throwIfAborted()
+    void scope
+    void input
+    return Promise.reject(new AttachmentError(
+      'The mounted attachment provider does not support generic files.',
+      'FILE_ATTACHMENTS_UNSUPPORTED',
+    ))
+  }
+
+  /**
+   * Verify a raw-upload receipt for its exact owner and immutable metadata.
+   * @param scope - opaque owner identity supplied when the upload was created.
+   * @param upload - proof and reference returned by `saveFileStream`.
+   * @returns the authenticated immutable reference.
+   */
+  authorizeUploadedFile(scope: string, upload: UploadedFileAttachment): Promise<FileAttachmentRef> {
+    void scope
+    void upload
+    return Promise.reject(new AttachmentError('Uploaded file receipt is invalid.', 'INVALID_ATTACHMENT_REF'))
+  }
+
+  /**
+   * Verify an ordered receipt batch and enforce complete message limits.
+   * @param scope - opaque owner identity shared by every receipt.
+   * @param uploads - ordered raw-upload receipts.
+   * @returns authenticated references in the same order.
+   */
+  async authorizeUploadedFiles(
+    scope: string,
+    uploads: readonly UploadedFileAttachment[],
+  ): Promise<readonly FileAttachmentRef[]> {
+    const refs = await Promise.all(uploads.map(upload => this.authorizeUploadedFile(scope, upload)))
+    this.validateFileReferences(refs)
+    return refs
+  }
+
+  /**
+   * Open a single-use verified byte stream without materializing the complete file.
+   * @param ref - durable reference from trusted session state.
+   * @param signal - optional cancellation observed during iteration.
+   * @returns the reference and byte source; integrity failures reject iteration.
+   */
+  readFileStream(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachmentStream> {
+    signal?.throwIfAborted()
+    void ref
+    return Promise.reject(new AttachmentError(
+      'Streaming file reads require a generic-file attachment provider.',
       'FILE_ATTACHMENTS_UNSUPPORTED',
     ))
   }

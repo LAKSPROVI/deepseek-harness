@@ -8,6 +8,7 @@
  * never a Cordis context or the mutable Session. RPC and service access go
  * through the provider plugin's own root context captured at registration.
  */
+import type { UploadedFileAttachment } from '@deepseek-ai/dsh-attachment'
 import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 
 /**
@@ -59,15 +60,17 @@ export type SubmitAttachment =
     /** Optional display name; never interpreted as a path. */
     readonly name?: string
   }
-  | {
-    readonly type: 'file'
-    /** Declared media type; absent or malformed values use the binary fallback. */
-    readonly mediaType?: string
-    /** Canonical base64 encoding of the exact file bytes. */
-    readonly data: string
-    /** Optional display name; never interpreted as a path. */
-    readonly name?: string
-  }
+  | ({ readonly type: 'file' } & (
+    | {
+      /** Declared media type; absent or malformed values use the binary fallback. */
+      readonly mediaType?: string
+      /** Canonical base64 encoding used by fixture and custom transports. */
+      readonly data: string
+      /** Optional display name; never interpreted as a path. */
+      readonly name?: string
+    }
+    | UploadedFileAttachment
+  ))
 
 /**
  * Command-mode entry credential. Pure data + a closure method — no class, no

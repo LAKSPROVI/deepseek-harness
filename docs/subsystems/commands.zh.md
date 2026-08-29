@@ -14,7 +14,7 @@
 /** One encoded composer attachment in the exact submitted position. */
 type EncodedCommandAttachment =
   | ({ readonly type: 'image' } & EncodedImageAttachment)
-  | ({ readonly type: 'file' } & EncodedFileAttachment)
+  | ({ readonly type: 'file' } & (EncodedFileAttachment | UploadedFileAttachment))
 ```
 
 ```ts type-equiv

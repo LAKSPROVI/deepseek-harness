@@ -327,11 +327,11 @@ Source: [`packages/core/agent-tool-presentation/src/index.ts:38`](../packages/co
 export interface Config {
   /** Explicit harness home; omitted follows `DSH_HOME`, then `~/.dsh`. */
   dshHome?: string
-  /** Maximum bytes accepted for one opaque file. Default: 20 MiB. */
+  /** Maximum bytes accepted for one opaque file. Default: 1 GiB. */
   maxFileBytes?: number
   /** Maximum opaque-file count accepted in one submitted message. Default: 20. */
   maxFilesPerMessage?: number
-  /** Maximum aggregate opaque-file bytes accepted in one submitted message. Default: 200 MiB. */
+  /** Maximum aggregate opaque-file bytes accepted in one submitted message. Default: 1 GiB. */
   maxMessageFileBytes?: number
   /** Maximum encoded bytes accepted for one submitted image. Default: 20 MiB. */
   maxImageBytes?: number
@@ -352,7 +352,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/attachment/attachment-local/src/index.ts:79`](../packages/attachment/attachment-local/src/index.ts)
+Source: [`packages/attachment/attachment-local/src/index.ts:89`](../packages/attachment/attachment-local/src/index.ts)
 
 <a id="deepseek-aidsh-bash-local"></a>
 
@@ -424,7 +424,7 @@ export interface ConnectionConfig {
 }
 ```
 
-Source: [`packages/client/connection/src/index.ts:50`](../packages/client/connection/src/index.ts)
+Source: [`packages/client/connection/src/index.ts:52`](../packages/client/connection/src/index.ts)
 
 <a id="deepseek-aidsh-client-hmr"></a>
 

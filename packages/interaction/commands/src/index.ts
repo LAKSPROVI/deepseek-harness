@@ -5,8 +5,10 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { AttachmentError, admitEncodedFiles, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
-import type { EncodedFileAttachment, EncodedImageAttachment } from '@deepseek-ai/dsh-attachment/types'
+import { AttachmentError, AttachmentStore, admitEncodedFiles, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
+import type {
+  EncodedFileAttachment, EncodedImageAttachment, UploadedFileAttachment,
+} from '@deepseek-ai/dsh-attachment/types'
 import type { FileBlock, ImageBlock } from '@deepseek-ai/dsh-llm'
 import { NamedEntries, ScopedLayers } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer } from '@deepseek-ai/dsh-scope'
@@ -179,27 +181,38 @@ function admittedAt<T>(values: readonly T[], index: number): T {
 /** Admit image and file groups together, then restore the submitted mixed order. */
 async function admitCommandAttachments(
   store: import('@deepseek-ai/dsh-attachment').AttachmentStore,
+  scope: string,
   attachments: readonly EncodedCommandAttachment[],
 ): Promise<readonly CommandAttachmentBlock[]> {
   const images: EncodedImageAttachment[] = []
-  const files: EncodedFileAttachment[] = []
-  const order: Array<{ readonly type: 'image' | 'file'; readonly index: number }> = []
+  const encodedFiles: EncodedFileAttachment[] = []
+  const uploadedFiles: UploadedFileAttachment[] = []
+  const order: Array<{ readonly type: 'image' | 'encoded-file' | 'uploaded-file'; readonly index: number }> = []
   for (const attachment of attachments) {
     if (attachment.type === 'image') {
       order.push({ type: 'image', index: images.length })
       images.push(attachment)
+    } else if ('data' in attachment) {
+      order.push({ type: 'encoded-file', index: encodedFiles.length })
+      encodedFiles.push(attachment)
     } else {
-      order.push({ type: 'file', index: files.length })
-      files.push(attachment)
+      order.push({ type: 'uploaded-file', index: uploadedFiles.length })
+      uploadedFiles.push(attachment)
     }
   }
-  const [imageRefs, fileRefs] = await Promise.all([
+  const [imageRefs, encodedRefs, uploadedRefs] = await Promise.all([
     images.length === 0 ? [] : admitEncodedImages(store, images),
-    files.length === 0 ? [] : admitEncodedFiles(store, files),
+    encodedFiles.length === 0 ? [] : admitEncodedFiles(store, encodedFiles),
+    uploadedFiles.length === 0 ? [] : store.authorizeUploadedFiles(scope, uploadedFiles),
   ])
-  return Object.freeze(order.map((entry): CommandAttachmentBlock => entry.type === 'image'
-    ? Object.freeze({ type: 'image', attachment: admittedAt(imageRefs, entry.index) })
-    : Object.freeze({ type: 'file', attachment: admittedAt(fileRefs, entry.index) })))
+  AttachmentStore.prototype.validateFileReferences.call(store, [...encodedRefs, ...uploadedRefs])
+  return Object.freeze(order.map((entry): CommandAttachmentBlock => {
+    if (entry.type === 'image') {
+      return Object.freeze({ type: 'image', attachment: admittedAt(imageRefs, entry.index) })
+    }
+    const refs = entry.type === 'encoded-file' ? encodedRefs : uploadedRefs
+    return Object.freeze({ type: 'file', attachment: admittedAt(refs, entry.index) })
+  }))
 }
 
 /** Reject invalid command metadata before it can reach a UI protocol. */
@@ -401,7 +414,7 @@ export class CommandRuntime extends TypertRemoteService {
         return settle({ kind: 'error', text: `/${parsed.name}: attachments are unavailable because no attachment store is composed` })
       }
       try {
-        attachments = await admitCommandAttachments(store, encodedAttachments)
+        attachments = await admitCommandAttachments(store, String(agent.session.id), encodedAttachments)
       } catch (error: unknown) {
         if (error instanceof AttachmentError) {
           return settle({ kind: 'error', text: error.message })

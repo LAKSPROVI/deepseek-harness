@@ -1,9 +1,11 @@
 /** Local durable attachment backend rooted below `DSH_HOME`. @module @deepseek-ai/dsh-attachment-local */
 
+import { Buffer } from 'node:buffer'
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import { AttachmentError, AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type {
   FileAttachmentLimits,
   FileAttachmentRef,
@@ -12,9 +14,12 @@ import type {
   ImageRequestPolicy,
   RequestImageAttachment,
   SaveFileAttachment,
+  SaveFileAttachmentStream,
   SaveImageAttachment,
   StoredFileAttachment,
+  StoredFileAttachmentStream,
   StoredImageAttachment,
+  UploadedFileAttachment,
 } from '@deepseek-ai/dsh-attachment'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { NormalizationPolicy } from './normalization.ts'
@@ -25,7 +30,9 @@ import {
   prepareFileAttachment,
   prepareImageFile,
   readFileAttachment,
+  readFileAttachmentStream,
   readImageFile,
+  saveFileAttachmentStream,
   validateImageFile,
 } from './store.ts'
 import { readRequestImageFile, requestImageVariantId } from './request-image.ts'
@@ -38,8 +45,11 @@ export {
   prepareFileAttachment,
   prepareImageFile,
   readFileAttachment,
+  readFileAttachmentStream,
   readImageFile,
   saveFileAttachment,
+  saveFileAttachmentStream,
+  saveFileAttachmentStreams,
   saveImageFile,
   validateImageFile,
 } from './store.ts'
@@ -47,11 +57,11 @@ export type { PreparedFileAttachment, PreparedImageFile } from './store.ts'
 export { readRequestImageFile, requestImageDimensions, requestImageVariantId } from './request-image.ts'
 
 /** Default maximum bytes for one submitted opaque file. */
-export const DEFAULT_MAX_FILE_BYTES = 20 * 1024 * 1024
+export const DEFAULT_MAX_FILE_BYTES = 1024 * 1024 * 1024
 /** Default maximum opaque files in one message. */
 export const DEFAULT_MAX_FILES_PER_MESSAGE = 20
 /** Default maximum aggregate opaque-file bytes in one message. */
-export const DEFAULT_MAX_MESSAGE_FILE_BYTES = 200 * 1024 * 1024
+export const DEFAULT_MAX_MESSAGE_FILE_BYTES = 1024 * 1024 * 1024
 /** Default maximum encoded bytes for one submitted image; oversized sources are refused, not shrunk. */
 export const DEFAULT_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 /** Default maximum images in one prompt. */
@@ -79,11 +89,11 @@ export const MAX_IMAGE_COMPRESSION_CONCURRENCY = 8
 export interface Config {
   /** Explicit harness home; omitted follows `DSH_HOME`, then `~/.dsh`. */
   dshHome?: string
-  /** Maximum bytes accepted for one opaque file. Default: 20 MiB. */
+  /** Maximum bytes accepted for one opaque file. Default: 1 GiB. */
   maxFileBytes?: number
   /** Maximum opaque-file count accepted in one submitted message. Default: 20. */
   maxFilesPerMessage?: number
-  /** Maximum aggregate opaque-file bytes accepted in one submitted message. Default: 200 MiB. */
+  /** Maximum aggregate opaque-file bytes accepted in one submitted message. Default: 1 GiB. */
   maxMessageFileBytes?: number
   /** Maximum encoded bytes accepted for one submitted image. Default: 20 MiB. */
   maxImageBytes?: number
@@ -149,8 +159,8 @@ class SharedRequest<T> {
       }, (error: unknown) => {
         signal.removeEventListener('abort', abort)
         release(false)
-        // CompressionLimiter normalizes task rejections before this handler.
-        reject(error)
+        // CompressionLimiter normally supplies Error; preserve an Error reason for external implementations.
+        reject(error instanceof Error ? error : new Error('Attachment request failed.', { cause: error }))
       })
     })
   }
@@ -190,6 +200,7 @@ export class LocalAttachmentStore extends AttachmentStore {
   /** Resolved instance-level compression limit. */
   readonly imageCompressionConcurrency: number
   private readonly compression: CompressionLimiter
+  private readonly uploadReceiptSecret = randomBytes(32)
   private readonly requestInflight = new Map<string, SharedRequest<RequestImageAttachment>>()
 
   constructor(ctx: Context, config: Config) {
@@ -224,8 +235,10 @@ export class LocalAttachmentStore extends AttachmentStore {
     this.compression = new CompressionLimiter(compressionConcurrency)
   }
 
-  override async validateFile(input: SaveFileAttachment): Promise<void> {
-    prepareFileAttachment(input, this.fileLimits)
+  override validateFile(input: SaveFileAttachment): Promise<void> {
+    return Promise.resolve().then(() => {
+      prepareFileAttachment(input, this.fileLimits)
+    })
   }
 
   override async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]> {
@@ -242,6 +255,44 @@ export class LocalAttachmentStore extends AttachmentStore {
 
   override readFile(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachment> {
     return readFileAttachment(this.root, ref, signal)
+  }
+
+  override async saveFileStream(
+    scope: string,
+    input: SaveFileAttachmentStream,
+    signal?: AbortSignal,
+  ): Promise<UploadedFileAttachment> {
+    const attachment = await saveFileAttachmentStream(this.root, input, this.fileLimits, signal)
+    return { uploadId: this.signUpload(scope, attachment), attachment }
+  }
+
+  override authorizeUploadedFile(
+    scope: string,
+    upload: UploadedFileAttachment,
+  ): Promise<FileAttachmentRef> {
+    this.validateFileReferences([upload.attachment])
+    const supplied = /^[a-f0-9]{64}$/u.test(upload.uploadId)
+      ? Buffer.from(upload.uploadId, 'hex')
+      : Buffer.alloc(0)
+    const expected = Buffer.from(this.signUpload(scope, upload.attachment), 'hex')
+    if (supplied.byteLength !== expected.byteLength || !timingSafeEqual(supplied, expected)) {
+      return Promise.reject(new AttachmentError('Uploaded file receipt is invalid.', 'INVALID_ATTACHMENT_REF'))
+    }
+    return Promise.resolve(upload.attachment)
+  }
+
+  override readFileStream(
+    ref: FileAttachmentRef,
+    signal?: AbortSignal,
+  ): Promise<StoredFileAttachmentStream> {
+    return Promise.resolve(readFileAttachmentStream(this.root, ref, signal))
+  }
+
+  private signUpload(scope: string, ref: FileAttachmentRef): string {
+    const canonical = JSON.stringify([
+      'dsh-file-upload-v1', scope, String(ref.attachmentId), ref.mediaType, ref.bytes, ref.name ?? null,
+    ])
+    return createHmac('sha256', this.uploadReceiptSecret).update(canonical).digest('hex')
   }
 
   async validateImage(input: SaveImageAttachment): Promise<void> {

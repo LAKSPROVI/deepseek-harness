@@ -9,8 +9,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import AttachmentStore from '@deepseek-ai/dsh-attachment'
-import LlmRuntime, { LlmAdapter } from '@deepseek-ai/dsh-llm'
+import AttachmentStore, { AttachmentId } from '@deepseek-ai/dsh-attachment'
+import LlmRuntime, { CallId, createToolResultMessage, LlmAdapter } from '@deepseek-ai/dsh-llm'
 import type {
   GenerateOptions, LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, StreamChunk, UserMessage,
 } from '@deepseek-ai/dsh-llm'
@@ -102,6 +102,10 @@ function fileStore(limits: Partial<{
       ...input.name === undefined ? {} : { name: input.name },
     })),
     validateFile: vi.fn(() => Promise.resolve()),
+    authorizeUploadedFile: vi.fn((scope: string, upload: { uploadId: string; attachment: object }) => {
+      if (upload.uploadId !== `receipt:${scope}`) return Promise.reject(new Error('wrong upload scope'))
+      return Promise.resolve(upload.attachment)
+    }),
     saveFile: vi.fn((input: { data: Uint8Array; mediaType?: string; name?: string }) => {
       saved += 1
       return Promise.resolve({
@@ -155,6 +159,40 @@ describe('generic file prompt admission', () => {
       },
       { type: 'file', attachment: { attachmentId: 'file-2', mediaType: 'application/octet-stream', bytes: 1 } },
     ])
+    await ctx.fiber.dispose()
+  })
+
+  it('authorizes uploaded receipts for the exact session and preserves mixed order', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    const attachments = fileStore()
+    ctx.provide('attachments', attachments as never)
+    const followup = vi.fn()
+    Object.assign(agent, { followup })
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'files-native', model: 'route' }), cwd: '/tmp',
+    })
+    const ref = {
+      attachmentId: AttachmentId('sha256:raw'), mediaType: 'application/octet-stream', bytes: 3, name: 'raw.bin',
+    }
+
+    const accepted = await api.sessions.prompt(request({
+      sessionId, mode: 'queue' as const, content: [
+        { type: 'text' as const, text: 'inspect' },
+        { type: 'file' as const, uploadId: `receipt:${String(sessionId)}`, attachment: ref },
+      ],
+    }))
+    expect(accepted.result.ok).toBe(true)
+    expect((followup.mock.calls[0]?.[0] as UserMessage).content).toEqual([
+      { type: 'text', text: 'inspect' }, { type: 'file', attachment: ref },
+    ])
+
+    const denied = await api.sessions.prompt(request({
+      sessionId, mode: 'queue' as const, content: [
+        { type: 'file' as const, uploadId: 'receipt:another-session', attachment: ref },
+      ],
+    }))
+    expect(denied.result.ok).toBe(false)
+    expect(followup).toHaveBeenCalledOnce()
     await ctx.fiber.dispose()
   })
 
@@ -241,6 +279,75 @@ describe('generic file prompt admission', () => {
 })
 
 describe('generic file attachment authorization', () => {
+  it('publishes no event on upload and authorizes raw download only from user-message content', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    const ref = {
+      attachmentId: AttachmentId('sha256:streamed'), mediaType: 'application/pdf', bytes: 3, name: 'brief.pdf',
+    }
+    const receipt = { uploadId: `receipt:${String(sessionId)}`, attachment: ref }
+    const saveFileStream = vi.fn(() => Promise.resolve(receipt))
+    const readFileStream = vi.fn(() => Promise.resolve({
+      ref,
+      data: (async function* (): AsyncGenerator<Uint8Array> {
+        yield Uint8Array.of(1)
+        yield Uint8Array.of(2, 3)
+      })(),
+    }))
+    ctx.provide('attachments', {
+      ...fileStore(), saveFileStream, readFileStream,
+    } as never)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'files-native', model: 'route' }), cwd: '/tmp',
+    })
+    const before = agent.session.events.length
+    const uploaded = await api.downloads.fileUpload({
+      sessionId,
+      body: (async function* (): AsyncGenerator<Uint8Array> { yield Uint8Array.of(1, 2, 3) })(),
+      expectedBytes: 3,
+      mediaType: 'application/pdf',
+      name: 'brief.pdf',
+    }, new AbortController().signal)
+    expect(uploaded.status).toBe(201)
+    await expect(uploaded.json()).resolves.toEqual(receipt)
+    expect(agent.session.events).toHaveLength(before)
+
+    const beforeLog = await api.downloads.fileDownload(
+      { sessionId, attachmentId: ref.attachmentId }, new AbortController().signal)
+    expect(beforeLog.status).toBe(404)
+
+    agent.session.append('turn/start', { turn: 1 })
+    agent.session.append('tool/call', {
+      turn: 1, step: 1, callId: CallId('file-tool'), name: 'file-tool', arguments: '{}',
+    })
+    agent.session.append('tool/result', {
+      turn: 1,
+      step: 1,
+      message: createToolResultMessage({
+        callId: CallId('file-tool'), content: [{ type: 'text', text: 'done' }], isError: false,
+      }),
+      meta: { type: 'file', attachment: ref },
+    } as never, { surfaceOp: 'append' })
+    const toolOnly = await api.downloads.fileDownload(
+      { sessionId, attachmentId: ref.attachmentId }, new AbortController().signal)
+    expect(toolOnly.status).toBe(404)
+    expect(readFileStream).not.toHaveBeenCalled()
+
+    agent.session.append('user/message', {
+      id: 'file-message', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'file', attachment: ref }],
+    } as never, { surfaceOp: 'append' })
+    const allowed = await api.downloads.fileDownload(
+      { sessionId, attachmentId: ref.attachmentId }, new AbortController().signal)
+    expect(allowed.status).toBe(200)
+    await expect(allowed.arrayBuffer().then(value => [...new Uint8Array(value)])).resolves.toEqual([1, 2, 3])
+    expect(allowed.headers.get('content-type')).toBe('application/octet-stream')
+    expect(allowed.headers.get('content-disposition')).toContain('attachment;')
+    expect(allowed.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(allowed.headers.get('cache-control')).toBe('private, no-store')
+    expect(readFileStream).toHaveBeenCalledOnce()
+    await ctx.fiber.dispose()
+  })
+
   it('serves file bytes discriminated as file only when the session log references the id', async () => {
     const { ctx, agent, sessionId } = await harness()
     const ref = { attachmentId: 'file-authorized', mediaType: 'application/pdf', bytes: 2, name: 'brief.pdf' }

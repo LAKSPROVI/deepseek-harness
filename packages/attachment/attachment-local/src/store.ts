@@ -1,7 +1,8 @@
 /** Content-addressed, owner-private local attachment storage. */
 
+import { Buffer } from 'node:buffer'
 import { createHash, randomUUID } from 'node:crypto'
-import { constants } from 'node:fs'
+import { constants, createReadStream } from 'node:fs'
 import { chmod, link, mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { dirname, join, parse, resolve } from 'node:path'
 import {
@@ -14,8 +15,10 @@ import type {
   ImageAttachmentLimits,
   ImageAttachmentRef,
   SaveFileAttachment,
+  SaveFileAttachmentStream,
   SaveImageAttachment,
   StoredFileAttachment,
+  StoredFileAttachmentStream,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
 import { normalizeImage } from './normalization.ts'
@@ -348,6 +351,260 @@ export function saveFileAttachment(
   limits: FileAttachmentLimits,
 ): Promise<FileAttachmentRef> {
   return commitPreparedFileAttachment(root, prepareFileAttachment(input, limits))
+}
+
+/** Private staged stream with final content-addressed reference facts. */
+interface StagedFileAttachment {
+  path: string
+  ref: FileAttachmentRef
+}
+
+/** Remove a staging file without masking the operation failure that triggered cleanup. */
+async function removeStaging(path: string): Promise<void> {
+  await unlink(path).catch((error: unknown) => {
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error
+  })
+}
+
+/** Incrementally verify one object without materializing it in memory. */
+async function verifyObjectStream(path: string, ref: StoredObjectRef, signal?: AbortSignal): Promise<void> {
+  const expected = ensureReference(ref)
+  const hash = createHash('sha256')
+  let bytes = 0
+  try {
+    for await (const value of createReadStream(path, { signal })) {
+      signal?.throwIfAborted()
+      const chunk = value as Buffer
+      bytes += chunk.byteLength
+      hash.update(chunk)
+    }
+  } catch (error) {
+    signal?.throwIfAborted()
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      throw new AttachmentError('Attachment object is missing.', 'ATTACHMENT_NOT_FOUND')
+    }
+    throw new AttachmentError('Unable to read attachment.', 'ATTACHMENT_READ_FAILED', { cause: error })
+  }
+  if (bytes !== ref.bytes || hash.digest('hex') !== expected) {
+    throw new AttachmentError('Stored attachment failed integrity verification.', 'ATTACHMENT_CORRUPT')
+  }
+}
+
+/** Await one producer chunk while allowing cancellation to release staging immediately. */
+async function nextChunk(
+  iterator: AsyncIterator<Uint8Array>,
+  signal?: AbortSignal,
+): Promise<IteratorResult<Uint8Array>> {
+  signal?.throwIfAborted()
+  if (signal === undefined) return iterator.next()
+  return new Promise((resolve, reject) => {
+    const abort = (): void => {
+      reject(signal.reason instanceof Error ? signal.reason : new Error('File stream was aborted.'))
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    void iterator.next().then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', abort)
+    })
+  })
+}
+
+/** Consume one source with backpressure into a private staging file. */
+async function stageFileStream(
+  root: string,
+  input: SaveFileAttachmentStream,
+  limits: FileAttachmentLimits,
+  aggregate: { bytes: number },
+  signal?: AbortSignal,
+): Promise<StagedFileAttachment> {
+  signal?.throwIfAborted()
+  if (input.expectedBytes !== undefined) {
+    if (!Number.isSafeInteger(input.expectedBytes) || input.expectedBytes < 0) {
+      throw new AttachmentError('Expected file byte length is invalid.', 'FILE_SIZE_MISMATCH')
+    }
+    if (input.expectedBytes > limits.maxFileBytes) {
+      throw new AttachmentError('File exceeds the configured byte limit.', 'FILE_TOO_LARGE')
+    }
+    const expectedAggregate = aggregate.bytes + input.expectedBytes
+    if (!Number.isSafeInteger(expectedAggregate) || expectedAggregate > limits.maxMessageFileBytes) {
+      throw new AttachmentError('File batch exceeds the configured aggregate file-byte limit.', 'FILES_TOO_LARGE')
+    }
+  }
+  const staging = join(root, 'tmp')
+  const boundary = await ensureDurableHome(dirname(dirname(resolve(root))))
+  await ensureDurableDirectory(staging, boundary)
+  const path = join(staging, randomUUID())
+  const hash = createHash('sha256')
+  let bytes = 0
+  let handle
+  try {
+    handle = await open(path, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600)
+    const iterator = input.data[Symbol.asyncIterator]()
+    for (;;) {
+      const result = await nextChunk(iterator, signal)
+      if (result.done) break
+      const chunk = result.value
+      const nextFileBytes = bytes + chunk.byteLength
+      if (!Number.isSafeInteger(nextFileBytes) || nextFileBytes > limits.maxFileBytes) {
+        throw new AttachmentError('File exceeds the configured byte limit.', 'FILE_TOO_LARGE')
+      }
+      const nextAggregateBytes = aggregate.bytes + chunk.byteLength
+      if (!Number.isSafeInteger(nextAggregateBytes) || nextAggregateBytes > limits.maxMessageFileBytes) {
+        throw new AttachmentError('File batch exceeds the configured aggregate file-byte limit.', 'FILES_TOO_LARGE')
+      }
+      await handle.writeFile(chunk)
+      bytes = nextFileBytes
+      aggregate.bytes = nextAggregateBytes
+      hash.update(chunk)
+    }
+    if (input.expectedBytes !== undefined
+      && (!Number.isSafeInteger(input.expectedBytes) || input.expectedBytes < 0 || bytes !== input.expectedBytes)) {
+      throw new AttachmentError('File byte length does not match the expected size.', 'FILE_SIZE_MISMATCH')
+    }
+    signal?.throwIfAborted()
+    await handle.sync()
+    await handle.close()
+    handle = undefined
+    const name = displayName(input.name)
+    return {
+      path,
+      ref: {
+        attachmentId: AttachmentId(`sha256:${hash.digest('hex')}`),
+        mediaType: fileMediaType(input.mediaType),
+        bytes,
+        ...(name === undefined ? {} : { name }),
+      },
+    }
+  } catch (error) {
+    if (handle !== undefined) await handle.close().catch(() => {})
+    await removeStaging(path)
+    signal?.throwIfAborted()
+    if (error instanceof AttachmentError) throw error
+    throw new AttachmentError('Unable to stage attachment.', 'ATTACHMENT_WRITE_FAILED', { cause: error })
+  }
+}
+
+/** Publish one staged stream object through the content-addressed object namespace. */
+async function commitStagedFile(
+  root: string,
+  staged: StagedFileAttachment,
+  signal?: AbortSignal,
+): Promise<FileAttachmentRef> {
+  signal?.throwIfAborted()
+  const sha256 = ensureReference(staged.ref)
+  const bucket = join(root, 'objects', sha256.slice(0, 2))
+  const boundary = await ensureDurableHome(dirname(dirname(resolve(root))))
+  await ensureDurableDirectory(bucket, boundary)
+  const target = objectPath(root, sha256)
+  try {
+    try {
+      await link(staged.path, target)
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
+      await verifyObjectStream(target, staged.ref, signal)
+    }
+    signal?.throwIfAborted()
+    await syncDirectory(bucket)
+    await syncDirectory(join(root, 'objects'))
+    await removeStaging(staged.path)
+    return staged.ref
+  } catch (error) {
+    await removeStaging(staged.path)
+    signal?.throwIfAborted()
+    if (error instanceof AttachmentError) throw error
+    throw new AttachmentError('Unable to persist attachment.', 'ATTACHMENT_WRITE_FAILED', { cause: error })
+  }
+}
+
+/**
+ * Stage and publish one opaque byte stream with bounded memory.
+ * @param root - absolute versioned attachment root.
+ * @param input - ordered byte source and display metadata.
+ * @param limits - resolved generic-file limits.
+ * @param signal - optional cancellation.
+ * @returns immutable content-addressed file reference.
+ */
+export async function saveFileAttachmentStream(
+  root: string,
+  input: SaveFileAttachmentStream,
+  limits: FileAttachmentLimits,
+  signal?: AbortSignal,
+): Promise<FileAttachmentRef> {
+  const staged = await stageFileStream(root, input, limits, { bytes: 0 }, signal)
+  return commitStagedFile(root, staged, signal)
+}
+
+/**
+ * Stage every stream before publishing any member and clean all remaining staging on failure.
+ * @param root - absolute versioned attachment root.
+ * @param inputs - ordered streaming files.
+ * @param limits - resolved generic-file limits.
+ * @param signal - optional cancellation.
+ * @returns references in input order after complete publication.
+ */
+export async function saveFileAttachmentStreams(
+  root: string,
+  inputs: readonly SaveFileAttachmentStream[],
+  limits: FileAttachmentLimits,
+  signal?: AbortSignal,
+): Promise<readonly FileAttachmentRef[]> {
+  if (inputs.length > limits.maxFilesPerMessage) {
+    throw new AttachmentError('File batch exceeds the configured file-count limit.', 'TOO_MANY_FILES')
+  }
+  const aggregate = { bytes: 0 }
+  const staged: StagedFileAttachment[] = []
+  try {
+    for (const input of inputs) staged.push(await stageFileStream(root, input, limits, aggregate, signal))
+  } catch (error) {
+    await Promise.all(staged.map(file => removeStaging(file.path)))
+    throw error
+  }
+  const refs: FileAttachmentRef[] = []
+  try {
+    for (const file of staged) refs.push(await commitStagedFile(root, file, signal))
+    return refs
+  } catch (error) {
+    await Promise.all(staged.slice(refs.length).map(file => removeStaging(file.path)))
+    throw error
+  }
+}
+
+/**
+ * Open a single-use incremental stream that rejects on size or digest mismatch.
+ * @param root - absolute versioned attachment root.
+ * @param ref - durable file reference.
+ * @param signal - optional cancellation observed while iterating.
+ * @returns verified stream descriptor without an exposed filesystem path.
+ */
+export function readFileAttachmentStream(
+  root: string,
+  ref: FileAttachmentRef,
+  signal?: AbortSignal,
+): StoredFileAttachmentStream {
+  const sha256 = ensureReference(ref)
+  signal?.throwIfAborted()
+  const data = (async function* (): AsyncGenerator<Uint8Array> {
+    const hash = createHash('sha256')
+    let bytes = 0
+    try {
+      for await (const value of createReadStream(objectPath(root, sha256), { signal })) {
+        signal?.throwIfAborted()
+        const chunk = value as Buffer
+        bytes += chunk.byteLength
+        hash.update(chunk)
+        yield new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+      }
+    } catch (error) {
+      signal?.throwIfAborted()
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        throw new AttachmentError('Attachment object is missing.', 'ATTACHMENT_NOT_FOUND')
+      }
+      throw new AttachmentError('Unable to read attachment.', 'ATTACHMENT_READ_FAILED', { cause: error })
+    }
+    if (bytes !== ref.bytes || hash.digest('hex') !== sha256) {
+      throw new AttachmentError('Stored attachment failed integrity verification.', 'ATTACHMENT_CORRUPT')
+    }
+  })()
+  return { ref, data }
 }
 
 /** Read exact object bytes after validating the opaque id, length, and digest. */

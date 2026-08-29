@@ -10,7 +10,7 @@ import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import CommandRuntime, { type CommandDefinition } from '@deepseek-ai/dsh-commands'
-import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import { AttachmentError, AttachmentId, AttachmentStore } from '@deepseek-ai/dsh-attachment'
 
 /** Canonical base64 payloads: 'AAAA' decodes to three bytes, 'AAAAAQ==' to four. */
 const PNG = 'AAAA'
@@ -46,7 +46,9 @@ function storeOf(overrides: { maxFilesPerMessage?: number; maxFileBytes?: number
   let files = 0
   const base = AttachmentStore.prototype as unknown as {
     validateFileBatch(this: unknown, batch: readonly unknown[]): void
+    validateFileReferences(this: unknown, refs: readonly unknown[]): void
     validateFiles(this: unknown, batch: readonly unknown[]): Promise<void>
+    authorizeUploadedFiles(this: unknown, scope: string, uploads: readonly unknown[]): Promise<readonly unknown[]>
     saveFiles(this: unknown, batch: readonly unknown[]): Promise<unknown[]>
     saveImages(this: unknown, batch: readonly unknown[]): Promise<unknown[]>
     validateImageBatch(this: unknown, batch: readonly unknown[]): void
@@ -83,7 +85,17 @@ function storeOf(overrides: { maxFilesPerMessage?: number; maxFileBytes?: number
     validateImageBatch(inputs: readonly unknown[]) { base.validateImageBatch.call(this, inputs) },
     saveImages(inputs: readonly unknown[]) { return base.saveImages.call(this, inputs) },
     validateFileBatch(inputs: readonly unknown[]) { base.validateFileBatch.call(this, inputs) },
+    validateFileReferences(refs: readonly unknown[]) { base.validateFileReferences.call(this, refs) },
     validateFiles(inputs: readonly unknown[]) { return base.validateFiles.call(this, inputs) },
+    authorizeUploadedFile(scope: string, upload: { uploadId: string; attachment: object }) {
+      if (upload.uploadId !== `receipt:${scope}`) {
+        return Promise.reject(new AttachmentError('Uploaded file receipt is invalid.', 'INVALID_ATTACHMENT_REF'))
+      }
+      return Promise.resolve(upload.attachment)
+    },
+    authorizeUploadedFiles(scope: string, uploads: readonly unknown[]) {
+      return base.authorizeUploadedFiles.call(this, scope, uploads)
+    },
     saveFiles(inputs: readonly unknown[]) { return base.saveFiles.call(this, inputs) },
   }
 }
@@ -136,6 +148,37 @@ describe('command generic file attachments', () => {
         ['file', 'notes.bin', 'application/octet-stream'],
       ])
     expect(invocation.attachments[2]?.attachment.bytes).toBe(4)
+  })
+
+  it('authorizes a receipt for the exact command session and preserves mixed order', async () => {
+    const ctx = await mount()
+    const store = storeOf()
+    ctx.provide('attachments', store)
+    const agent = await mintAgent(ctx, 'receipt-session')
+    const seen = vi.fn((_invocation: unknown) => ({ kind: 'success' as const }))
+    ctx.commands.register(accepting(seen))
+    const ref = {
+      attachmentId: AttachmentId('sha256:raw'), mediaType: 'application/octet-stream', bytes: 3, name: 'raw.bin',
+    }
+
+    const accepted = await ctx.commands.execute(agent, '/vision x', [
+      { type: 'image', mediaType: 'image/png', data: PNG, name: 'shot.png' },
+      { type: 'file', uploadId: `receipt:${String(agent.session.id)}`, attachment: ref },
+      { type: 'file', data: BYTES_3, name: 'legacy.bin' },
+    ], new AbortController().signal)
+    expect(accepted?.result.kind).toBe('success')
+    const invocation = seen.mock.calls[0]?.[0] as {
+      attachments: ReadonlyArray<{ type: string; attachment: { name?: string } }>
+    }
+    expect(invocation.attachments.map(block => [block.type, block.attachment.name])).toEqual([
+      ['image', 'shot.png'], ['file', 'raw.bin'], ['file', 'legacy.bin'],
+    ])
+
+    const denied = await ctx.commands.execute(agent, '/vision x', [
+      { type: 'file', uploadId: 'receipt:another-session', attachment: ref },
+    ], new AbortController().signal)
+    expect(denied?.result).toMatchObject({ kind: 'error' })
+    expect(seen).toHaveBeenCalledOnce()
   })
 
   it('settles the store file-count limit as a logged error without entering the handler', async () => {

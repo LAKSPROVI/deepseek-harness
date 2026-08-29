@@ -5,10 +5,10 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-/** Default carrier cap for all HTTP RPC bodies: sized for the combined
- * default image and file aggregate limits after base64 expansion plus
- * envelope headroom (~534.3 MiB required), rounded up for slack. The bridge
- * buffers each body in memory, so this cap is also the per-request resident bound. */
+/** Default carrier cap for buffered JSON RPC bodies. Generic files use a
+ * separate raw streaming route; images and ordinary envelopes remain here.
+ * The bridge buffers each body in memory, so this cap is also the per-request
+ * resident bound. */
 export const DEFAULT_MAX_REQUEST_BODY_BYTES = 600 * 1024 * 1024
 
 /** Transport-independent request handler consumed by the Host HTTP bridge. */

@@ -165,7 +165,7 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'dropped.png', { type: 'image/png' })
   const dataTransfer = { types: ['Files'], files: [image], dropEffect: 'none' }
   fireEvent.dragEnter(document.body, { dataTransfer })
-  const overlayTitle = await screen.findByText('Drag images here to add them')
+  const overlayTitle = await screen.findByText('Drag files here to add them')
   const overlay = overlayTitle.closest('[role="status"]')
   if (overlay === null) throw new Error('drop overlay status missing')
   await waitFor(() => {
@@ -179,7 +179,7 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
     if (rail === null) throw new Error('attachment rail missing after page drop')
     expect([...rail.querySelectorAll('img')].map(img => img.getAttribute('alt'))).toEqual(['dropped.png'])
   }, { timeout: 5_000 })
-  expect(screen.queryByText('Drag images here to add them')).toBeNull()
+  expect(screen.queryByText('Drag files here to add them')).toBeNull()
 
   // An intake that would exceed the projected per-message count is refused as
   // a whole batch at add time: the banner names the limit and the rail keeps

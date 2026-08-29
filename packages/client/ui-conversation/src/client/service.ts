@@ -13,8 +13,11 @@ import type { Context } from '@deepseek-ai/cordis'
 // error, so scope resolution goes through the sessions service (scopeOf
 // method) instead of the standalone helper.
 import type { ISessions, SessionFace, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { SubmitAttachment, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import type { FileAttachmentRef, ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
+import type {
+  FileAttachmentRef, ImageAttachmentRef, ImageMediaType, UploadedFileAttachment,
+} from '@deepseek-ai/dsh-attachment'
 import type { ComposerAttachment } from './contract/slots.ts'
 import type { QueueAction, QueueItemId } from './contract/queue.ts'
 import type { ComposerBlocks } from './input/blocks.ts'
@@ -94,6 +97,7 @@ export class ConversationController extends Service implements IConversation {
   /** The per-session composer-block registry. */
   readonly blocks: ComposerBlocks
   private readonly draftRegistry = new Map<DraftAttachmentId, ComposerAttachment>()
+  private readonly fileUploads = new Map<string, Promise<UploadedFileAttachment>>()
   private readonly imageUrls = new Map<string, ImageUrlEntry>()
   private readonly imageGenerations = new Map<SessionId, number>()
   private readonly createdImageUrls = new Set<string>()
@@ -115,6 +119,7 @@ export class ConversationController extends Service implements IConversation {
       for (const url of this.createdImageUrls) revokePreview(url)
       this.createdImageUrls.clear()
       this.draftRegistry.clear()
+      this.fileUploads.clear()
       this.imageUrls.clear()
       this.imageGenerations.clear()
     }, 'conversation attachment URL cache')
@@ -154,7 +159,9 @@ export class ConversationController extends Service implements IConversation {
     if (attachments.length !== attachmentIds.length) {
       throw new Error('conversation.sendSession: one or more draft attachments are no longer available')
     }
-    const uploaded = await Promise.all(attachments.map(attachment => this.encodeAttachment(attachment)))
+    const uploaded = await Promise.all(attachments.map(
+      attachment => this.encodeAttachment(session.sessionId, attachment, signal),
+    ))
     const content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
     const result = await session.prompt(content, mode, signal)
     if (!result.ok) return { kind: 'error' }
@@ -190,15 +197,21 @@ export class ConversationController extends Service implements IConversation {
 
   /**
    * Serialize ordered draft attachments without sending or releasing them.
+   * @param sessionId - session scope for raw-upload receipts.
    * @param ids - ordered draft identities.
+   * @param signal - optional cancellation for file reads or raw uploads.
    * @returns encoded wire attachments in the same order.
    */
-  async serializeDraftAttachments(ids: readonly DraftAttachmentId[]): Promise<readonly SubmitAttachment[]> {
+  async serializeDraftAttachments(
+    sessionId: SessionId,
+    ids: readonly DraftAttachmentId[],
+    signal?: AbortSignal,
+  ): Promise<readonly SubmitAttachment[]> {
     const attachments = this.draftAttachments(ids)
     if (attachments.length !== ids.length) {
       throw new Error('conversation.serializeDraftAttachments: one or more draft attachments are no longer available')
     }
-    return Promise.all(attachments.map(attachment => this.encodeAttachment(attachment)))
+    return Promise.all(attachments.map(attachment => this.encodeAttachment(sessionId, attachment, signal)))
   }
 
   /**
@@ -209,6 +222,9 @@ export class ConversationController extends Service implements IConversation {
     const attachment = this.draftRegistry.get(id)
     if (attachment === undefined) return
     this.draftRegistry.delete(id)
+    for (const key of this.fileUploads.keys()) {
+      if (key.endsWith(`:${id}`)) this.fileUploads.delete(key)
+    }
     if (attachment.kind === 'image') {
       this.createdImageUrls.delete(attachment.previewUrl)
       revokePreview(attachment.previewUrl)
@@ -234,6 +250,10 @@ export class ConversationController extends Service implements IConversation {
     attachment: ImageAttachmentRef | FileAttachmentRef,
   ): Promise<string> {
     if (this.disposed) return Promise.reject(new Error('conversation.resolveAttachment: service is disposed'))
+    if (!('width' in attachment)) {
+      const transfer = (this.ctx.get('connection') as ConnectionHandle | undefined)?.fileTransfer
+      if (transfer !== undefined) return Promise.resolve(transfer.downloadUrl(sessionId, attachment))
+    }
     const key = `${sessionId}:${attachment.attachmentId}`
     const cached = this.imageUrls.get(key)
     if (cached !== undefined) return cached.pending
@@ -346,21 +366,40 @@ export class ConversationController extends Service implements IConversation {
     return sessions
   }
 
-  /** Canonical base64 wire form of one browser-owned attachment. */
-  private async encodeAttachment(attachment: ComposerAttachment): Promise<SubmitAttachment> {
-    const data = bytesToBase64(new Uint8Array(await attachment.file.arrayBuffer()))
+  /** Serialize one browser-owned attachment through the active carrier. */
+  private async encodeAttachment(
+    sessionId: SessionId,
+    attachment: ComposerAttachment,
+    signal?: AbortSignal,
+  ): Promise<SubmitAttachment> {
     const name = attachment.file.name === '' ? {} : { name: attachment.file.name }
     if (attachment.kind === 'image') {
       const mediaType = imageMediaType(attachment.file.type)
       if (mediaType === undefined) throw new UnsupportedImageMediaTypeError(attachment.file.type)
+      const data = bytesToBase64(new Uint8Array(await attachment.file.arrayBuffer()))
       return { type: 'image', mediaType, data, ...name }
     }
-    return {
-      type: 'file',
-      mediaType: attachment.file.type === '' ? 'application/octet-stream' : attachment.file.type,
-      data,
-      ...name,
+    const transfer = (this.ctx.get('connection') as ConnectionHandle | undefined)?.fileTransfer
+    if (transfer === undefined) {
+      const data = bytesToBase64(new Uint8Array(await attachment.file.arrayBuffer()))
+      return {
+        type: 'file',
+        mediaType: attachment.file.type === '' ? 'application/octet-stream' : attachment.file.type,
+        data,
+        ...name,
+      }
     }
+    const key = `${sessionId}:${attachment.id}`
+    let pending = this.fileUploads.get(key)
+    if (pending === undefined) {
+      pending = transfer.upload(sessionId, attachment.file, signal).catch((error: unknown) => {
+        if (this.fileUploads.get(key) === pending) this.fileUploads.delete(key)
+        throw error
+      })
+      this.fileUploads.set(key, pending)
+    }
+    const receipt = await pending
+    return { type: 'file', ...receipt }
   }
 }
 

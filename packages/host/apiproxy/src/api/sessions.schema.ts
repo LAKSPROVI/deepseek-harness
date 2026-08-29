@@ -291,15 +291,25 @@ export const imageMediaTypeSchema = z.union([
 ])
 
 /** Prompt wire content is intentionally narrower than merge-extensible durable core content. */
-export const promptContentPartSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('text'), text: z.string() }),
-  z.object({ type: z.literal('image'), mediaType: imageMediaTypeSchema, data: z.string(), name: z.string().optional() }),
+export const promptContentPartSchema = z.union([
+  z.object({ type: z.literal('text'), text: z.string() }).strict(),
+  z.object({ type: z.literal('image'), mediaType: imageMediaTypeSchema, data: z.string(), name: z.string().optional() }).strict(),
   z.object({
     type: z.literal('file'),
     mediaType: z.string().optional(),
     data: z.string(),
     name: z.string().optional(),
-  }),
+  }).strict(),
+  z.object({
+    type: z.literal('file'),
+    uploadId: z.string().min(1),
+    attachment: z.object({
+      attachmentId: z.string().min(1),
+      mediaType: z.string().min(1),
+      bytes: z.number().int().nonnegative(),
+      name: z.string().optional(),
+    }).strict(),
+  }).strict(),
 ])
 
 /** session.prompt request payload, including optional browser-local request provenance. */
@@ -340,7 +350,7 @@ export const imageAttachmentRefSchema = z.object({
 export const fileAttachmentRefSchema = z.object({
   attachmentId: attachmentIdSchema,
   mediaType: z.string().min(1),
-  bytes: z.number().int().positive(),
+  bytes: z.number().int().nonnegative(),
   name: z.string().optional(),
 }) as unknown as z.ZodType<FileAttachmentRef>
 

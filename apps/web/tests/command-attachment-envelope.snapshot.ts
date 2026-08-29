@@ -54,8 +54,8 @@ it('keeps an opaque file and draft when a non-declaring command refuses the enve
   fireEvent.change(textarea, { target: { value: '/echo hello' } })
   fireEvent.keyDown(textarea, { key: 'Enter' })
 
-  const notice = await screen.findByRole('alert')
-  expect(notice.textContent).toBe('/echo does not accept attachments; remove them first')
+  const notice = await screen.findByText('/echo does not accept attachments; remove them first')
+  expect(notice.closest('[role="alert"]')).not.toBeNull()
   expect(textarea.value).toBe('/echo hello')
   expect(within(group).getByText('notes.txt')).not.toBeNull()
   expect(group.querySelector('img')).toBeNull()

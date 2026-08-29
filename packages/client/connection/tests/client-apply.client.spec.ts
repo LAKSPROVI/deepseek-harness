@@ -63,6 +63,34 @@ async function mount(): Promise<ConnectionHandle> {
 }
 
 describe('connection client apply', () => {
+  it('streams generic files directly and builds authorized download URLs only on served Web', async () => {
+    ;(globalThis as Win).location = {
+      hostname: 'localhost', search: '', origin: 'http://127.0.0.1:3080',
+    }
+    const handle = await mount()
+    expect(handle.fileTransfer).toBeDefined()
+    const file = new File([Uint8Array.of(1, 2, 3)], 'report.bin', { type: 'application/octet-stream' })
+    const ref = {
+      attachmentId: 'sha256:abc' as never,
+      mediaType: 'application/octet-stream', bytes: 3, name: 'report.bin',
+    }
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ uploadId: 'receipt', attachment: ref }))
+
+    await expect(handle.fileTransfer!.upload('session-a' as never, file)).resolves.toEqual({
+      uploadId: 'receipt', attachment: ref,
+    })
+    expect(fetch).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/api/session.file' }),
+      expect.objectContaining({ method: 'POST', body: file }),
+    )
+    expect(handle.fileTransfer!.downloadUrl('session-a' as never, ref))
+      .toContain('/api/session.file?sessionId=session-a&attachmentId=sha256%3Aabc')
+
+    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    expect((await mount()).fileTransfer).toBeUndefined()
+    fetch.mockRestore()
+  })
+
   it('mounts ctx.connection with the real client when no ?fixture switch is present', async () => {
     ;(globalThis as Win).location = { hostname: 'localhost', search: '' }
     const handle = await mount()

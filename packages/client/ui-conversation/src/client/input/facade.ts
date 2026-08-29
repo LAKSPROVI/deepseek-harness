@@ -54,7 +54,7 @@ export interface SessionInputDeps {
   /** Command-plane attachment plumbing (the hub owns the conversation face and the copy). */
   commandAttachments: {
     /** Resolve ordered draft ids to wire payloads without sending them; rejects when an id no longer resolves. */
-    serialize(ids: readonly DraftAttachmentId[]): Promise<readonly SubmitAttachment[]>
+    serialize(ids: readonly DraftAttachmentId[], signal?: AbortSignal): Promise<readonly SubmitAttachment[]>
     /** Free consumed draft attachments after a successful command submit. */
     release(ids: readonly DraftAttachmentId[]): void
     /** Localized composer notice for a claimed command that does not accept attachments. */
@@ -556,11 +556,13 @@ export class SessionInputShell implements SessionInput {
     const attachmentIds = claim.attachments === true ? [...this.attachmentIds] : []
     Promise.resolve()
       .then(async () => {
-        const images = attachmentIds.length > 0 ? await this.deps.commandAttachments.serialize(attachmentIds) : []
+        const attachments = attachmentIds.length > 0
+          ? await this.deps.commandAttachments.serialize(attachmentIds, attempt.signal)
+          : []
         // Serialization may outlive the attempt (large files, session
         // teardown); a dead attempt must not reach the Host executor.
         if (this.dead(attempt)) return undefined
-        return claim.submit(args, this.deps.actx, images)
+        return claim.submit(args, this.deps.actx, attachments)
       })
       .then(
         (outcome) => {
