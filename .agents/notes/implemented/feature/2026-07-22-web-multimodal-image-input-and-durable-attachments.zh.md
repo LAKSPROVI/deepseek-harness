@@ -138,9 +138,9 @@ Pi-AI 与直接 DeepSeek 适配器都会在请求时解析 `ctx.attachments`，�
 
 ### 限制与信任边界
 
-专用图片路径仅接受 PNG、JPEG、WebP 和 GIF；SVG 与远程 URL 绝不会进入光栅解码。源文件输入默认限制为每张图片 20 MiB、每条消息 20 张图片和 200 MiB 图片总字节数、每张图片 6400 万解码像素，以及任一边 8192px。与提供方无关的主版本默认长边 2048px，独立安全上限 4 MiB。通用文件使用独立默认值：每条消息 20 个文件、每个 20 MiB、总计 200 MiB。提供方请求的像素和编码字节上限是单独的路由策略。这些随部署变化的限制属于经过校验的后端配置，并在持久化或请求发送前强制执行。客户端连接载体为每个 API 请求设置独立且可配置的 `maxRequestBodyBytes` 上限，默认 600 MiB；如果该上限无法容纳图片与文件最大配置总量经 base64 和请求封装膨胀后的体积，加载就会失败。未声明长度的请求体在越过上限时即被拒绝，而不是先读完再拒。
+专用图片路径仅接受 PNG、JPEG、WebP 和 GIF；SVG 与远程 URL 绝不会进入光栅解码。源文件输入默认限制为每张图片 20 MiB、每条消息 20 张图片和 200 MiB 图片总字节数、每张图片 6400 万解码像素，以及任一边 8192px。与提供方无关的主版本默认长边 2048px，独立安全上限 4 MiB。通用文件独立使用每条消息 20 个、单文件 1 GiB、总计 1 GiB 的默认值。提供方请求的像素和编码字节上限仍是单独的路由策略。这些随部署变化的限制属于经过校验的后端配置，并在持久化或请求发送前强制执行。served Web 通用文件使用整体缓冲 JSON carrier 之外的流式 `POST` 与 `GET /api/session.file` route；图片以及不具备原始文件能力的 carrier 继续使用有界 base64 RPC。[原始流式传输决策](2026-08-29-raw-streaming-generic-file-transfer.zh.md)是传输、receipt 与授权语义的权威记录。
 
-格式错误的 base64、不支持或不匹配的媒体、截断的图片数据、超出字节限制、超出图片数量、超出像素限制、超出单边尺寸限制、对象缺失和完整性不匹配都会返回稳定的结构化错误。原始文件名只保留用于显示的末段，控制字符会被移除，并且任何本地路径都不会写入日志或返回浏览器。
+编码 carrier 上格式错误的 base64、不支持或不匹配的媒体、截断的图片数据、超出字节或数量限制、超出像素或尺寸限制、对象缺失和完整性不匹配都会返回稳定的结构化错误。原始文件名只保留用于显示的末段，控制字符会被移除，并且任何本地路径都不会写入日志或返回浏览器。
 
 ### 包与接口变更
 
@@ -153,7 +153,7 @@ Pi-AI 与直接 DeepSeek 适配器都会在请求时解析 `ctx.attachments`，�
 | `packages/llm/llm-deepseek` | 把官方视觉输入解析为确定性请求版本和 Files API ID。 |
 | `packages/compaction/compaction-basic` | 在摘要输入中保留图片，并明确拒绝非文本检查点输出。 |
 | `packages/host/apiproxy` 和 `packages/bundle/base` | 范围狭窄的上传协议、共享批量准入、限制和路由模型前置检查、先持久化再追加事件的顺序、会话授权读取，以及默认 profile 组合。 |
-| `packages/client/connection` 和 `packages/client/runtime` | 有界请求缓冲、协议类型、fixture（测试前置数据）图片、提示词上传、附件读取和持久引用折叠。 |
+| `packages/client/connection` 和 `packages/client/runtime` | 缓冲 RPC 与原始流式文件 carrier、协议类型、fixture 兼容上传、附件读取和持久引用折叠。 |
 | `packages/client/ui-conversation` | 每个会话的草稿图片、附件栏、用户与助手图片控件和原图预览。 |
 | `packages/acp/acp` | 条件式原生图片能力、原子内联图片准入，以及经过校验的助手图片交付。 |
 | `packages/mcp/mcp-client` | 无损规范 MCP 结果、经能力门禁的持久图片投影，以及针对不受支持丰富块的明确诊断。 |

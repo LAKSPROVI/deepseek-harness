@@ -22,9 +22,21 @@ Start a session and send:
 
 The agent can read and edit workspace files, run commands, delegate work, and maintain a plan. The Web UI asks before operations that require approval under the active permission policy.
 
+## Reuse saved prompts
+
+Open **Settings → Prompt library** to create, edit, or delete reusable prompts. In a session, open the prompt-library button beside the composer and search by title or body. Selecting a prompt inserts it into the draft; it never sends automatically. If the draft already contains text, the saved body is appended after a blank line.
+
+## Attach files
+
+Use **Add attachments**, paste files, or drag them anywhere over the page. PNG, JPEG, WebP, and GIF use image previews; every other type, including SVG, PDF, HTML, and archives, stays an inert file card. A default deployment accepts up to 20 generic files, 1 GiB per file and 1 GiB total per submission. The Harness stores exact opaque bytes and forces historical files to download instead of rendering them in the page.
+
+The attachment limit is a transport and storage limit, not a promise that the selected model understands a file format. Routes without generic-file input receive a deterministic metadata description instead of the bytes. Removing a draft before submission discards it from the composer; selecting a saved prompt or attaching a file never sends the message by itself.
+
 ## Continue
 
 - [Configure models](./providers.md)
+- [Understand the prompt library](../../../packages/client/ui-prompt-library/README.md)
+- [Read the attachment reference](../../subsystems/attachment.md)
 - [Use the Python SDK](./python-sdk.md)
 - [Use other CLI modes](../../../apps/cli/README.md)
 - [Develop a plugin](../develop/basic/index.md)
