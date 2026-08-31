@@ -16,7 +16,7 @@ import { AttachmentError, admitEncodedFiles, admitEncodedImages } from '@deepsee
 import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { createUserMessage, freezeMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { errorChain } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, LlmResolvedModelInfo, MessageSource } from '@deepseek-ai/dsh-llm'
 import { isAppendSurfaceEvent, isJsonValue } from '@deepseek-ai/dsh-session'
 import type { JsonValue, Session, SessionEvent, SessionEventMap, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
@@ -38,7 +38,7 @@ import type { PresetBearingSession } from '@deepseek-ai/dsh-agent-presets'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {
   ApiProxy, ConfigurableProviderView, CredentialView, GoalRef, HistoryEntry, HostFrame,
-  ModelCatalogFailure, ModelProviderGroup,
+  ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup,
   ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
   QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
   WorkspaceId, WorkspaceView,
@@ -307,6 +307,38 @@ function ok<T>(request: RpcRequest<unknown>, value: T): RpcResponse<T> {
   return { rpcId: request.rpcId, result: { ok: true, value } }
 }
 
+/** Project detached exact-route metadata onto the session model wire. */
+function projectModelInfo(info: LlmResolvedModelInfo): ModelCatalogModel {
+  const reasoning: ModelReasoning | undefined = info.reasoning === undefined
+    ? undefined
+    : {
+      efforts: info.reasoning.efforts.map(effort => ({
+        id: effort.id,
+        name: effort.name,
+        ...effort.description === undefined ? {} : { description: effort.description },
+      })),
+      ...info.reasoning.defaultEffort === undefined
+        ? {}
+        : { defaultEffort: info.reasoning.defaultEffort },
+    }
+  return {
+    id: info.id,
+    name: info.name,
+    ...info.description === undefined ? {} : { description: info.description },
+    ...info.inputModalities === undefined ? {} : { inputModalities: [...info.inputModalities] },
+    ...reasoning === undefined ? {} : { reasoning },
+  }
+}
+
+/** Resolve current-route metadata without turning an advisory read into a failure. */
+async function currentModelInfo(ctx: Context, current: ModelSelection): Promise<ModelCatalogModel | undefined> {
+  try {
+    return projectModelInfo(await ctx.llm.resolveModelInfo(current.provider, current.model))
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Build the provider/model catalog over every registered route. Shared by the
  * session-scoped `session.models` and host-scoped `llm.models`. Catalog
@@ -323,26 +355,13 @@ async function buildModelCatalog(ctx: Context): Promise<{
     try {
       const models = await ctx.llm.listModels(provider.id)
       const entries = await Promise.all(models.map(async (model) => {
-        const resolved = await ctx.llm.resolveModelInfo(provider.id, model.id)
-        const reasoning: ModelReasoning | undefined = resolved.reasoning === undefined
-          ? undefined
-          : {
-            efforts: resolved.reasoning.efforts.map(effort => ({
-              id: effort.id,
-              name: effort.name,
-              ...effort.description === undefined
-                ? {}
-                : { description: effort.description },
-            })),
-            ...resolved.reasoning.defaultEffort === undefined
-              ? {}
-              : { defaultEffort: resolved.reasoning.defaultEffort },
-          }
+        const exact = projectModelInfo(await ctx.llm.resolveModelInfo(provider.id, model.id))
         return {
           id: model.id,
           name: model.name,
           ...model.description === undefined ? {} : { description: model.description },
-          ...reasoning === undefined ? {} : { reasoning },
+          ...exact.inputModalities === undefined ? {} : { inputModalities: exact.inputModalities },
+          ...exact.reasoning === undefined ? {} : { reasoning: exact.reasoning },
         }
       }))
       const group: ModelProviderGroup = {
@@ -2246,9 +2265,18 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const found = await agentFor(sessionId)
         if ('error' in found) return err(request, found.error)
         const current = selectionFor(found.agent).current
-        const { groups, failures } = await buildModelCatalog(ctx)
+        const [{ groups, failures }, currentModel] = await Promise.all([
+          buildModelCatalog(ctx),
+          currentModelInfo(ctx, current),
+        ])
         const routable = routeServed(current.provider)
-        return ok(request, { current: { ...current }, routable, groups, failures })
+        return ok(request, {
+          current: { ...current },
+          ...currentModel === undefined ? {} : { currentModel },
+          routable,
+          groups,
+          failures,
+        })
       },
 
       async selectModel(request) {
@@ -2257,13 +2285,18 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         if ('error' in found) return err(request, found.error)
         return serializeAttachmentAdmission(found.agent, async () => {
           try {
-            const resolved = await ctx.llm.resolveCallConfig({
+            const proposal = {
               provider,
               model,
               ...reasoningEffort === undefined
                 ? {}
                 : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
-            })
+            }
+            const [resolved, modelInfo] = await Promise.all([
+              ctx.llm.resolveCallConfig(proposal),
+              ctx.llm.resolveModelInfo(provider, model),
+            ])
+            const currentModel = projectModelInfo(modelInfo)
             const selected: ModelSelection = {
               provider: resolved.provider,
               model: resolved.model,
@@ -2279,7 +2312,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 `api-proxy: the model switch applies to this session but was not saved as the default: ${String(error)}`,
               )
             }
-            return ok(request, { selected: { ...selected } })
+            return ok(request, { selected: { ...selected }, currentModel })
           } catch (error: unknown) {
             return err(request, {
               code: 'model-unavailable',

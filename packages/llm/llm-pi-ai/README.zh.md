@@ -91,6 +91,8 @@ profile 的 `models` 列表是*替换*该路由已安装 catalog，而不是扩�
 
 该声明会转换为 pi-ai 的 `Model.reasoning` + `thinkingLevelMap`，其中每个档位都被显式决定——未声明的档位一律固定为不支持，而不是留给 pi-ai 自己的默认规则：那套规则并不对称（键缺席对五个基础档位意味着「支持」，对 `xhigh`/`max` 却意味着「不支持」），也本不该要求 profile 作者了解。`off` 是唯一的三态键：不写它，选择器不提供 Off，显式请求 Off 会被拒绝——不点名任何档位的请求仍会在不带该参数的情况下发出，提供方随后做什么是它自己的默认行为；声明而不给值（`off:`），则会提供 Off，选中它时什么也不发送——对 `deepseek` 方言则是一个显式的 `thinking: {type: "disabled"}`——这同时覆盖完全不点名任何档位的请求；声明并给值（`off: none`），该值就会作为档位参数在协议中发送。没有任何写法能把 catalog 映射中的键恢复为「未设置」：这份声明就是对外提供的全部，因此把你要保留的 catalog 档位重述出来。
 
+精确模型 id `kr/gpt-5.6-sol-thinking-agentic` 在已配置路由上使用已验证的覆盖：选择器只提供 `off`、`low`、`medium`、`high`、`xhigh` 与 `max`；没有显式选择或路由默认值时，`off` 是该模型的默认档位，分派把它映射为 `none`，其余档位映射为自身。显式选择或路由默认值仍然优先。`minimal` 对其他模型仍然有效，但该 id 会在网络 I/O 前拒绝它。这是显式的模型验证，并非从端点 discovery 推断能力；已审计的 catalog 快照报告空的档位列表。
+
 ### 协议兼容开关
 
 pi-ai 依据提供方 id 与 baseURL 决定每个请求的形状：系统提示词由哪个角色承载、输出上限写在哪个字段、思考级别如何传输。私有网关的 URL 什么也说明不了，而对于 pi-ai 无法识别的端点，其检测会当作 OpenAI 本身来回答——推理模型的系统提示词以 `developer` 发出、输出上限写作 `max_completion_tokens`、思考级别只发一个裸的 `reasoning_effort`——而多数 OpenAI 兼容网关至少会拒绝其中之一。因此 `compat` 既可配置在路由上（作为其模型的默认值），也可按模型配置（逐字段胜出），解析顺序为模型 → 路由 → 已安装 catalog 条目 → pi-ai 自身的检测；路由级开关会为每个读取它的模型遮蔽 catalog 条目的值，而且除了重述其值，没有任何写法能把某个字段交还给 catalog。
@@ -156,7 +158,7 @@ pi-ai 依据提供方 id 与 baseURL 决定每个请求的形状：系统提示�
 
 - pi-ai 工具调用参数是已解析对象；harness 存储原始 JSON 字符串。适配器会解析输入，并将输出重新字符串化。
 - pi-ai 将失败报告为流内错误事件；它们会映射到 `finish {kind:'error'|'aborted', failure}` 分片。提供方特定错误文本会区分终止型 `QUOTA` 与暂时型 `RATE_LIMIT`，针对已解析模型上下文窗口评估的文本与 usage 信号则将溢出规范化为 `CONTEXT_WINDOW_EXCEEDED`。终止时的 `stop` 若消息不含内容块，则会映射为 `finish {kind:'error'}`，code 为 `EMPTY_RESPONSE`（默认策略会重试），而非成功空消息。
-- pi-ai 将推理 token 折叠到输出 usage 中；没有可映射的独立推理计数。
+- 提供方报告独立推理计数时，pi-ai 会将其公开；适配器会在该值已定义时映射它（包括零），且不会更改输出 usage。
 - pi-ai 的 `off` 思考级别会原样穿过 Harness 能力 seam，并在分派时变为被省略的 pi-ai 通用 `reasoning` 选项。
 - `GenerateOptions.stop` 会以 `UNSUPPORTED_OPTION` 被拒绝，因为 pi-ai 的通用流式输出接口无法保证所有提供方都支持它。
 
@@ -192,7 +194,7 @@ pi-ai 事件会变为 harness 推理、文本、工具调用、usage 与 finish 
 
 #### Token 影响
 
-只有在 loop 记录生成内容后，它才会影响后续输入。提供方不单独报告推理 token 时，pi-ai 会将其折叠到输出 usage 中。
+只有在 loop 记录生成内容后，它才会影响后续输入。独立报告的推理计数会作为 `reasoningTokens` 与提供方未更改的输出计数一同出现；提供方省略该计数时，这个字段也会缺席。
 
 #### KV Cache 影响
 

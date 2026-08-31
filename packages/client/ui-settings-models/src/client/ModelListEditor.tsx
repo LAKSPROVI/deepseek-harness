@@ -143,13 +143,18 @@ function capacitySpelling(value: number | undefined): string {
   return value === undefined ? '' : formatCapacity(value)
 }
 
-/** Adopt a candidate, keeping whatever capacities the provider disclosed. */
+/** Adopt a candidate without storing modalities the pi-ai profile cannot represent. */
 function adopt(candidate: DiscoveredModelView): ModelDraft {
+  const inputModalities = candidate.inputModalities
+  const input = inputModalities?.every(modality => modality === 'text' || modality === 'image')
+    ? inputModalities
+    : undefined
   return {
     id: candidate.id,
     ...candidate.name === undefined ? {} : { name: candidate.name },
     ...candidate.contextWindow === undefined ? {} : { contextWindow: candidate.contextWindow },
     ...candidate.maxTokens === undefined ? {} : { maxTokens: candidate.maxTokens },
+    ...input === undefined ? {} : { input: [...input] },
   }
 }
 

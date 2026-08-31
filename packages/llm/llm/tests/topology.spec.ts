@@ -238,6 +238,11 @@ describe('model discovery registry', () => {
   it('normalizes what an interrogation returns without inventing capacities', async () => {
     const ctx = await setup()
     ctx.llm.registerModelDiscovery('llm-example', () => Promise.resolve([
+      { id: 'vision', inputModalities: ['text', 'image'] },
+      { id: 'text-only', inputModalities: ['text'] },
+      { id: 'file-capable', inputModalities: ['text', 'file'] },
+      { id: 'explicit-none', inputModalities: [] },
+      { id: 'normalized', inputModalities: ['image', 'image', 'audio', 'file', 'file'] },
       { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256 },
       { id: '' },
       { id: 'keep' },
@@ -245,6 +250,11 @@ describe('model discovery registry', () => {
     ] as never))
 
     expect(await ctx.llm.discoverModels('llm-example', { baseURL: 'https://gateway.example/v1' })).toEqual([
+      { id: 'vision', inputModalities: ['text', 'image'] },
+      { id: 'text-only', inputModalities: ['text'] },
+      { id: 'file-capable', inputModalities: ['text', 'file'] },
+      { id: 'explicit-none', inputModalities: [] },
+      { id: 'normalized', inputModalities: ['image', 'file'] },
       { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256 },
       { id: 'bare' },
     ])

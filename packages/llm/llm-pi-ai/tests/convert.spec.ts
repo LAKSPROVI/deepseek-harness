@@ -8,7 +8,7 @@ import { toPiContext } from '../src/context.ts'
 import { toPiReplayState } from '../src/replay.ts'
 import { mapStopReason, mapUsage, toStreamChunks } from '../src/stream.ts'
 
-function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0): Usage {
+function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0, reasoning?: number): Usage {
   return {
     input,
     output,
@@ -16,6 +16,7 @@ function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0): Usage {
     cacheWrite,
     totalTokens: input + output + cacheRead + cacheWrite,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    ...reasoning === undefined ? {} : { reasoning },
   }
 }
 
@@ -874,14 +875,23 @@ describe('mapStopReason / mapUsage', () => {
     })
   })
 
-  it('maps cache fields only when nonzero', () => {
-    expect(mapUsage(usage(10, 5, 8, 2))).toEqual({
+  it.each([
+    ['omits undefined reasoning', usage(10, 5), { inputTokens: 10, outputTokens: 5 }],
+    ['preserves zero reasoning', usage(10, 5, 0, 0, 0), { inputTokens: 10, outputTokens: 5, reasoningTokens: 0 }],
+    ['preserves positive reasoning without subtracting it from output', usage(10, 5, 0, 0, 3), {
+      inputTokens: 10,
+      outputTokens: 5,
+      reasoningTokens: 3,
+    }],
+    ['maps reasoning alongside cache', usage(10, 5, 8, 2, 3), {
       inputTokens: 10,
       outputTokens: 5,
       cacheReadTokens: 8,
       cacheWriteTokens: 2,
-    })
-    expect(mapUsage(usage(10, 5))).toEqual({ inputTokens: 10, outputTokens: 5 })
+      reasoningTokens: 3,
+    }],
+  ] as const)('%s', (_name, source, expected) => {
+    expect(mapUsage(source)).toEqual(expected)
   })
 })
 

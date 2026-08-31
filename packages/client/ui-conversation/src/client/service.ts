@@ -24,6 +24,9 @@ import type { ComposerBlocks } from './input/blocks.ts'
 import type { DraftAttachmentId, SessionInputResolver } from './input/contract.ts'
 import type { InputSubmitMode } from './contract/composer-submission.ts'
 
+/** Synchronous client preflight for one ordinary model prompt. */
+export type PromptAdmissionCheck = (attachments: readonly ComposerAttachment[]) => string | undefined
+
 /**
  * The outward conversation face (`ctx.conversation`): the scope-addressed
  * verbs and the input registry other plugins may reach — and exactly what a
@@ -37,6 +40,20 @@ export interface IConversation {
    * cannot import makes a session's input inert with its own reason.
    */
   readonly blocks: ComposerBlocks
+  /**
+   * Register a synchronous preflight for ordinary model prompts in one session.
+   * Returning text rejects before attachment encoding or Host RPC; undefined admits.
+   * @param sessionId - session whose ordinary prompts are checked.
+   * @param check - prompt attachment check.
+   * @returns disposer removing the check.
+   */
+  registerPromptAdmission(sessionId: SessionId, check: PromptAdmissionCheck): () => void
+  /**
+   * Resolve browser-owned draft attachments without serializing them.
+   * @param ids - ordered draft identities.
+   * @returns every registered matching attachment in input order.
+   */
+  draftAttachments(ids: readonly DraftAttachmentId[]): readonly ComposerAttachment[]
   /**
    * Send a prompt into the caller scope's session (queued turn).
    * @param text - prompt text, sent verbatim as one text block.
@@ -100,6 +117,7 @@ export class ConversationController extends Service implements IConversation {
   private readonly fileUploads = new Map<string, Promise<UploadedFileAttachment>>()
   private readonly imageUrls = new Map<string, ImageUrlEntry>()
   private readonly imageGenerations = new Map<SessionId, number>()
+  private readonly promptAdmissions = new Map<SessionId, Set<PromptAdmissionCheck>>()
   private readonly createdImageUrls = new Set<string>()
   private disposed = false
 
@@ -122,7 +140,19 @@ export class ConversationController extends Service implements IConversation {
       this.fileUploads.clear()
       this.imageUrls.clear()
       this.imageGenerations.clear()
+      this.promptAdmissions.clear()
     }, 'conversation attachment URL cache')
+  }
+
+  /** @inheritdoc */
+  registerPromptAdmission(sessionId: SessionId, check: PromptAdmissionCheck): () => void {
+    const checks = this.promptAdmissions.get(sessionId) ?? new Set<PromptAdmissionCheck>()
+    checks.add(check)
+    this.promptAdmissions.set(sessionId, checks)
+    return () => {
+      checks.delete(check)
+      if (checks.size === 0) this.promptAdmissions.delete(sessionId)
+    }
   }
 
   /**
@@ -158,6 +188,10 @@ export class ConversationController extends Service implements IConversation {
     const attachments = this.draftAttachments(attachmentIds)
     if (attachments.length !== attachmentIds.length) {
       throw new Error('conversation.sendSession: one or more draft attachments are no longer available')
+    }
+    for (const check of this.promptAdmissions.get(session.sessionId) ?? []) {
+      const rejection = check(attachments)
+      if (rejection !== undefined) return { kind: 'error', text: rejection }
     }
     const uploaded = await Promise.all(attachments.map(
       attachment => this.encodeAttachment(session.sessionId, attachment, signal),

@@ -45,12 +45,14 @@ function scriptedApi(overrides: {
       }),
       models: r => ok(r, {
         current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+        currentModel: { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', inputModalities: ['text', 'image'] },
         routable: true,
         groups: [],
         failures: [],
       }),
       selectModel: r => ok(r, {
         selected: { provider: r.payload.provider, model: r.payload.model },
+        currentModel: { id: r.payload.model, name: r.payload.model, inputModalities: ['text', 'image'] },
       }),
       rename: r => ok(r, { title: 'renamed', seq: 0 }),
       fork: r => ok(r, { sessionId: sid('s-fork') }),
@@ -757,7 +759,9 @@ describe('config unary surface', () => {
       llm: {
         providers: record('llm.providers', r => ok(r, { providers: [providerRow] })),
         models: record('llm.models', r => ok(r, { groups: [group], failures: [] })),
-        discoverModels: record('llm.discoverModels', r => ok(r, { models: [{ id: 'acme-large', contextWindow: 65536 }] })),
+        discoverModels: record('llm.discoverModels', r => ok(r, {
+          models: [{ id: 'acme-large', contextWindow: 65536, inputModalities: ['text', 'image'] }],
+        })),
       },
     })
     const c = client(api)
@@ -789,7 +793,12 @@ describe('config unary surface', () => {
       api: 'openai-completions',
       apiKey: 'probe-key',
     })
-    expect(discovered.result).toEqual({ ok: true, value: { models: [{ id: 'acme-large', contextWindow: 65536 }] } })
+    expect(discovered.result).toEqual({
+      ok: true,
+      value: {
+        models: [{ id: 'acme-large', contextWindow: 65536, inputModalities: ['text', 'image'] }],
+      },
+    })
 
     expect(seen.map(call => call.method)).toEqual([
       'settings.describe', 'settings.openDocument', 'settings.update', 'settings.replace', 'settings.mutate',

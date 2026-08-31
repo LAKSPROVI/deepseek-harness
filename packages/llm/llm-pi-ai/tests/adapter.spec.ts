@@ -81,7 +81,7 @@ describe('PiAiAdapter provider routing', () => {
     })
     expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
     expect(result.finish).toEqual({ kind: 'stop' })
-    expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 1 })
+    expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 1, reasoningTokens: 0 })
     expect(server.paths).toEqual(['/chat/completions'])
   })
 
@@ -622,6 +622,78 @@ describe('provider profile lifecycle', () => {
       failure: { code: 'UNSUPPORTED_REASONING_EFFORT' },
     })
     expect(server.requests).toHaveLength(1)
+  })
+
+  it('applies the verified GPT-5.6 effort profile on any configured 9Router route', async () => {
+    vi.stubEnv('PI_TEST_KEY', 'test-key')
+    const levels = ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+    const server = await mockServer(['default', ...levels, 'minimal'].map(() => ({ events: textEvents })))
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        '9router': {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-completions',
+          baseURL: `${server.url}/v1`,
+          models: [
+            { id: 'kr/gpt-5.6-sol-thinking-agentic' },
+            { id: 'other-model', reasoningEfforts: { minimal: 'minimal' } },
+          ],
+        },
+      },
+    })
+
+    const info = await ctx.llm.resolveModelInfo('9router', 'kr/gpt-5.6-sol-thinking-agentic')
+    expect(info.reasoning).toEqual({
+      efforts: [
+        { id: ReasoningEffortId('off'), name: 'Off' },
+        { id: ReasoningEffortId('low'), name: 'Low' },
+        { id: ReasoningEffortId('medium'), name: 'Medium' },
+        { id: ReasoningEffortId('high'), name: 'High' },
+        { id: ReasoningEffortId('xhigh'), name: 'XHigh' },
+        { id: ReasoningEffortId('max'), name: 'Max' },
+      ],
+      defaultEffort: ReasoningEffortId('off'),
+    })
+    expect((await ctx.llm.resolveModelInfo('9router', 'other-model')).reasoning?.efforts.map(effort => effort.id))
+      .toEqual([ReasoningEffortId('minimal')])
+
+    await assemble(ctx, {
+      provider: '9router',
+      model: 'kr/gpt-5.6-sol-thinking-agentic',
+      messages: [],
+    })
+    for (const level of levels) {
+      await assemble(ctx, {
+        provider: '9router',
+        model: 'kr/gpt-5.6-sol-thinking-agentic',
+        reasoningEffort: ReasoningEffortId(level),
+        messages: [],
+      })
+    }
+    expect(server.requests.map(request => (request as { reasoning_effort?: string }).reasoning_effort))
+      .toEqual(['none', 'none', 'low', 'medium', 'high', 'xhigh', 'max'])
+
+    await assemble(ctx, {
+      provider: '9router',
+      model: 'other-model',
+      reasoningEffort: ReasoningEffortId('minimal'),
+      messages: [],
+    })
+    expect(server.requests.at(-1)).toMatchObject({ reasoning_effort: 'minimal' })
+
+    const minimal = await assemble(ctx, {
+      provider: '9router',
+      model: 'kr/gpt-5.6-sol-thinking-agentic',
+      reasoningEffort: ReasoningEffortId('minimal'),
+      messages: [],
+    })
+    expect(minimal.finish).toMatchObject({
+      kind: 'error',
+      failure: { code: 'UNSUPPORTED_REASONING_EFFORT' },
+    })
+    expect(server.requests).toHaveLength(levels.length + 2)
   })
 
   it('dispatches the compat-switched dialect on a declared route', async () => {

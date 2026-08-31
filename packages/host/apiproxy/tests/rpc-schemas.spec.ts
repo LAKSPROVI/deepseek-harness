@@ -9,7 +9,7 @@ import {
   contentBlockSchema, sessionCancelRequestSchema, sessionCancelValueSchema, sessionCreateRequestSchema,
   sessionCreateValueSchema, sessionEventSchema, sessionHistoryRequestSchema, sessionHistoryValueSchema,
   sessionIdSchema, sessionListRequestSchema, sessionListValueSchema, sessionModelsRequestSchema,
-  sessionModelsValueSchema, sessionPromptRequestSchema, sessionPromptValueSchema,
+  modelCatalogModelSchema, sessionModelsValueSchema, sessionPromptRequestSchema, sessionPromptValueSchema,
   sessionSearchRequestSchema, sessionSearchValueSchema, sessionSelectModelRequestSchema,
   sessionSelectModelValueSchema, sessionSummarySchema,
   sessionUpdateQueueRequestSchema, sessionUpdateQueueValueSchema,
@@ -206,6 +206,7 @@ describe('sessions domain schemas', () => {
     expect(sessionModelsRequestSchema.parse({ sessionId: 's1' }).sessionId).toBe('s1')
     expect(sessionModelsValueSchema.parse({
       current: { provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'max' },
+      currentModel: { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', inputModalities: ['text', 'image'] },
       routable: true,
       groups: [{
         id: 'deepseek-official',
@@ -225,6 +226,13 @@ describe('sessions domain schemas', () => {
       }],
       failures: [{ id: 'broken', name: 'Broken', message: 'offline' }],
     }).groups[0]?.models[0]?.id).toBe('deepseek-v4-flash')
+    expect(modelCatalogModelSchema.parse({ id: 'unknown', name: 'Unknown' }).inputModalities).toBeUndefined()
+    expect(modelCatalogModelSchema.parse({
+      id: 'text-only', name: 'Text Only', inputModalities: ['text'],
+    }).inputModalities).toEqual(['text'])
+    expect(modelCatalogModelSchema.parse({
+      id: 'vision', name: 'Vision', inputModalities: ['text', 'image'],
+    }).inputModalities).toEqual(['text', 'image'])
     expect(sessionSelectModelRequestSchema.parse({
       sessionId: 's1',
       provider: 'deepseek-official',
@@ -233,7 +241,11 @@ describe('sessions domain schemas', () => {
     }).reasoningEffort).toBe('max')
     expect(sessionSelectModelValueSchema.parse({
       selected: { provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'max' },
-    }).selected.reasoningEffort).toBe('max')
+      currentModel: { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', inputModalities: ['text'] },
+    })).toMatchObject({
+      selected: { reasoningEffort: 'max' },
+      currentModel: { inputModalities: ['text'] },
+    })
     expect(() => sessionSelectModelRequestSchema.parse({
       sessionId: 's1',
       provider: '',

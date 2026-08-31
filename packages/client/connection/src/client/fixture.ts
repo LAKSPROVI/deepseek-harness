@@ -35,7 +35,7 @@ import type { CommandDescriptor, CommandExecution, CommandResult } from '@deepse
 import { deriveEventMessage, foldSurface } from '@deepseek-ai/dsh-session/surface'
 import type {
   ApiProxy, ClientRequest, ClientResponse, HistoryEntry, HostFrame, MuxFrame, RpcReceipt,
-  ModelProviderGroup, ModelSelection, RpcRequest, RpcResponse, RpcResult, ServerRequest, ServerResponse,
+  ModelCatalogModel, ModelProviderGroup, ModelSelection, RpcRequest, RpcResponse, RpcResult, ServerRequest, ServerResponse,
   SessionAttachmentValue, SessionSummary,
   ToolCallView, ToolEventView, ToolResultView, WorkspaceId, WorkspaceView,
 } from './api.ts'
@@ -330,6 +330,15 @@ function fixtureModelGroups(): ModelProviderGroup[] {
       models: [{ id: 'gpt-5', name: 'GPT-5', reasoning: OPENAI_REASONING }],
     },
   ]
+}
+
+/** Exact model projection served independently of advisory catalog membership. */
+function fixtureCurrentModel(selection: ModelSelection, textOnly = false): ModelCatalogModel {
+  const catalog = fixtureModelGroups()
+    .find(group => group.id === selection.provider)?.models
+    .find(model => model.id === selection.model)
+  const base = catalog ?? { id: selection.model, name: selection.model }
+  return { ...base, ...textOnly ? { inputModalities: ['text'] } : {} }
 }
 
 function sid(id: string): SessionId {
@@ -1447,6 +1456,8 @@ export interface FixtureOptions {
   empty?: boolean
   /** Reject every prompt before appending its user event. */
   rejectPrompt?: boolean
+  /** Report the current exact model as known text-only without changing the advisory catalog. */
+  textOnlyModel?: boolean
   /** Expose a seeded durable prompt-library namespace to assembled Web tests. */
   promptLibrary?: boolean
   /** Publish the Session but fail its Workspace account write. */
@@ -2482,15 +2493,19 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         if (doomed) throw new Error('fixture: simulated history transport failure')
         return ok(request, { ...page, ...projections === undefined ? {} : { projections } })
       },
-      models: request => ok(request, {
-        current: modelSelections.get(request.payload.sessionId)
-          ?? { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
-        // The fixture's routes all serve; a surface exercising the blocked
-        // posture drives it through its own stub.
-        routable: true,
-        groups: fixtureModelGroups(),
-        failures: [],
-      }),
+      models: (request) => {
+        const current = modelSelections.get(request.payload.sessionId)
+          ?? { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
+        return ok(request, {
+          current,
+          currentModel: fixtureCurrentModel(current, options.textOnlyModel),
+          // The fixture's routes all serve; a surface exercising the blocked
+          // posture drives it through its own stub.
+          routable: true,
+          groups: fixtureModelGroups(),
+          failures: [],
+        })
+      },
       selectModel: (request) => {
         const selected: ModelSelection = {
           provider: request.payload.provider,
@@ -2500,7 +2515,10 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
             : { reasoningEffort: request.payload.reasoningEffort },
         }
         modelSelections.set(request.payload.sessionId, selected)
-        return ok(request, { selected })
+        return ok(request, {
+          selected,
+          currentModel: fixtureCurrentModel(selected, options.textOnlyModel),
+        })
       },
       prompt: (request) => {
         const { sessionId: id, mode, content } = request.payload
@@ -3324,6 +3342,7 @@ function fixtureOptionsFromLocation(): FixtureOptions {
   return {
     empty: query.get('fixture') === 'empty',
     rejectPrompt: query.get('fixturePrompt') === 'reject',
+    textOnlyModel: query.get('fixtureModel') === 'text-only',
     promptLibrary: query.get('fixturePromptLibrary') === '1',
     failWorkspaceAttach: query.get('fixtureAttach') === 'fail',
     dropSessionCreateResponse: query.get('fixtureSessionCreate') === 'drop-response',

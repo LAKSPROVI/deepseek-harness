@@ -26,6 +26,7 @@ export const zh = {
   'warning.groupLoad': '{name} 加载失败：{message}',
   'empty.models': '没有可用的模型。',
   'blocked.composer': '当前模型不可用，请先选择模型',
+  'blocked.images': '当前模型不支持图片输入。请选择支持图片的模型，或移除图片后重试。',
   'empty.efforts': '当前模型未提供推理等级。',
 } satisfies Record<string, string>
 
@@ -50,5 +51,6 @@ export const en = {
   'warning.groupLoad': '{name} failed to load: {message}',
   'empty.models': 'No models available.',
   'blocked.composer': 'This model is unavailable — select one to continue',
+  'blocked.images': 'This model does not support image input. Select an image-capable model or remove the image and try again.',
   'empty.efforts': 'This model provides no reasoning effort levels.',
 } satisfies Record<ModelKey, string>

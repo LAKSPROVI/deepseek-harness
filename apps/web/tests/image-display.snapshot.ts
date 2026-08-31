@@ -199,6 +199,56 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
   expect([...(rail?.querySelectorAll('img') ?? [])]).toHaveLength(1)
 })
 
+it('blocks a known text-only model while preserving the image draft and clears on removal', async () => {
+  mountAssembledApp('?fixture&fixtureModel=text-only')
+
+  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+  const start = tree.querySelector<HTMLButtonElement>('button[aria-label="New session in fixture"]')
+  if (start === null) throw new Error('fixture Workspace new-session action missing')
+  fireEvent.click(start)
+
+  const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 })
+  if (!(textarea instanceof HTMLTextAreaElement)) throw new Error('composer textarea missing')
+  fireEvent.change(textarea, { target: { value: 'keep this draft' } })
+  const image = new File([new Uint8Array([137, 80, 78, 71])], 'unsupported.png', { type: 'image/png' })
+  fireEvent.paste(textarea, {
+    clipboardData: {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => image }],
+      getData: () => '',
+    },
+  })
+
+  const guidance = 'This model does not support image input. Select an image-capable model or remove the image and try again.'
+  await waitFor(() => {
+    expect(textarea.disabled).toBe(true)
+    expect(textarea.placeholder).toBe(guidance)
+  })
+  const rail = document.querySelector('[role="group"][aria-label="Pending images"]')
+  if (rail === null) throw new Error('blocked attachment rail missing')
+  expect({
+    disabled: textarea.disabled,
+    draft: textarea.value,
+    guidance: textarea.placeholder,
+    images: [...rail.querySelectorAll('img')].map(img => img.getAttribute('alt')),
+  }).toMatchInlineSnapshot(`
+    {
+      "disabled": true,
+      "draft": "keep this draft",
+      "guidance": "This model does not support image input. Select an image-capable model or remove the image and try again.",
+      "images": [
+        "unsupported.png",
+      ],
+    }
+  `)
+
+  fireEvent.click(within(rail as HTMLElement).getByRole('button', { name: 'Remove image unsupported.png' }))
+  await waitFor(() => {
+    expect(textarea.disabled).toBe(false)
+    expect(document.querySelector('[role="group"][aria-label="Pending images"]')).toBeNull()
+  })
+  expect(textarea.value).toBe('keep this draft')
+})
+
 it('renders a host dimension rejection with the projected 2000px limit', async () => {
   mountAssembledApp('?fixture&fixturePrompt=reject')
 

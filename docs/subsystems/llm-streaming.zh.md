@@ -628,6 +628,8 @@ interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+  /** Accepted request modalities; absent means unknown, while an empty list is known negative capability. */
+  inputModalities?: readonly ModelModality[]
 }
 ```
 
