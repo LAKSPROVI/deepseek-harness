@@ -30,14 +30,24 @@ const reasoning = {
 }
 
 function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryState {
+  const current = overrides.current === undefined
+    ? { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
+    : overrides.current
+  const groups = overrides.groups ?? [{
+    id: 'deepseek-official',
+    name: 'DeepSeek',
+    models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', reasoning }],
+  }]
+  const currentModel = overrides.currentModel !== undefined
+    ? overrides.currentModel
+    : current === null
+      ? null
+      : groups.find(group => group.id === current.provider)?.models.find(model => model.id === current.model) ?? null
   return {
-    current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+    current,
+    currentModel,
     routable: true,
-    groups: [{
-      id: 'deepseek-official',
-      name: 'DeepSeek',
-      models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', reasoning }],
-    }],
+    groups,
     failures: [],
     status: 'ready',
     error: null,
