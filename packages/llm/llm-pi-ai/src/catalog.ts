@@ -209,6 +209,20 @@ const VERIFIED_REASONING_EFFORTS: Readonly<Record<string, PiAiReasoningEfforts>>
   },
 }
 
+/** Default reasoning level verified for an exact route model. */
+const VERIFIED_REASONING_DEFAULTS: Readonly<Record<string, ModelThinkingLevel>> = {
+  'kr/gpt-5.6-sol-thinking-agentic': 'off',
+}
+
+/**
+ * Return the verified default for one exact route model.
+ * @param model - Exact model id sent to the route.
+ * @returns The verified default, or undefined when the route owns the choice.
+ */
+export function verifiedReasoningDefault(model: string): ModelThinkingLevel | undefined {
+  return VERIFIED_REASONING_DEFAULTS[model]
+}
+
 /**
  * Whether one pi-ai compat field is configurable on a profile.
  *

@@ -627,7 +627,7 @@ describe('provider profile lifecycle', () => {
   it('applies the verified GPT-5.6 effort profile on any configured 9Router route', async () => {
     vi.stubEnv('PI_TEST_KEY', 'test-key')
     const levels = ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const
-    const server = await mockServer([...levels, 'minimal'].map(() => ({ events: textEvents })))
+    const server = await mockServer(['default', ...levels, 'minimal'].map(() => ({ events: textEvents })))
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(LlmPiAi, {
@@ -645,10 +645,25 @@ describe('provider profile lifecycle', () => {
     })
 
     const info = await ctx.llm.resolveModelInfo('9router', 'kr/gpt-5.6-sol-thinking-agentic')
-    expect(info.reasoning?.efforts.map(effort => effort.id)).toEqual(levels.map(ReasoningEffortId))
+    expect(info.reasoning).toEqual({
+      efforts: [
+        { id: ReasoningEffortId('off'), name: 'Off' },
+        { id: ReasoningEffortId('low'), name: 'Low' },
+        { id: ReasoningEffortId('medium'), name: 'Medium' },
+        { id: ReasoningEffortId('high'), name: 'High' },
+        { id: ReasoningEffortId('xhigh'), name: 'XHigh' },
+        { id: ReasoningEffortId('max'), name: 'Max' },
+      ],
+      defaultEffort: ReasoningEffortId('off'),
+    })
     expect((await ctx.llm.resolveModelInfo('9router', 'other-model')).reasoning?.efforts.map(effort => effort.id))
       .toEqual([ReasoningEffortId('minimal')])
 
+    await assemble(ctx, {
+      provider: '9router',
+      model: 'kr/gpt-5.6-sol-thinking-agentic',
+      messages: [],
+    })
     for (const level of levels) {
       await assemble(ctx, {
         provider: '9router',
@@ -658,7 +673,7 @@ describe('provider profile lifecycle', () => {
       })
     }
     expect(server.requests.map(request => (request as { reasoning_effort?: string }).reasoning_effort))
-      .toEqual(['none', 'low', 'medium', 'high', 'xhigh', 'max'])
+      .toEqual(['none', 'none', 'low', 'medium', 'high', 'xhigh', 'max'])
 
     await assemble(ctx, {
       provider: '9router',
@@ -678,7 +693,7 @@ describe('provider profile lifecycle', () => {
       kind: 'error',
       failure: { code: 'UNSUPPORTED_REASONING_EFFORT' },
     })
-    expect(server.requests).toHaveLength(levels.length + 1)
+    expect(server.requests).toHaveLength(levels.length + 2)
   })
 
   it('dispatches the compat-switched dialect on a declared route', async () => {

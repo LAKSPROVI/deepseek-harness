@@ -59,6 +59,7 @@ import type {
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
+import { verifiedReasoningDefault } from './catalog.ts'
 import { toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 
@@ -179,7 +180,7 @@ function resolveReasoningLevel(
  * capability is unavailable, which leaves the surface offering only the
  * provider's default.
  * @param model - the resolved model descriptor.
- * @param defaultLevel - the profile's configured effort, already validated.
+ * @param defaultLevel - the configured or verified effort, already validated.
  * @returns the `reasoning` field, or an empty object when none can be offered.
  */
 function reasoningInfo(
@@ -192,7 +193,7 @@ function reasoningInfo(
     reasoning: {
       efforts: levels.map(level => ({
         id: ReasoningEffortId(level),
-        name: `${level.charAt(0).toUpperCase()}${level.slice(1)}`,
+        name: level === 'xhigh' ? 'XHigh' : `${level.charAt(0).toUpperCase()}${level.slice(1)}`,
       })),
       ...defaultLevel === undefined ? {} : { defaultEffort: ReasoningEffortId(defaultLevel) },
     },
@@ -293,7 +294,10 @@ export class PiAiAdapter extends LlmAdapter {
   private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
     const profile = this.profileOf(snapshot, provider)
     const resolvedModel = this.modelOf(snapshot, provider, model)
-    const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
+    const defaultLevel = describableReasoningLevel(
+      resolvedModel,
+      profile.reasoning ?? verifiedReasoningDefault(model),
+    )
     // Only a cap the deployment configured is a request default; the
     // catalog's `maxTokens` sizes the model and stops there.
     const configuredMaxTokens = profile.configuredMaxTokens.get(model)
@@ -336,7 +340,7 @@ export class PiAiAdapter extends LlmAdapter {
     const model = this.modelOf(snapshot, options.provider, options.model)
     const reasoning = resolveReasoningLevel(
       model,
-      options.reasoningEffort ?? profile.reasoning,
+      options.reasoningEffort ?? profile.reasoning ?? verifiedReasoningDefault(options.model),
     )
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 
