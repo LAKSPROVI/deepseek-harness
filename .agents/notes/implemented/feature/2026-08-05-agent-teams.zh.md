@@ -16,15 +16,15 @@ subagent seam 已提供 fresh／fork provider、持久 child Session、FIFO foll
 
 每个普通运行时 Root 都是一个隐式 Team 的 Lead，Team id 等于该 Root 的 `SessionId`。Team 没有 creation event：Lead pseudo-row 由身份直接存在，持久状态从第一条 member、message 或 task event 开始。roster 是扁平结构，最多包含配置数量、不可变且采用小写 kebab-case 的名字。每个 teammate 都是使用预留 Session id 的 continuable 直接 child；只有 Lead 可以创建或 interrupt teammate。roster 外由 provider 管理的普通 subagent 不是 Team member；普通 fork 是新的 Root，继承的 Team 记录会因 ancestor `TeamId` 被排除。
 
-实现拆分为 `@deepseek-ai/dsh-experimental-agent-team` 与 `@deepseek-ai/dsh-experimental-tool-agent-team`：前者负责 `ctx.agentTeams` 和持久语义，后者负责 scoped schema 与模型指引。每个 Team 工具都声明完整的结果 schema，并把该值渲染为紧凑 JSON，因此编译器会检查每个 `execute` 是否符合对模型的承诺，也没有结果把 token 花在缩进上。部署显式挂载两个插件，并可禁用具有相同模型可见名称的旧 continuable control。显式 delegation 策略只允许在用户要求 Agent Teams 或 teammate 时创建 Team。 两个包都是 `packages/experimental/` 的私有成员；[实验性包决策](../architecture/2026-08-18-experimental-agent-teams-packages.zh.md)负责发布排除、依赖隔离与 promotion。
+实现拆分为 `packages/subagent/agent-team`（`@deepseek-ai/dsh-agent-team`）与 `packages/subagent/tool-agent-team`（`@deepseek-ai/dsh-tool-agent-team`）：前者负责 `ctx.agentTeams` 和持久语义，后者负责 scoped schema 与模型指引。每个 Team 工具都声明完整的结果 schema，并把该值渲染为紧凑 JSON，因此编译器会检查每个 `execute` 是否符合对模型的承诺，也没有结果把 token 花在缩进上。base composition 挂载 Host service，显式启用的 `agent-teams` preset 挂载模型可见工具，并可禁用具有相同名称的旧 continuable control。显式 delegation 策略只允许在用户要求 Agent Teams 或 teammate 时创建 Team。[稳定 route、debate 与 Web control 决策](2026-08-30-stable-agent-teams-debate.zh.md)负责 package promotion、异构 route、debate state、projection 与 human control。
 
 Lead 必须等待所需工作后才能给出最终答案。进程 teardown 仍是最终生命周期 owner，并会 drain continuation Activation；Team task owner 是持久状态，不会因 idle、interrupt 或进程退出自动释放。
 
 ## Provisioning and recovery
 
-创建操作先在 Lead Session 中追加并 flush `team/member` provisioning 快照，再通过选定 fresh 或 fork provider 启动预留的 continuable child。初始 inbox 获准前的失败会追加 failed 快照；成功会先 flush child 中已接受的 inbox 条目，再追加 active。恢复会在初始消息仍处于 pending 或已进入用户消息历史时识别它。名字由第一条 provisioning 记录永久保留，包括失败后也不能复用。dispose 会关闭准入，中止并等待已获准的创建与 mailbox dispatch 事务，再停止 roster 记录的所有 live child；failed child 在 Activation 退出前仍由 cleanup 拥有，cleanup 拒绝会让 dispose 失败。
+创建操作先在 Lead Session 中追加并 flush `team/member` provisioning 快照，再通过选定 fresh 或 fork provider 启动预留的 continuable child。该快照将 continuable provider 与可选 `llmProvider`、`model`、`persona` 选择分开记录；创建操作通过 child `agentOptions` 转发 LLM route，并通过 child composition 转发 persona。初始 inbox 获准前的失败会追加 failed 快照；成功会先 flush child 中已接受的 inbox 条目，再追加 active。恢复会在初始消息仍处于 pending 或已进入用户消息历史时识别它。名字由第一条 provisioning 记录永久保留，包括失败后也不能复用。dispose 会关闭准入，中止并等待已获准的创建与 mailbox dispatch 事务，再停止 roster 记录的所有 live child；failed child 在 Activation 退出前仍由 cleanup 拥有，cleanup 拒绝会让 dispose 失败。
 
-Root 恢复时会把未终结 provisioning 记录与独立持久 child Session 对账。直接 parent 与 continuable descriptor 匹配，并且已经记录初始用户消息，才能证明准入成功并转为 active；缺失、损坏、provider／lineage 不匹配或缺少已准入消息都会转为 failed。creator 会在同一 Lead 日志 serializer 内重读终态；如果 recovery 在创建成功时先标记 failed，creator 会 drain child 并报告 provisioning conflict，而不是遗留孤儿。这样既无需重建从未保存在 Team 日志中的初始 prompt，也能约束插件 reload 竞争。
+Root 恢复时会把未终结 provisioning 记录与独立持久 child Session 对账。直接 parent 与 continuable descriptor（包括选定的 LLM provider、model 与 persona）匹配，并且已经记录初始用户消息，才能证明准入成功并转为 active；缺失、损坏、provider、route、persona 或 lineage 不匹配，或缺少已准入消息都会转为 failed。同一 descriptor 会在 cold resume 时重建显式 per-member 选择，而不是继承 Lead 的当前 route。creator 会在同一 Lead 日志 serializer 内重读终态；如果 recovery 在创建成功时先标记 failed，creator 会 drain child 并报告 provisioning conflict，而不是遗留孤儿。这样既无需重建从未保存在 Team 日志中的初始 prompt，也能约束插件 reload 竞争。
 
 fresh child 不继承对话。fork child 只捕获一次 Lead 已完成 turn 前缀，并保留为自己的持久 seed。当前 delegation turn 保持排除，与既有 fork provider 契约一致。
 
@@ -37,6 +37,10 @@ Peer 通讯使用 Lead 日志 mailbox。投递前先追加并 flush `team/messag
 共享 task 是带 Team-local id 与单调 revision 的完整快照。每次变更都携带 `expectedRevision`。任意 member 可以创建、读取或 claim ready 且无 owner 的任务；Owner 或 Lead 可以编辑和转换；只有 Lead 可以分配给另一个 member。数字 task id 保持在安全整数分配范围内；该范围耗尽时会失败，不会复用 id。依赖必须指向未删除任务，并形成完整 DAG。删除任务保留为 tombstone。`writeScopes` 是规范化路径前缀，只产生重叠诊断，绝不会阻止 claim 或授予写权限。
 
 `wait_agent` 等待调用注册后发生的下一条 roster、mailbox、task 或实时 status 边，避免模型轮询。它不会回放更早的边，因此调用方需要在唤醒或超时后重新读取权威状态。仅限 Lead 的 interrupt 使用 inbox preservation 取消当前 turn，不改变 mailbox 或 task owner。
+
+## Structured debate and projection
+
+Team 可以把一个当前 structured debate 保存为完整 `team/debate` snapshot，并携带稳定 id 与 compare-and-set revision。Lead 控制 `positions`、`critique`、`rebuttal`、`verification`、`synthesis` 阶段间的 pause、resume、推进与完成；pause 是持久协调状态，与保留 inbox 的 interrupt 保持不同。`agentTeam` Session projection 折叠 member、task 与 debate state，同时排除 mailbox content；conversation UI 读取该 projection，并通过生成的 `agentTeams` Remote 调用 human control。[稳定 route、debate 与 Web control 决策](2026-08-30-stable-agent-teams-debate.zh.md)负责这些扩展决策。
 
 ## Shared checkout boundary
 
@@ -62,7 +66,7 @@ Worktree isolation 不是 harness runtime 行为。deployment 或 prompt 可以�
 
 ## Testing
 
-Package test 以逐文件 100% coverage 覆盖身份、名字与权限检查、provider 选择、预留 id 持久化冲突、child-before-Lead flush 顺序、持久 provisioning 失败与 pending-inbox JSONL／SQLite 对账、target-local 并发顺序、pending／history 去重、mailbox 限额、flush 后 notification、取消在途创建与 dispatch 的有界 dispose、failed member cleanup、task CAS 与 DAG 校验、write-scope warning、wait cancel／timeout、保留 inbox 的 interrupt、普通 fork 隔离、旧 control shadowing、声明 schema 的紧凑结果渲染与 scoped registration HMR。一条 keyless headless Loader 快照会组合真实 Team 插件，并记录 teammate 创建、peer mail、依赖任务、等待与 Lead 汇总。
+Package test 以逐文件 100% coverage 覆盖身份、名字与权限检查、Lead 加九名 teammate 上限、continuable provider 选择、显式与继承的 LLM provider／model／persona routing、descriptor-backed cold resume、预留 id 持久化冲突、child-before-Lead flush 顺序、持久 provisioning 失败与 pending-inbox JSONL／SQLite 对账、target-local 并发顺序、pending／history 去重、mailbox 限额、flush 后 notification、取消在途创建与 dispatch 的有界 dispose、failed member cleanup、task CAS 与 DAG 校验、debate phase 顺序、debate CAS 与 pause-versus-interrupt 行为、projection replay 与 mailbox exclusion、write-scope warning、wait cancel／timeout、普通 fork 隔离、旧 control shadowing、声明 schema 的紧凑结果渲染、生成 Remote mounting 与 scoped registration HMR。一条 keyless headless Loader 快照会组合真实 Team 插件，并记录异构 teammate 创建、peer mail、依赖任务、structured debate、等待与 Lead 汇总；Host API 与 Web test 固定通用 projection delivery 与 human control。
 
 ## Consequences
 

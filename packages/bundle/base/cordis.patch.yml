@@ -292,6 +292,17 @@
     - id: subagent
       name: '@deepseek-ai/dsh-subagent'
 
+    # Process-wide Team domain: Remote endpoints, durable projection, roster,
+    # mailbox, task board, and continuable-child ownership. Presets choose
+    # whether their agents receive the model-facing Team tools.
+    - id: agent-team
+      name: '@deepseek-ai/dsh-agent-team'
+      config:
+        maxMembers: 9
+        maxDebateRounds: 8
+        freshProvider: spawn
+        forkProvider: fork
+
     - id: subagent-spawn-in-process
       name: '@deepseek-ai/dsh-subagent-spawn-in-process'
       config:

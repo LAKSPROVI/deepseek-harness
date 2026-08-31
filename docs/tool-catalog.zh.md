@@ -41,7 +41,7 @@
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`、`list_agents`、`send_message` | `ctx.tools`、`ctx.subagents`、`ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`、`tool/result`、`child session events through ctx.subagents` | - | 这些是控制可继续后台 subagent 的全局命名工具：绑定提供方的 `tool-subagent` 实例注册不同的委派工具；本包注册一次 `send_message` 和 `interrupt_agent`，另由 `list_agents` 通过单独加载的 `/list-agents` 插件提供，其目录行使用 sessionProjections 和实时 Agent 注册表。 |
 | `@deepseek-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`、`ctx.systemPrompt`、`a live continuable in-process child Agent` | `tool/call`、`tool/result`、`a user-role message in the direct parent session` | - | 按可继续的进程内子级注册，而非全局注册，因此该 schema 仅在这种子级内部可见，并且不受其全局 `toolFilter` 影响。同一份贡献还会安装子级作用域的 `tool:report` 系统提示词 section，本目录不渲染该 section。面向父级的 `send_message` 工具单独安装。 |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
-| `@deepseek-ai/dsh-experimental-tool-agent-team` | `followup_task`、`interrupt_agent`、`list_agents`、`send_message`、`spawn_teammate`、`team_task_create`、`team_task_get`、`team_task_list`、`team_task_update`、`wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | 这 10 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
+| `@deepseek-ai/dsh-tool-agent-team` | `followup_task`、`interrupt_agent`、`list_agents`、`send_message`、`spawn_teammate`、`team_debate_get`、`team_debate_start`、`team_debate_update`、`team_task_create`、`team_task_get`、`team_task_list`、`team_task_update`、`wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | 所有 Team 工具都限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；`agent-teams` preset 会启用它，并禁用旧 continuable child 的同名控制工具。 |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
@@ -1714,9 +1714,9 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。
 
-<a id="deepseek-aidsh-experimental-tool-agent-team"></a>
+<a id="deepseek-aidsh-tool-agent-team"></a>
 
-## `@deepseek-ai/dsh-experimental-tool-agent-team`
+## `@deepseek-ai/dsh-tool-agent-team`
 
 ### `followup_task`
 
@@ -1742,7 +1742,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `interrupt_agent`
 
@@ -1763,7 +1763,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `list_agents`
 
@@ -1776,7 +1776,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `send_message`
 
@@ -1802,7 +1802,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `spawn_teammate`
 
@@ -1831,6 +1831,18 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
         "fresh",
         "fork"
       ]
+    },
+    "llm_provider": {
+      "type": "string",
+      "description": "Optional LLM adapter route. Omit to inherit the Lead provider."
+    },
+    "model": {
+      "type": "string",
+      "description": "Optional provider-owned model id. Omit to inherit the Lead model."
+    },
+    "persona": {
+      "type": "string",
+      "description": "Optional teammate-only system persona describing its role and constraints."
     }
   },
   "required": [
@@ -1841,7 +1853,94 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_debate_get`
+
+读取当前结构化 debate，包括其 CAS revision、round、phase、status 与 transition history。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_debate_start`
+
+启动一个结构化 Team debate。仅 Team Lead 可用。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "topic": {
+      "type": "string",
+      "description": "Question or proposition the Team must debate."
+    },
+    "participants": {
+      "type": "array",
+      "description": "Two through ten unique Team member names, including lead when it participates.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "max_rounds": {
+      "type": "integer",
+      "description": "Maximum complete debate rounds. Defaults to 2."
+    }
+  },
+  "required": [
+    "topic",
+    "participants"
+  ]
+}
+```
+
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
+
+### `team_debate_update`
+
+对结构化 debate transition 执行 compare-and-set。仅 Team Lead 可用。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "debate_id": {
+      "type": "string",
+      "description": "Current debate id."
+    },
+    "expected_revision": {
+      "type": "integer",
+      "description": "Current debate revision."
+    },
+    "action": {
+      "type": "string",
+      "description": "Protocol transition. Pausing does not interrupt active model turns.",
+      "enum": [
+        "pause",
+        "resume",
+        "advance",
+        "complete"
+      ]
+    },
+    "note": {
+      "type": "string",
+      "description": "Short audit note about completed work or the human instruction."
+    }
+  },
+  "required": [
+    "debate_id",
+    "expected_revision",
+    "action"
+  ]
+}
+```
+
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_create`
 
@@ -1881,7 +1980,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_get`
 
@@ -1902,7 +2001,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_list`
 
@@ -1941,7 +2040,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `team_task_update`
 
@@ -2008,7 +2107,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
 ### `wait_agent`
 
@@ -2026,9 +2125,9 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+来源：[`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/tool-agent-team/src/index.ts)
 
-这 10 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。
+所有 Team 工具都限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；`agent-teams` preset 会启用它，并禁用旧 continuable child 的同名控制工具。
 
 
 <a id="deepseek-aidsh-tool-todo"></a>

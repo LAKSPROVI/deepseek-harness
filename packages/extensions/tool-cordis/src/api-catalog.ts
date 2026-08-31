@@ -316,10 +316,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'its root, Team identity, role, and model-facing name.',
       },
       {
-        signature: 'listMembers(agent: Agent): TeamMemberView[]',
+        signature: '@Remote(\'members\') listMembers(agent: Agent): TeamMemberView[]',
         description: 'List the runtime-enriched roster visible to one Team member.',
         parameters: [{ name: 'agent', description: 'exact live Team member.' }],
         returns: 'Lead and teammate rows in creation order.',
+      },
+      {
+        signature: '@Remote(\'spawn\') async remoteSpawn( agent: Agent, request: SpawnTeamMemberRemoteRequest, signal: AbortSignal, ): Promise<SpawnTeammateResult>',
+        description: 'Create one teammate from browser-safe text fields.',
+        parameters: [{ name: 'agent', description: 'exact live Lead Agent resolved by the Remote gateway.' }, { name: 'request', description: 'identity, initial prompt, context, and optional LLM route.' }, { name: 'signal', description: 'caller cancellation before the durable creation edge.' }],
+        returns: 'the active roster row.',
       },
       {
         signature: 'async spawnTeammate(caller: Agent, request: SpawnTeammateRequest): Promise<SpawnTeammateResult>',
@@ -332,6 +338,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Queue one durable peer message, then attempt immediate delivery.',
         parameters: [{ name: 'caller', description: 'exact live sending Team member.' }, { name: 'request', description: 'target name, content, scheduling mode, and pre-queue cancellation.' }],
         returns: 'durable message identity and immediate-delivery observation.',
+      },
+      {
+        signature: '@Remote(\'guide\') async remoteGuide( agent: Agent, request: GuideTeamMemberRemoteRequest, signal: AbortSignal, ): Promise<SendTeamMessageResult>',
+        description: 'Send browser-authored guidance through the durable Team mailbox.',
+        parameters: [{ name: 'agent', description: 'exact live Team member resolved by the Remote gateway.' }, { name: 'request', description: 'target, plain text, and quiet-or-wakeup delivery.' }, { name: 'signal', description: 'caller cancellation before the durable queue edge.' }],
+        returns: 'durable message identity and immediate delivery observation.',
       },
       {
         signature: 'async createTask(caller: Agent, request: CreateTeamTaskRequest): Promise<TeamTaskView>',
@@ -358,15 +370,33 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the committed next task revision.',
       },
       {
+        signature: 'getDebate(caller: Agent): TeamDebateSnapshot | undefined',
+        description: 'Return the current structured debate visible to one Team member.',
+        parameters: [{ name: 'caller', description: 'exact live Team member reading the debate.' }],
+        returns: 'the current debate, or undefined before one starts.',
+      },
+      {
+        signature: '@Remote(\'debateStart\') async startDebate(agent: Agent, request: StartTeamDebateRequest): Promise<TeamDebateSnapshot>',
+        description: 'Create one active structured debate.',
+        parameters: [{ name: 'agent', description: 'exact live Lead Agent authorizing creation.' }, { name: 'request', description: 'topic, participants, and round limit.' }],
+        returns: 'the committed initial debate snapshot.',
+      },
+      {
+        signature: '@Remote(\'debateUpdate\') async updateDebate(agent: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateSnapshot>',
+        description: 'Apply one Lead-authorized compare-and-set debate transition.',
+        parameters: [{ name: 'agent', description: 'exact live Lead Agent authorizing the transition.' }, { name: 'request', description: 'debate identity, expected revision, action, and optional note.' }],
+        returns: 'the committed next debate snapshot.',
+      },
+      {
         signature: 'async waitForChange(caller: Agent, timeoutMs: number, signal: AbortSignal): Promise<TeamWaitResult>',
         description: 'Wait for the next Team-domain or member-status change.',
         parameters: [{ name: 'caller', description: 'exact live Team member waiting for activity.' }, { name: 'timeoutMs', description: 'bounded wait duration from ten seconds through one hour.' }, { name: 'signal', description: 'caller cancellation for the wait only.' }],
         returns: 'one observed change or a timeout result.',
       },
       {
-        signature: 'interrupt(caller: Agent, targetName: string): { previousStatus: \'running\' | \'idle\' | \'inactive\' }',
+        signature: '@Remote(\'interrupt\') interrupt(agent: Agent, targetName: string): { previousStatus: \'running\' | \'idle\' | \'inactive\' }',
         description: 'Interrupt one live teammate turn without clearing its pending inbox.',
-        parameters: [{ name: 'caller', description: 'exact live Lead Agent.' }, { name: 'targetName', description: 'durable teammate name.' }],
+        parameters: [{ name: 'agent', description: 'exact live Lead Agent.' }, { name: 'targetName', description: 'durable teammate name.' }],
         returns: 'the target status sampled before cancellation.',
       },
       {
@@ -3566,6 +3596,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
   },
   {
+    name: 'GuideTeamMemberRemoteRequest',
+    declaration: 'export interface GuideTeamMemberRemoteRequest {\n    readonly target: string;\n    readonly content: string;\n    readonly delivery: \'quiet\' | \'wakeup\';\n}',
+  },
+  {
     name: 'ImageAttachmentLimits',
     declaration: 'export interface ImageAttachmentLimits {\n    maxImageBytes: number;\n    maxImagesPerMessage: number;\n    maxMessageImageBytes: number;\n    maxImagePixels: number;\n    maxImageDimension: number;\n    mediaTypes: readonly ImageMediaType[];\n}',
   },
@@ -4551,11 +4585,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SpawnTeammateRequest',
-    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly llmProvider?: string;\n    readonly model?: string;\n    readonly persona?: string;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SpawnTeammateResult',
     declaration: 'export interface SpawnTeammateResult {\n    readonly member: TeamMemberView;\n}',
+  },
+  {
+    name: 'SpawnTeamMemberRemoteRequest',
+    declaration: 'export interface SpawnTeamMemberRemoteRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: string;\n    readonly context: \'fresh\' | \'fork\';\n    readonly llmProvider?: string;\n    readonly model?: string;\n    readonly persona?: string;\n}',
   },
   {
     name: 'SpillLocator',
@@ -4572,6 +4610,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SpillSource',
     declaration: 'export interface SpillSource {\n    toolName: string;\n    callId: CallId;\n    label: string;\n}',
+  },
+  {
+    name: 'StartTeamDebateRequest',
+    declaration: 'export interface StartTeamDebateRequest {\n    readonly topic: string;\n    readonly participants: readonly string[];\n    readonly maxRounds?: number;\n}',
   },
   {
     name: 'StorageBackend',
@@ -4746,6 +4788,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
   },
   {
+    name: 'TeamDebateAction',
+    declaration: 'export type TeamDebateAction = \'pause\' | \'resume\' | \'advance\' | \'complete\';',
+  },
+  {
+    name: 'TeamDebateId',
+    declaration: 'export type TeamDebateId = Branded<\'TeamDebateId\'>;',
+  },
+  {
+    name: 'TeamDebatePhase',
+    declaration: 'export type TeamDebatePhase = \'positions\' | \'critique\' | \'rebuttal\' | \'verification\' | \'synthesis\';',
+  },
+  {
+    name: 'TeamDebateSnapshot',
+    declaration: 'export interface TeamDebateSnapshot {\n    readonly id: TeamDebateId;\n    readonly revision: number;\n    readonly topic: string;\n    readonly status: TeamDebateStatus;\n    readonly phase: TeamDebatePhase;\n    readonly round: number;\n    readonly maxRounds: number;\n    readonly participants: string[];\n    readonly history: TeamDebateTransition[];\n}',
+  },
+  {
+    name: 'TeamDebateStatus',
+    declaration: 'export type TeamDebateStatus = \'active\' | \'paused\' | \'completed\';',
+  },
+  {
+    name: 'TeamDebateTransition',
+    declaration: 'export interface TeamDebateTransition {\n    readonly revision: number;\n    readonly round: number;\n    readonly phase: TeamDebatePhase;\n    readonly status: TeamDebateStatus;\n    readonly actor: string;\n    readonly note?: string;\n}',
+  },
+  {
     name: 'TeamId',
     declaration: 'export type TeamId = Branded<\'TeamId\'>;',
   },
@@ -4755,7 +4821,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TeamMemberView',
-    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly model?: string;\n    readonly diagnostics: string[];\n}',
+    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly llmProvider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly model?: string;\n    readonly persona?: string;\n    readonly diagnostics: string[];\n}',
   },
   {
     name: 'TeamMessageId',
@@ -5076,6 +5142,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TypertTypeModel',
     declaration: 'export interface TypertTypeModel {\n    readonly name: string;\n    readonly declaration: string;\n}',
+  },
+  {
+    name: 'UpdateTeamDebateRequest',
+    declaration: 'export interface UpdateTeamDebateRequest {\n    readonly debateId: TeamDebateId;\n    readonly expectedRevision: number;\n    readonly action: TeamDebateAction;\n    readonly note?: string;\n}',
   },
   {
     name: 'UpdateTeamTaskRequest',

@@ -19,6 +19,7 @@ describe('Client Remote mount order', () => {
     const dispose = await apply(ctx)
 
     expect(mounted).toEqual([
+      '@deepseek-ai/dsh-agent-team',
       '@deepseek-ai/dsh-commands',
       '@deepseek-ai/dsh-goal',
       '@deepseek-ai/dsh-cordis-host-runner',

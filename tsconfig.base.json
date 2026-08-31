@@ -102,8 +102,9 @@
       "@deepseek-ai/dsh-agent/invariant": ["./packages/core/agent/src/invariant.ts"],
       "@deepseek-ai/dsh-scope/invariant": ["./packages/core/scope/src/invariant.ts"],
       "@deepseek-ai/dsh-agent-loop/invariant": ["./packages/core/agent-loop/src/invariant.ts"],
-      "@deepseek-ai/dsh-experimental-agent-team/invariant": ["./packages/experimental/agent-team/src/invariant.ts"],
-      "@deepseek-ai/dsh-experimental-tool-agent-team/invariant": ["./packages/experimental/tool-agent-team/src/invariant.ts"],
+      "@deepseek-ai/dsh-agent-team/invariant": ["./packages/subagent/agent-team/src/invariant.ts"],
+      "@deepseek-ai/dsh-agent-team/client": ["./packages/subagent/agent-team/src/client.ts"],
+      "@deepseek-ai/dsh-tool-agent-team/invariant": ["./packages/subagent/tool-agent-team/src/invariant.ts"],
       "@deepseek-ai/dsh-*/invariant": [
         "./packages/core/*/src/invariant.ts",
         "./packages/prompt/*/src/invariant.ts",
@@ -238,8 +239,8 @@
       "@deepseek-ai/dsh-sdk-client": ["./packages/sdk/client/src"],
       "@deepseek-ai/dsh-sdk-protocol": ["./packages/sdk/protocol/src"],
       "@deepseek-ai/dsh-sdk-jsonrpc-server": ["./packages/sdk/server/src"],
-      "@deepseek-ai/dsh-experimental-agent-team": ["./packages/experimental/agent-team/src"],
-      "@deepseek-ai/dsh-experimental-tool-agent-team": ["./packages/experimental/tool-agent-team/src"],
+      "@deepseek-ai/dsh-agent-team": ["./packages/subagent/agent-team/src"],
+      "@deepseek-ai/dsh-tool-agent-team": ["./packages/subagent/tool-agent-team/src"],
       "@deepseek-ai/dsh-*": [
         "./packages/core/*/src",
         "./packages/prompt/*/src",

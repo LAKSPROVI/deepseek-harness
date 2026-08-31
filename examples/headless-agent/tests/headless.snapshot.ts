@@ -669,7 +669,7 @@ describe('headless stream-json snapshots', () => {
     expect(normalized).toBe(await readFile(advancedStreamExpected, 'utf8'))
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
-  it('runs a keyless Agent Team with peer mail, dependent tasks, waiting, and Lead aggregation', async () => {
+  it('runs a keyless heterogeneous Agent Team with structured debate and durable coordination', async () => {
     let projection: unknown
     const result = await runLoaderSmoke({
       label: 'Agent Teams headless snapshot',
@@ -682,7 +682,7 @@ describe('headless stream-json snapshots', () => {
         '请明确使用 Agent Teams，把调研和实现拆给两个 teammate，等待完成后汇总。',
       ],
       tsconfigPath,
-      processTimeoutMs: 60_000,
+      processTimeoutMs: 120_000,
       env: {
         DSH_SNAPSHOT: 'team',
         NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
@@ -697,10 +697,27 @@ describe('headless stream-json snapshots', () => {
         const tasks = rows.filter(row => row.type === 'team/task')
           .map(row => ((row.data as JsonObject).task as JsonObject))
         const latestTasks = Object.values(Object.fromEntries(tasks.map(task => [String(task.subject), task])))
+        const activeMembers = members.filter(member => member.phase === 'active')
+        const debates = rows.filter(row => row.type === 'team/debate')
+          .map(row => ((row.data as JsonObject).debate as JsonObject))
+        const currentDebate = debates.at(-1)
         projection = {
           sessions: logs.length,
           memberEdges: members.length,
-          activeMembers: members.filter(member => member.phase === 'active').map(member => member.name).sort(),
+          activeMembers: activeMembers.map(member => member.name).sort(),
+          memberRoutes: activeMembers.map(member => ({
+            name: member.name,
+            llmProvider: member.llmProvider,
+            model: member.model,
+            persona: member.persona,
+          })).sort((left, right) => String(left.name).localeCompare(String(right.name))),
+          debate: currentDebate === undefined ? null : {
+            revisions: debates.length,
+            revision: currentDebate.revision,
+            phase: currentDebate.phase,
+            status: currentDebate.status,
+            historyLength: Array.isArray(currentDebate.history) ? currentDebate.history.length : -1,
+          },
           tasks: latestTasks.map(task => ({
             subject: task.subject,
             revision: task.revision,
@@ -718,7 +735,7 @@ describe('headless stream-json snapshots', () => {
     expect(result.stderr).toBe('')
     expect(parseJsonl(result.stdout).at(-1)).toMatchObject({
       type: 'result',
-      output: 'TEAM_WORKFLOW_OK: both teammates and dependent tasks completed.',
+      output: 'TEAM_WORKFLOW_OK: heterogeneous teammates, dependent tasks, and structured debate completed.',
     })
     expect(projection).toMatchInlineSnapshot(`
       {
@@ -727,8 +744,29 @@ describe('headless stream-json snapshots', () => {
           "researcher",
         ],
         "checkedRoster": true,
+        "debate": {
+          "historyLength": 6,
+          "phase": "synthesis",
+          "revision": 6,
+          "revisions": 6,
+          "status": "completed",
+        },
         "deliveredMessages": 2,
         "memberEdges": 4,
+        "memberRoutes": [
+          {
+            "llmProvider": "team-primary",
+            "model": "fixture-implementer",
+            "name": "implementer",
+            "persona": "You implement the verified proposal.",
+          },
+          {
+            "llmProvider": "team-review",
+            "model": "fixture-researcher",
+            "name": "researcher",
+            "persona": "You challenge assumptions and verify evidence.",
+          },
+        ],
         "queuedMessages": 2,
         "sessions": 3,
         "tasks": [
@@ -746,7 +784,7 @@ describe('headless stream-json snapshots', () => {
         "waited": true,
       }
     `)
-  }, 75_000)
+  }, 135_000)
 
   it('replays persisted goal tools through the one-shot app', async () => {
     const prompt = await scenarioPrompt(goalScenarioDir, 'goal-tools')

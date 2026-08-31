@@ -3,6 +3,8 @@ import type {
   ClientContext, SessionId, SubagentAddress,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import { AgentTeamView, type AgentTeamViewInjected } from './AgentTeamView.tsx'
 import { SubagentHeaderLineage, type SubagentCatalogInjected } from './SubagentHeaderLineage.tsx'
 import {
   SubagentReadOnlyComposer, type SubagentReadOnlyMatch,
@@ -17,6 +19,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
+export { AgentTeamView } from './AgentTeamView.tsx'
+export type { AgentTeamActions, AgentTeamViewInjected, AgentTeamViewProps } from './AgentTeamView.tsx'
 export type {
   SubagentCatalogInjected, SubagentHeaderLineageProps,
 } from './SubagentHeaderLineage.tsx'
@@ -24,8 +28,8 @@ export type {
   SubagentReadOnlyComposerProps, SubagentReadOnlyMatch,
 } from './SubagentReadOnlyComposer.tsx'
 
-/** Required services for conversation slots and session navigation. */
-export const inject = ['sessions', 'slots', 'locale']
+/** Required services for conversation slots, Team mutations, and session navigation. */
+export const inject = ['sessions', 'slots', 'remote.agentTeams', 'locale']
 
 /** Claim the composer for one-shot history or an unavailable continuation owner. */
 function selectReadOnlySubagent(owner: ComposerChainProps): SubagentReadOnlyMatch | null {
@@ -46,6 +50,23 @@ function selectReadOnlySubagent(owner: ComposerChainProps): SubagentReadOnlyMatc
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-subagent: dictionaries')
   const sessions = ctx.sessions
+  const t = ctx.locale.bind(NS)
+  const teamActions = (sessionId: SessionId): AgentTeamViewInjected => ({
+    members: async () => await ctx.remote.agentTeams.members(sessionId),
+    spawn: async (request, signal) => await ctx.remote.agentTeams.spawn(sessionId, request, signal),
+    guide: async (request, signal) => await ctx.remote.agentTeams.guide(sessionId, request, signal),
+    interrupt: async targetName => await ctx.remote.agentTeams.interrupt(sessionId, targetName),
+    debateStart: async request => await ctx.remote.agentTeams.debateStart(sessionId, request),
+    debateUpdate: async request => await ctx.remote.agentTeams.debateUpdate(sessionId, request),
+  })
+  ctx.slots.inject('conversation.view', () => ctx.slots.register({
+    name: 'conversation.view',
+    id: 'agent-teams',
+    order: 20,
+    locale: NS,
+    label: () => t('view.agentTeams'),
+    inject: teamActions,
+  }, AgentTeamView))
   const catalogActions = (_parentSessionId: SessionId): SubagentCatalogInjected => ({
     openChild(address: SubagentAddress) {
       sessions.openSubagent(address)

@@ -35,6 +35,14 @@ function latestToolText(messages) {
     : []).join('\n')
 }
 
+function latestToolJson(messages) {
+  try {
+    return JSON.parse(latestToolText(messages))
+  } catch {
+    return undefined
+  }
+}
+
 function toolChunks(specs) {
   const chunks = []
   for (const [index, spec] of specs.entries()) {
@@ -137,6 +145,9 @@ function lead(messages) {
         description: 'Own deterministic implementation.',
         prompt: 'IMPLEMENTER_MARK: wait for research, complete dependent task 2, report to lead.',
         context: 'fresh',
+        llm_provider: 'team-primary',
+        model: 'fixture-implementer',
+        persona: 'You implement the verified proposal.',
       },
     }])
   }
@@ -148,18 +159,37 @@ function lead(messages) {
         description: 'Own deterministic research.',
         prompt: 'RESEARCHER_MARK: complete research task 1, message implementer, then finish.',
         context: 'fresh',
+        llm_provider: 'team-review',
+        model: 'fixture-researcher',
+        persona: 'You challenge assumptions and verify evidence.',
       },
     }])
   }
   const result = latestToolText(messages)
   if (last.includes('team_task_list')) {
     const completed = result.match(/"status":"completed"/gu)?.length ?? 0
-    if (completed >= 2) return toolChunks([{ name: 'list_agents', args: {} }])
+    if (completed >= 2 && !names.includes('team_debate_start')) {
+      return toolChunks([{ name: 'team_debate_start', args: {
+        topic: 'Which implementation is supported by the verified evidence?',
+        participants: ['lead', 'implementer', 'researcher'],
+        max_rounds: 1,
+      } }])
+    }
     return toolChunks([{ name: 'team_task_list', args: {} }])
+  }
+  if (last.includes('team_debate_start') || last.includes('team_debate_update')) {
+    const debate = latestToolJson(messages)
+    if (debate?.status === 'completed') return toolChunks([{ name: 'list_agents', args: {} }])
+    return toolChunks([{ name: 'team_debate_update', args: {
+      debate_id: debate.id,
+      expected_revision: debate.revision,
+      action: debate.phase === 'synthesis' ? 'complete' : 'advance',
+      note: `Completed ${debate.phase}.`,
+    } }])
   }
   if (last.includes('list_agents')) {
     const inactive = result.match(/"status":"inactive"/gu)?.length ?? 0
-    if (inactive >= 2) return textChunks('TEAM_WORKFLOW_OK: both teammates and dependent tasks completed.')
+    if (inactive >= 2) return textChunks('TEAM_WORKFLOW_OK: heterogeneous teammates, dependent tasks, and structured debate completed.')
     return toolChunks([{ name: 'list_agents', args: {} }])
   }
   if (last.includes('wait_agent')) return toolChunks([{ name: 'team_task_list', args: {} }])
@@ -188,7 +218,7 @@ export const name = 'team-fixture-llm'
 /** LLM registry dependency. */
 export const inject = ['llm']
 
-/** Register the keyless adapter on the shipped default provider route. */
+/** Register one keyless adapter under the Lead and two teammate routes. */
 export function apply(ctx) {
-  ctx.llm.registerAdapter(['deepseek-official'], new TeamFixtureAdapter())
+  ctx.llm.registerAdapter(['deepseek-official', 'team-primary', 'team-review'], new TeamFixtureAdapter())
 }

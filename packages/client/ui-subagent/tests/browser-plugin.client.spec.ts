@@ -59,6 +59,7 @@ async function provideSlotFaces(ctx: Context): Promise<void> {
     children: {
       'conversation.session.header.lineage': { kind: 'single', scope: 'session' },
       'conversation.composer': { kind: 'chain', scope: 'session' },
+      'conversation.view': { kind: 'tab', scope: 'session' },
     },
   } as never, () => null)
 }
@@ -69,7 +70,17 @@ async function fullBench(sessions: SessionSummary[]) {
   const face = sessionsWith(sessions)
   ctx.provide('sessions', face)
   ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
-  ctx.provide('remote', { $on: () => () => {} } as never)
+  const success = (value: unknown) => Promise.resolve({ ok: true as const, value })
+  const agentTeams = {
+    members: () => success([]),
+    spawn: () => success({}),
+    guide: () => success({}),
+    interrupt: () => success({ previousStatus: 'idle' as const }),
+    debateStart: () => success({}),
+    debateUpdate: () => success({}),
+  }
+  ctx.provide('remote', { $on: () => () => {}, agentTeams } as never)
+  ctx.provide('remote.agentTeams', agentTeams as never)
   ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   await provideSlotFaces(ctx)
   await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
@@ -89,7 +100,7 @@ const FAMILY: SessionSummary[] = [
 
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'slots', 'locale'])
+    expect(inject).toEqual(['sessions', 'slots', 'remote.agentTeams', 'locale'])
   })
 
   it('registers catalog actions and selects read-only subagent composers from session facts', async () => {
