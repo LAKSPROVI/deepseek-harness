@@ -1189,6 +1189,41 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     return selection
   }
 
+  /**
+   * Replace only an effort invalidated by the current exact-model metadata.
+   * An unresolved model keeps its recorded identity and effort so the existing
+   * unavailable-route path, rather than an invented fallback, owns recovery.
+   */
+  async function currentSelectionFor(agent: Agent): Promise<{
+    current: ModelSelection
+    currentModel?: ModelCatalogModel
+  }> {
+    const selection = selectionFor(agent)
+    const current = selection.current
+    const currentModel = await currentModelInfo(ctx, current)
+    const requested = current.reasoningEffort
+    if (requested === undefined || currentModel === undefined
+      || currentModel.reasoning?.efforts.some(effort => effort.id === requested)) {
+      return { current, ...currentModel === undefined ? {} : { currentModel } }
+    }
+    const fallback = currentModel.reasoning?.defaultEffort
+    const normalized: ModelSelection = {
+      provider: current.provider,
+      model: current.model,
+      ...fallback === undefined ? {} : { reasoningEffort: ReasoningEffortId(fallback) },
+    }
+    // Exact-model resolution is asynchronous. A newer accepted selection wins
+    // rather than being overwritten by repair of the value it superseded.
+    const latest = selection.current
+    if (latest.provider !== current.provider || latest.model !== current.model
+      || latest.reasoningEffort !== current.reasoningEffort) {
+      const latestModel = await currentModelInfo(ctx, latest)
+      return { current: latest, ...latestModel === undefined ? {} : { currentModel: latestModel } }
+    }
+    selection.current = normalized
+    return { current: normalized, currentModel }
+  }
+
   /** Pre-publication setup used by both fresh and resumed Web agents. */
   function installSelection(agentCtx: Context): void {
     const agent = agentCtx.agent
@@ -1873,7 +1908,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const found = await agentFor(sessionId)
     if ('error' in found) return { refused: err(request, found.error) }
     const agent = found.agent
-    const selection = selectionFor(agent).current
+    const { current: selection } = await currentSelectionFor(agent)
     if (!routeServed(selection.provider)) {
       return {
         refused: err(request, {
@@ -2264,10 +2299,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const { sessionId } = request.payload
         const found = await agentFor(sessionId)
         if ('error' in found) return err(request, found.error)
-        const current = selectionFor(found.agent).current
-        const [{ groups, failures }, currentModel] = await Promise.all([
+        const [{ groups, failures }, { current, currentModel }] = await Promise.all([
           buildModelCatalog(ctx),
-          currentModelInfo(ctx, current),
+          currentSelectionFor(found.agent),
         ])
         const routable = routeServed(current.provider)
         return ok(request, {
