@@ -9,6 +9,9 @@ import {
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
 import {
+  AgentTeamView, type AgentTeamViewInjected,
+} from '../src/client/AgentTeamView.tsx'
+import {
   SubagentHeaderLineage, type SubagentCatalogInjected,
 } from '../src/client/SubagentHeaderLineage.tsx'
 import {
@@ -100,7 +103,16 @@ const FAMILY: SessionSummary[] = [
 
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'slots', 'remote.agentTeams', 'locale'])
+    expect(inject).toEqual(['sessions', 'slots', 'remote', 'remote.agentTeams', 'locale'])
+  })
+
+  it('keeps deferred Agent Team Remote actions inside the injected parent service', async () => {
+    const { ctx } = await fullBench(FAMILY)
+    const teamEntry = ctx.slots.entries('conversation.view')
+      .find(entry => entry.component === AgentTeamView)!
+    const actions = (teamEntry.inject as unknown as (id: SessionId) => AgentTeamViewInjected)(sid('parent'))
+
+    await expect(actions.members()).resolves.toEqual({ ok: true, value: [] })
   })
 
   it('registers catalog actions and selects read-only subagent composers from session facts', async () => {

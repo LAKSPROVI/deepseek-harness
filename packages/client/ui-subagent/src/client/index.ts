@@ -29,7 +29,7 @@ export type {
 } from './SubagentReadOnlyComposer.tsx'
 
 /** Required services for conversation slots, Team mutations, and session navigation. */
-export const inject = ['sessions', 'slots', 'remote.agentTeams', 'locale']
+export const inject = ['sessions', 'slots', 'remote', 'remote.agentTeams', 'locale']
 
 /** Claim the composer for one-shot history or an unavailable continuation owner. */
 function selectReadOnlySubagent(owner: ComposerChainProps): SubagentReadOnlyMatch | null {

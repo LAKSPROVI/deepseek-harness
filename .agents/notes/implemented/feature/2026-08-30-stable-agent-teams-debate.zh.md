@@ -36,7 +36,7 @@ Lead Session 以完整 `team/debate` snapshot 保存一个当前 structured deba
 
 `agentTeam` Session projection 是浏览器安全的完整值，包含 member、task 与当前 debate。它有意排除 queued mailbox content，因为 pending peer mail 属于投递状态，可能包含尚未进入 target Session 的内容，并且 Team control 不需要它。
 
-Web conversation Team tab 从 history tail 读取初始 projection，并从通用 `session/projection` frame 接收后续值。mutation 使用生成的 `agentTeams` Remote 与当前 projected revision，因此 legacy Host API proxy 保持领域无关，也不增加 Team-specific HTTP、SSE 或 WebSocket 约定。
+Web conversation Team tab 从 history tail 读取初始 projection，并从通用 `session/projection` frame 接收后续值。mutation 使用生成的 `agentTeams` Remote 与当前 projected revision；Client plugin 同时注入 deferred Slot action 所访问的父级 `remote` Service，以及控制 activation 的 `remote.agentTeams` namespace。legacy Host API proxy 因此保持领域无关，也不增加 Team-specific HTTP、SSE 或 WebSocket 约定。
 
 ## Alternatives considered
 

@@ -36,7 +36,7 @@ Create and transition operations are Lead-authorized. Every transition supplies 
 
 The `agentTeam` Session projection is a browser-safe whole value containing members, tasks, and the current debate. It deliberately excludes queued mailbox content because pending peer mail is delivery state, may contain content not yet admitted to a target Session, and is unnecessary for Team controls.
 
-The Web conversation Team tab reads the initial projection from the history tail and later values from generic `session/projection` frames. Mutations use the generated `agentTeams` Remote and current projected revisions, so the legacy Host API proxy remains domain-agnostic and no Team-specific HTTP, SSE, or WebSocket contract is added.
+The Web conversation Team tab reads the initial projection from the history tail and later values from generic `session/projection` frames. Mutations use the generated `agentTeams` Remote and current projected revisions; the Client plugin injects both the parent `remote` Service that its deferred Slot actions access and the `remote.agentTeams` namespace that gates activation. The legacy Host API proxy remains domain-agnostic, and no Team-specific HTTP, SSE, or WebSocket contract is added.
 
 ## Alternatives considered
 
