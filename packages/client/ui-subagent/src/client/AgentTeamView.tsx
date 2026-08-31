@@ -172,7 +172,7 @@ export function AgentTeamView({
   debateStart,
   debateUpdate,
 }: AgentTeamViewProps) {
-  const projection = useProjection('agentTeam') as TeamProjection | null | undefined
+  const projection = useProjection('agentTeam')
   const sessions = useSessions(state => state)
   const [runtimeMembers, setRuntimeMembers] = useState<TeamMemberView[] | null>(null)
   const [spawnDraft, setSpawnDraft] = useState<SpawnDraft>(EMPTY_SPAWN)
