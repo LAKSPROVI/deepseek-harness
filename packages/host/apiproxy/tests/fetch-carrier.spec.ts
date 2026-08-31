@@ -63,6 +63,7 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
             ok: true,
             value: {
               current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+              currentModel: { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', inputModalities: ['text', 'image'] },
               routable: true,
               groups: [],
               failures: [],
@@ -82,6 +83,11 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
                 ...request.payload.reasoningEffort === undefined
                   ? {}
                   : { reasoningEffort: request.payload.reasoningEffort },
+              },
+              currentModel: {
+                id: request.payload.model,
+                name: request.payload.model,
+                inputModalities: ['text', 'image'],
               },
             },
           },
@@ -357,6 +363,11 @@ describe('unary round trip (handler ⇄ client, no network)', () => {
           provider: 'deepseek-official',
           model: 'deepseek-v4-flash',
           reasoningEffort: 'max',
+        },
+        currentModel: {
+          id: 'deepseek-v4-flash',
+          name: 'deepseek-v4-flash',
+          inputModalities: ['text', 'image'],
         },
       },
     })

@@ -169,9 +169,9 @@ export function InputBar({
   // adjudicating and submitting render read-only so the draft stays visible.
   const disabled = removed || inert || !live || blocked !== undefined || parentOffline
   const locked = disabled
-  // The model seat is the ONE control a block leaves live: every block this
-  // contract has is cleared by choosing a model, so locking it too would leave
-  // the composer asking for the only thing it prevents. The other reasons to
+  // A block leaves the model seat live so model incompatibility can be cleared
+  // without discarding the draft; attachment removal remains live in its rail.
+  // The other reasons to
   // be disabled do lock it — there is no session to choose a model for.
   const modelSeatLocked = removed || inert || !live
   const machineBusy = input?.phase === 'adjudicating' || input?.phase === 'submitting'
@@ -241,9 +241,8 @@ export function InputBar({
   // collapsed selection, but honoring direction keeps a future range-preserving
   // path from revealing its anchor instead of its focus.
   const revealSelectionFocus = (el: HTMLTextAreaElement): void => {
-    // selectionStart/End are number|null in lib.dom; the type-aware lint program narrows them.
     const caret = el.selectionDirection === 'backward' ? el.selectionStart : el.selectionEnd
-    revealCaret(caret ?? el.value.length)
+    revealCaret(caret)
   }
 
   // Unlock (mount / session switch) returns focus to the box, and owns the
@@ -310,10 +309,9 @@ export function InputBar({
     return () => { el.removeEventListener('wheel', onWheel) }
   }, [])
 
-  // selectionStart/End are number|null in lib.dom; the type-aware lint program narrows them.
   const selectionOf = (el: HTMLTextAreaElement) => ({
-    start: el.selectionStart ?? 0,
-    end: el.selectionEnd ?? el.selectionStart ?? 0,
+    start: el.selectionStart,
+    end: el.selectionEnd,
   })
 
   // The machine's occurrence math needs the edit's real range, and a controlled
@@ -359,7 +357,8 @@ export function InputBar({
     // IME guard so a composition-closing Shift+Enter still breaks the line.
     if (e.key === 'Enter' && e.shiftKey) return
     // keyCode 229 is the legacy IME-composition signal engines emit without isComposing.
-    const composing = composingRef.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229
+    const legacyEvent: { readonly keyCode?: number } = e.nativeEvent
+    const composing = composingRef.current || e.nativeEvent.isComposing || legacyEvent.keyCode === 229
     if (!composing && !machineBusy && !locked
       && (e.key === 'Backspace' || e.key === 'Delete')) {
       const selection = selectionOf(e.currentTarget)
@@ -441,8 +440,7 @@ export function InputBar({
     pendingEditRef.current = null
     safariNativeShrinkRef.current = safari && next.length < draft.length
     keyboard.setDraft(next, editRangeOf(pending, draft.length, next.length))
-    // selectionStart is number|null in lib.dom; the type-aware lint program narrows it.
-    keyboard.track(next, e.target.selectionStart ?? next.length)
+    keyboard.track(next, e.target.selectionStart)
   }
 
   const onCopyOrCut = (e: React.ClipboardEvent<HTMLTextAreaElement>, cut: boolean): void => {

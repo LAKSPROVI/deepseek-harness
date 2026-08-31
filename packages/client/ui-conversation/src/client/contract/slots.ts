@@ -539,9 +539,9 @@ export interface ComposerBarOwnerProps {
   /**
    * A block another plugin raised for this session: the bar refuses input and
    * shows the blocker's reason as the placeholder, but — unlike `disabled` —
-   * keeps the model seat live. Every block this contract has is one the user
-   * clears by choosing a model, so locking that seat too would leave the
-   * composer telling them to do the one thing it prevents.
+   * keeps the model seat live. Model incompatibility can therefore be cleared
+   * by changing models, while the attachment rail remains available to remove
+   * an incompatible draft attachment.
    */
   blocked?: { readonly reason: string }
   /**

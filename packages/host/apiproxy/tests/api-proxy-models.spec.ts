@@ -215,7 +215,14 @@ describe('Web session model selection', () => {
     } as never, { surfaceOp: 'append' })
     expect(expectValue(await api.sessions.selectModel(request({
       sessionId, provider: 'text-only', model: 'plain',
-    }))).selected).toEqual({ provider: 'text-only', model: 'plain' })
+    })))).toEqual({
+      selected: { provider: 'text-only', model: 'plain' },
+      currentModel: { id: 'plain', name: 'plain', inputModalities: ['text'] },
+    })
+    expect(expectValue(await api.sessions.models(request({ sessionId })))).toMatchObject({
+      current: { provider: 'text-only', model: 'plain' },
+      currentModel: { id: 'plain', name: 'plain', inputModalities: ['text'] },
+    })
 
     agent.session.append('user/message', {
       id: 'summary', role: 'user', source: { kind: 'plugin', plugin: 'compact' },
@@ -229,7 +236,7 @@ describe('Web session model selection', () => {
     } as never)
     expect(expectValue(await api.sessions.selectModel(request({
       sessionId, provider: 'text-only', model: 'plain',
-    }))).selected).toEqual({ provider: 'text-only', model: 'plain' })
+    }))).currentModel.inputModalities).toEqual(['text'])
     await ctx.fiber.dispose()
   })
 
@@ -281,6 +288,13 @@ describe('Web session model selection', () => {
       model: 'private-preview',
       reasoningEffort: 'max',
     })
+    expect(catalog.currentModel).toEqual({
+      id: 'private-preview',
+      name: 'private-preview',
+      reasoning: REASONING,
+    })
+    expect(catalog.groups.flatMap(group => group.models.map(model => model.id)))
+      .not.toContain('private-preview')
     expect(catalog.groups).toEqual([{
       id: 'deepseek-official',
       name: 'DeepSeek',

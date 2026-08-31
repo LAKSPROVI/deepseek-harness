@@ -174,6 +174,7 @@ export const modelCatalogModelSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
+  inputModalities: z.array(z.enum(['text', 'image', 'file'])).optional(),
   reasoning: modelReasoningSchema.optional(),
 }) satisfies z.ZodType<Wire<ModelCatalogModel>>
 
@@ -261,6 +262,7 @@ export const sessionModelsRequestSchema = z.object({
 /** session.models response value. */
 export const sessionModelsValueSchema = z.object({
   current: modelSelectionSchema,
+  currentModel: modelCatalogModelSchema.optional(),
   routable: z.boolean(),
   groups: z.array(modelProviderGroupSchema),
   failures: z.array(modelCatalogFailureSchema),
@@ -277,6 +279,7 @@ export const sessionSelectModelRequestSchema = z.object({
 /** session.selectModel response value. */
 export const sessionSelectModelValueSchema = z.object({
   selected: modelSelectionSchema,
+  currentModel: modelCatalogModelSchema,
 }) satisfies z.ZodType<Wire<ResponseValue<'session.selectModel'>>>
 
 /** ContentBlock passthrough: core is merge-extensible — the type discriminant envelope is strict, the rest stays wide. */

@@ -128,6 +128,59 @@ describe('draft-provider model discovery', () => {
     expect(server.headers[0]?.['user-agent']).toBe(userAgent())
   })
 
+  it('promotes only proved 9Router input probes in canonical order', async () => {
+    const inconclusive = [
+      'blocked_or_failed',
+      'accepted_unproved',
+      'untested',
+      'invalid_fixture',
+    ].map(state => ({
+      id: state,
+      x_9r: { capabilities_v1: { input: { image: { claim: true, probe: { state } } } } },
+    }))
+    const server = await listingServer({
+      body: JSON.stringify({
+        data: [
+          { id: 'image', vision: false, x_9r: { capabilities_v1: { input: { image: { probe: { state: 'proved' } } } } } },
+          { id: 'file', x_9r: { capabilities_v1: { input: { file: { probe: { state: 'proved' } } } } } },
+          { id: 'both', x_9r: { capabilities_v1: { input: {
+            file: { probe: { state: 'proved' } },
+            image: { probe: { state: 'proved' } },
+          } } } },
+          ...inconclusive,
+          { id: 'claim-false', x_9r: { capabilities_v1: { input: { image: { claim: false } } } } },
+          { id: 'claim-true', x_9r: { capabilities_v1: { input: { image: { claim: true } } } } },
+          { id: 'catalog-flag', vision: true },
+          { id: 'absent' },
+          { id: 'malformed-namespace', x_9r: { capabilities_v1: 'proved' } },
+          { id: 'malformed-probe', x_9r: { capabilities_v1: { input: { image: { probe: 'proved' } } } } },
+          { id: 'agent-only', agent_surface_v1: { input: { image: { probe: { state: 'proved' } } } } },
+          { id: 'wrong-9r-child', x_9r: { agent_surface_v1: { input: { image: { probe: { state: 'proved' } } } } } },
+        ],
+      }),
+    })
+    const ctx = await harness()
+
+    const models = await ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url })
+
+    expect(models.slice(0, 3)).toEqual([
+      { id: 'image', inputModalities: ['text', 'image'] },
+      { id: 'file', inputModalities: ['text', 'file'] },
+      { id: 'both', inputModalities: ['text', 'image', 'file'] },
+    ])
+    expect(models.slice(3)).toEqual([
+      ...inconclusive.map(({ id }) => ({ id })),
+      { id: 'claim-false' },
+      { id: 'claim-true' },
+      { id: 'catalog-flag' },
+      { id: 'absent' },
+      { id: 'malformed-namespace' },
+      { id: 'malformed-probe' },
+      { id: 'agent-only' },
+      { id: 'wrong-9r-child' },
+    ])
+  })
+
   it('keeps a deployment path instead of resolving it away', async () => {
     const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
     const ctx = await harness()
