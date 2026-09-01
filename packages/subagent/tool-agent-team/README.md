@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Scoped model-facing adapter for [`ctx.agentTeams`](../agent-team/README.md). It installs the Agent Teams policy and collaboration tools in each implicit Lead and durable teammate scope. Scoped Team definitions shadow same-named legacy global continuable-subagent controls, so a composition that mounts both must disable the legacy definitions.
+Scoped model-facing adapter for [`ctx.agentTeams`](../agent-team/README.md). It installs the Agent Teams policy and collaboration tools in each implicit Lead and durable teammate scope. Scoped Team definitions shadow same-named legacy global continuable-subagent controls, so a composition that mounts both must disable the legacy definitions. The [operating cookbook](../../../docs/cookbook/operating-agent-teams.md) defines how Leads and teammates use these tools without duplicate work or unsupported correctness claims.
 
 ## Config
 

@@ -38,6 +38,8 @@ The `agentTeam` Session projection is a browser-safe whole value containing memb
 
 The Web conversation Team tab reads the initial projection from the history tail and later values from generic `session/projection` frames. Mutations use the generated `agentTeams` Remote and current projected revisions; the Client plugin injects both the parent `remote` Service that its deferred Slot actions access and the `remote.agentTeams` namespace that gates activation. The legacy Host API proxy remains domain-agnostic, and no Team-specific HTTP, SSE, or WebSocket contract is added.
 
+The generated Typert Remote is a built Host artifact consumed by the Client bundle. Assembled validation therefore generates and builds Host modules before building the Client and Web shell, then exercises the existing `dsh web` process rather than a replacement Vite server. Source-only tests do not establish that the running GUI and its generated Remote agree.
+
 ## Alternatives considered
 
 **Keep Agent Teams under `packages/experimental/` and add a Host adapter.** Rejected because a release BFF or Web package still could not depend on the experimental domain, while duplicating its types in an adapter would create two authorities for the same durable state.

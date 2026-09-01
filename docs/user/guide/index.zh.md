@@ -32,8 +32,13 @@ Agent（智能体）可以读取和编辑工作区文件、运行命令、委派
 
 附件上限只表示传输与存储能力，并不保证所选模型能够理解该文件格式。不支持通用文件输入的路由会收到确定性的元数据说明，而不是文件字节。提交前移除草稿会把它从输入框丢弃；选择提示词或添加文件本身都不会发送消息。
 
+## 协调 Team
+
+当任务需要不同角色、模型 provider 或人工控制 debate 时，使用 [Agent Teams](./agent-teams.zh.md)。该指南涵盖 teammate route、guidance、protocol control、持久化与恢复。
+
 ## 继续使用
 
+- [使用 Agent Teams 协调工作](./agent-teams.zh.md)
 - [配置模型](./providers.zh.md)
 - [了解提示词库](../../../packages/client/ui-prompt-library/README.zh.md)
 - [阅读附件参考](../../subsystems/attachment.zh.md)

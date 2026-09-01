@@ -32,8 +32,13 @@ Use **Add attachments**, paste files, or drag them anywhere over the page. PNG, 
 
 The attachment limit is a transport and storage limit, not a promise that the selected model understands a file format. Routes without generic-file input receive a deterministic metadata description instead of the bytes. Removing a draft before submission discards it from the composer; selecting a saved prompt or attaching a file never sends the message by itself.
 
+## Coordinate a team
+
+Use [Agent Teams](./agent-teams.md) when a task benefits from distinct roles, model providers, or a human-controlled debate. The guide covers teammate routes, guidance, protocol controls, persistence, and recovery.
+
 ## Continue
 
+- [Coordinate work with Agent Teams](./agent-teams.md)
 - [Configure models](./providers.md)
 - [Understand the prompt library](../../../packages/client/ui-prompt-library/README.md)
 - [Read the attachment reference](../../subsystems/attachment.md)

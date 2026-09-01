@@ -38,6 +38,8 @@ Lead Session 以完整 `team/debate` snapshot 保存一个当前 structured deba
 
 Web conversation Team tab 从 history tail 读取初始 projection，并从通用 `session/projection` frame 接收后续值。mutation 使用生成的 `agentTeams` Remote 与当前 projected revision；Client plugin 同时注入 deferred Slot action 所访问的父级 `remote` Service，以及控制 activation 的 `remote.agentTeams` namespace。legacy Host API proxy 因此保持领域无关，也不增加 Team-specific HTTP、SSE 或 WebSocket 约定。
 
+生成式 Typert Remote 是供 Client bundle 消费的已构建 Host artifact。因此 assembled validation 会先生成并构建 Host module，再构建 Client 与 Web shell，随后操作已有 `dsh web` 进程，而不是替代用的 Vite server。只运行 source test 不能证明正在运行的 GUI 与其生成式 Remote 一致。
+
 ## Alternatives considered
 
 **把 Agent Teams 保留在 `packages/experimental/` 并增加 Host adapter。** 否决，因为 release BFF 或 Web package 仍不能依赖实验领域，而在 adapter 中复制其类型会为同一持久状态创建两个 authority。

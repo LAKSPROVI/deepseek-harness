@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Stable implicit-root Agent Teams domain. `ctx.agentTeams` owns a flat Lead/teammate roster, a durable peer mailbox, a shared task DAG, and a structured debate in the Lead Session log. The [Agent Teams Agent Note](../../../.agents/notes/implemented/feature/2026-08-05-agent-teams.md) owns the coordination and isolation decisions; the [Team subsystem catalog](../../../docs/subsystems/agent-team.md) records the literal durable forms and service API.
+Stable implicit-root Agent Teams domain. `ctx.agentTeams` owns a flat Lead/teammate roster, a durable peer mailbox, a shared task DAG, and a structured debate in the Lead Session log. The [Agent Teams Agent Note](../../../.agents/notes/implemented/feature/2026-08-05-agent-teams.md) owns the coordination and isolation decisions; the [Team subsystem catalog](../../../docs/subsystems/agent-team.md) records the literal durable forms, component map, and service API. Human operation belongs in the [user guide](../../../docs/user/guide/agent-teams.md), while the [operating cookbook](../../../docs/cookbook/operating-agent-teams.md) defines the Lead and teammate procedure.
 
 ## Config
 

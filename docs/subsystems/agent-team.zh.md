@@ -14,9 +14,13 @@ interface TeamMemberSnapshot {
   readonly id: SessionId
   readonly name: string
   readonly description: string
+  /** Continuable-child transport, normally `spawn` or `fork`. */
   readonly provider: string
+  /** LLM adapter route used by this teammate; absence inherits the Lead route. */
   readonly llmProvider?: string
+  /** Provider-owned model id; absence inherits the Lead model. */
   readonly model?: string
+  /** Child-only system persona; absence uses the mounted preset persona. */
   readonly persona?: string
   readonly context: 'fresh' | 'fork'
   readonly phase: TeamMemberPhase
@@ -84,6 +88,27 @@ interface TeamTaskSnapshot {
 `foldTeam()` 把一个 Root Session 回放成 Team 操作所读取的 roster、任务板、当前 debate 与 queued-minus-delivered mailbox。它按 `TeamId` 选取记录，因此普通 fork 继承的 event 保留 ancestor id，绝不会进入新 Root 的状态。Session event 的 `seq` 与 `time` 继续负责顺序和时间记录，Team snapshot 不再重复保存它们。
 
 `agentTeam` projection 提供持久 member snapshot、未删除 task snapshot 与当前 debate。它排除 mailbox record，后者仅供投递与恢复内部使用。roster 与 task 读取会添加 live status、owner name、readiness 与 write-scope 警告，但不改变持久 snapshot。包 [README](../../packages/subagent/agent-team/README.zh.md)负责 operation、authorization、recovery、限制与 Web control。
+
+## 组成地图
+
+| 平面 | 拥有方 | 职责 |
+|---|---|---|
+| Host 领域 | [`packages/subagent/agent-team`](../../packages/subagent/agent-team/README.zh.md) | Team 身份、roster、mailbox、任务 DAG、debate 状态、恢复、projection 与浏览器 Remote method。 |
+| 模型 adapter | [`packages/subagent/tool-agent-team`](../../packages/subagent/tool-agent-team/README.zh.md) | Team 策略与 13 个 scoped tool；只由 `agent-teams` preset 挂载。 |
+| Agent preset | [`apps/cli/config/agent-presets/agent-teams`](../../apps/cli/config/agent-presets/agent-teams/agent.cordis.yml) | 一个 Session 的 Lead persona 与模型可见 Team composition。 |
+| 浏览器 view | [`packages/client/ui-subagent`](../../packages/client/ui-subagent/README.zh.md) | roster、task 与 debate 显示，以及 spawn、guidance、interrupt 和 debate control。 |
+| transport assembly | `@deepseek-ai/dsh-api-remotes` 与 Typert | 通过通用 Session-aware Host gateway 生成 `agentTeams` Client Remote。 |
+| 持久 carrier | Lead Session log 与 `agentTeam` projection | replay 的 source of truth；projection 是浏览器安全的 read model。 |
+
+Host composition 即使对普通 preset 也挂载领域服务，让恢复与 projection 只有一个进程级拥有方。`agent-teams` preset 只增加模型 adapter 与协作策略，从而不把 Team schema 和 prompt 成本带进无关 Session。
+
+## 操作与数据流
+
+teammate 创建从 Lead tool 或浏览器 Remote 进入 `TeamService`；服务先保留持久 member name，再要求所选 continuable provider 创建直接 child，持久化 child inbox，最后提交 active roster edge。peer delivery 会先在 Lead log 中提交 mailbox record，再让 target 接收；target 侧 message identity 防止 retry 重复。task 与 debate mutation 使用各自当前 revision 作为 compare-and-set guard。
+
+Session replay 依次进入 `foldTeam()` 与 `agentTeam` projection。Web client 从 Session history 读取最新 projection，订阅后续 projection frame，并通过生成的 Remote 调用 mutation。mailbox content 永不跨越该 projection。模型 tool 使用确切 live Agent 作为 authority credential 调用同一个 Host service，因此浏览器与模型操作共享持久化和授权，而不维护平行 Team 状态。
+
+[用户指南](../user/guide/agent-teams.zh.md)负责人工操作。[操作 cookbook](../cookbook/operating-agent-teams.zh.md)负责 Lead／teammate 协作流程。本页负责数据词汇、组件地图与生成式 service reference。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

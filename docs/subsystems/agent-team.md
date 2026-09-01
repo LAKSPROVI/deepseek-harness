@@ -14,9 +14,13 @@ interface TeamMemberSnapshot {
   readonly id: SessionId
   readonly name: string
   readonly description: string
+  /** Continuable-child transport, normally `spawn` or `fork`. */
   readonly provider: string
+  /** LLM adapter route used by this teammate; absence inherits the Lead route. */
   readonly llmProvider?: string
+  /** Provider-owned model id; absence inherits the Lead model. */
   readonly model?: string
+  /** Child-only system persona; absence uses the mounted preset persona. */
   readonly persona?: string
   readonly context: 'fresh' | 'fork'
   readonly phase: TeamMemberPhase
@@ -84,6 +88,27 @@ A `TeamDebateSnapshot` stores one debate id, compare-and-set revision, topic, pa
 `foldTeam()` replays one root Session into the roster, task board, current debate, and queued-minus-delivered mailbox that Team operations read. It selects records by `TeamId`, so events inherited by an ordinary fork retain the ancestor id and never enter the new root's state. Session event `seq` and `time` remain the ordering and timing record; Team snapshots do not duplicate them.
 
 The `agentTeam` projection exposes durable member snapshots, non-deleted task snapshots, and the current debate. It excludes mailbox records, which stay internal to delivery and recovery. Roster and task reads add live status, owner name, readiness, and write-scope warnings without changing durable snapshots. The package [README](../../packages/subagent/agent-team/README.md) owns operation, authorization, recovery, limits, and Web controls.
+
+## Composition map
+
+| Plane | Owner | Responsibility |
+|---|---|---|
+| Host domain | [`packages/subagent/agent-team`](../../packages/subagent/agent-team/README.md) | Team identity, roster, mailbox, task DAG, debate state, recovery, projection, and browser Remote methods. |
+| Model adapter | [`packages/subagent/tool-agent-team`](../../packages/subagent/tool-agent-team/README.md) | Team policy and 13 scoped tools; mounted only by the `agent-teams` preset. |
+| Agent preset | [`apps/cli/config/agent-presets/agent-teams`](../../apps/cli/config/agent-presets/agent-teams/agent.cordis.yml) | Lead persona and model-visible Team composition for one Session. |
+| Browser view | [`packages/client/ui-subagent`](../../packages/client/ui-subagent/README.md) | Roster, task, and debate display plus spawn, guidance, interruption, and debate controls. |
+| Transport assembly | `@deepseek-ai/dsh-api-remotes` and Typert | Generated `agentTeams` Client Remote over the generic Session-aware Host gateway. |
+| Durable carrier | Lead Session log and `agentTeam` projection | Source of truth for replay; the projection is the browser-safe read model. |
+
+The Host composition mounts the domain service even for ordinary presets so recovery and projection have one process-wide owner. The `agent-teams` preset adds only the model adapter and collaboration policy, keeping Team schemas and prompt cost out of unrelated Sessions.
+
+## Operation and data flow
+
+Teammate creation flows from the Lead tool or browser Remote into `TeamService`, which first reserves a durable member name, asks the selected continuable provider for a direct child, persists the child inbox, and then commits the active roster edge. Peer delivery commits a mailbox record in the Lead log before target admission; target-side message identity prevents retry duplication. Task and debate mutations use their current revisions as compare-and-set guards.
+
+Session replay feeds `foldTeam()` and then the `agentTeam` projection. The Web client reads the latest projection from Session history, subscribes to later projection frames, and invokes mutations through the generated Remote. Mailbox content never crosses that projection. Model tools call the same Host service with the exact live Agent as the authority credential, so browser and model operations share persistence and authorization rather than maintaining parallel Team state.
+
+The [user guide](../user/guide/agent-teams.md) owns human operation. The [operating cookbook](../cookbook/operating-agent-teams.md) owns the Lead/teammate coordination procedure. This page owns the data vocabulary, component map, and generated service reference.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-[`ctx.agentTeams`](../agent-team/README.zh.md) 的 scoped 模型适配器。它会在每个隐式 Lead 与持久 teammate scope 中安装 Agent Teams 策略和协作工具。scoped Team 定义会覆盖同名的旧全局 continuable-subagent control，因此同时挂载两者的组合必须禁用旧定义。
+[`ctx.agentTeams`](../agent-team/README.zh.md) 的 scoped 模型适配器。它会在每个隐式 Lead 与持久 teammate scope 中安装 Agent Teams 策略和协作工具。scoped Team 定义会覆盖同名的旧全局 continuable-subagent control，因此同时挂载两者的组合必须禁用旧定义。[操作 cookbook](../../../docs/cookbook/operating-agent-teams.zh.md)定义 Lead 与 teammate 如何使用这些 tool，同时避免重复工作或没有依据的正确性声明。
 
 ## 配置
 

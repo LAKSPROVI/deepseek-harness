@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-稳定的隐式 Root Agent Teams 领域。`ctx.agentTeams` 在 Lead Session 日志中维护扁平的 Lead／teammate roster、持久 peer mailbox、共享任务 DAG 与结构化 debate。[Agent Teams Agent Note](../../../.agents/notes/implemented/feature/2026-08-05-agent-teams.zh.md)负责协作和隔离决策；[Team 子系统目录](../../../docs/subsystems/agent-team.zh.md)记录持久数据的字面形式与服务 API。
+稳定的隐式 Root Agent Teams 领域。`ctx.agentTeams` 在 Lead Session 日志中维护扁平的 Lead／teammate roster、持久 peer mailbox、共享任务 DAG 与结构化 debate。[Agent Teams Agent Note](../../../.agents/notes/implemented/feature/2026-08-05-agent-teams.zh.md)负责协作和隔离决策；[Team 子系统目录](../../../docs/subsystems/agent-team.zh.md)记录持久数据的字面形式、组件地图与服务 API。人工操作属于[用户指南](../../../docs/user/guide/agent-teams.zh.md)，[操作 cookbook](../../../docs/cookbook/operating-agent-teams.zh.md)定义 Lead 与 teammate 流程。
 
 ## 配置
 
