@@ -6,7 +6,7 @@
 
 Host 报告的 `ModelSelection` 是唯一的选择事实，其中包含提供方、模型与推理（reasoning）强度。`session.models.currentModel` 独立于建议分组成员关系携带该路由的精确元数据，但触发器仍只在确切提供方／模型对继续被公布时回显模型：目录行缺席时，可路由选择与能力元数据保持不变，触发器提示 `Select model`，系统不合成陈旧行，且在用户选择已公布模型前不显示 Effort 行。成功选择会立即同时替换 `current` 与回显的 `currentModel`。目录加载与选择共享一个代次计数器，旧响应不会覆盖新结果；连接重置会丢弃所有常驻目录投影，并在显示前重新拉取 Host 恢复的选择。各提供方的元数据获取失败会内联列出，同时可用分组仍可选择；选择失败会保留先前的选择和目录。
 
-本插件在两个确定条件下经 `ctx.conversation.blocks` 注册 composer 阻塞：`session.models.routable === false`，或草稿包含图片且 `currentModel.inputModalities` 是已知却不含 `image` 的列表。路由或模态元数据未知时绝不阻断，目录成员关系也不决定能力。resolver 同时订阅目录与输入 store，因此移除最后一张图片或选择支持图片的模型会立即清除图片阻塞；阻塞期间模型 seat 与附件移除仍可使用。同步 prompt 预检会在附件编码、上传或 RPC 之前重复同一项已知不兼容检查，提交尝试被拒绝时保留草稿与附件。Host 对所有调用方始终保留权威检查。
+本插件在两个确定条件下经 `ctx.conversation.blocks` 注册 composer 阻塞：`session.models.routable === false`，或草稿包含图片且 `currentModel.inputModalities` 是已知却不含 `image` 的列表。路由或模态元数据未知时绝不阻断，目录成员关系也不决定能力。resolver 同时订阅目录与输入 store，因此移除最后一张图片或选择支持图片的模型会立即清除图片阻塞；阻塞期间模型 seat 与附件移除仍可使用。同步 prompt 预检会在附件编码、上传或 RPC 之前重复同一项已知不兼容检查，提交尝试被拒绝时保留草稿与附件。Host 对所有调用方始终保留权威检查。[模型能力运行手册](../../../docs/cookbook/model-capability-agent-runbook.zh.md)负责端到端诊断与活动 smoke 顺序。
 
 目录按会话惰性解析（`ctx.modelDirectories.directoryFor(sessionId)`），随会话作用域一并 dispose（资源释放）。已寻址 subagent 会话不公开任一入口，其目录会拒绝加载、选择与重新连接刷新，因为绑定到 agent（智能体）的普通模型 RPC 会在直接 parent 继续执行路径之外激活持久化 child 历史。
 

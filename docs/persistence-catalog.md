@@ -723,7 +723,7 @@ Source: [`packages/subagent/subagent/src/descriptor.ts:37`](../packages/subagent
 
 Types: [TeamId](subsystems/agent-team.md)
 
-Source: [`packages/subagent/agent-team/src/types.ts:309`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:325`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammember--log-only"></a>
 
@@ -736,7 +736,7 @@ Source: [`packages/subagent/agent-team/src/types.ts:309`](../packages/subagent/a
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMemberSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/subagent/agent-team/src/types.ts:305`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:321`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagedelivered--log-only"></a>
 
@@ -754,7 +754,7 @@ Source: [`packages/subagent/agent-team/src/types.ts:305`](../packages/subagent/a
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMessageId](subsystems/agent-team.md)
 
-Source: [`packages/subagent/agent-team/src/types.ts:313`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:329`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagequeued--log-only"></a>
 
@@ -767,7 +767,7 @@ Source: [`packages/subagent/agent-team/src/types.ts:313`](../packages/subagent/a
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMessageSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/subagent/agent-team/src/types.ts:311`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:327`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teamtask--log-only"></a>
 
@@ -780,7 +780,7 @@ Source: [`packages/subagent/agent-team/src/types.ts:311`](../packages/subagent/a
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamTaskSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/subagent/agent-team/src/types.ts:307`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:323`](../packages/subagent/agent-team/src/types.ts)
 
 ### `todo/*`
 

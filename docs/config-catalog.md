@@ -322,7 +322,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/subagent/agent-team/src/types.ts:187`](../packages/subagent/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:203`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="deepseek-aidsh-agent-tool-presentation"></a>
 

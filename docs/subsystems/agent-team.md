@@ -14,9 +14,13 @@ interface TeamMemberSnapshot {
   readonly id: SessionId
   readonly name: string
   readonly description: string
+  /** Continuable-child transport, normally `spawn` or `fork`. */
   readonly provider: string
+  /** LLM adapter route used by this teammate; absence inherits the Lead route. */
   readonly llmProvider?: string
+  /** Provider-owned model id; absence inherits the Lead model. */
   readonly model?: string
+  /** Child-only system persona; absence uses the mounted preset persona. */
   readonly persona?: string
   readonly context: 'fresh' | 'fork'
   readonly phase: TeamMemberPhase

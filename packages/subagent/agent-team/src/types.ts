@@ -8,7 +8,11 @@ import type {} from '@deepseek-ai/dsh-session-projection/types'
 /** Identifies the implicit team rooted at one top-level Session. */
 export type TeamId = Branded<'TeamId'>
 
-/** Brand one root Session identity as its implicit Team identity. */
+/**
+ * Brand one root Session identity as its implicit Team identity.
+ * @param id Root Session identity.
+ * @returns Branded Team identity for that root Session.
+ */
 export function TeamId(id: SessionId | string): TeamId {
   return id as TeamId
 }
@@ -16,7 +20,11 @@ export function TeamId(id: SessionId | string): TeamId {
 /** Stable identifier for one task in a Team. */
 export type TeamTaskId = Branded<'TeamTaskId'>
 
-/** Brand a validated Team-local task identity. */
+/**
+ * Brand a validated Team-local task identity.
+ * @param id Validated task identifier.
+ * @returns Branded Team task identity.
+ */
 export function TeamTaskId(id: string): TeamTaskId {
   return id as TeamTaskId
 }
@@ -24,7 +32,11 @@ export function TeamTaskId(id: string): TeamTaskId {
 /** Stable identifier for one durable peer message. */
 export type TeamMessageId = Branded<'TeamMessageId'>
 
-/** Brand a generated peer-message identity. */
+/**
+ * Brand a generated peer-message identity.
+ * @param id Generated message identifier.
+ * @returns Branded Team message identity.
+ */
 export function TeamMessageId(id: string): TeamMessageId {
   return id as TeamMessageId
 }
@@ -32,7 +44,11 @@ export function TeamMessageId(id: string): TeamMessageId {
 /** Stable identifier for one structured Team debate. */
 export type TeamDebateId = Branded<'TeamDebateId'>
 
-/** Brand a generated Team-debate identity. */
+/**
+ * Brand a generated Team-debate identity.
+ * @param id Generated debate identifier.
+ * @returns Branded Team debate identity.
+ */
 export function TeamDebateId(id: string): TeamDebateId {
   return id as TeamDebateId
 }

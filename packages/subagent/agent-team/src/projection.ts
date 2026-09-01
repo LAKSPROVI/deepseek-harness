@@ -62,7 +62,12 @@ function empty(teamId: TeamProjection['teamId']): TeamProjection {
   return { teamId, members: [], tasks: [], debate: null }
 }
 
-/** Pure whole-value projection transition. */
+/**
+ * Apply one durable Team event to the browser-safe projection.
+ * @param state Current projection, or `null` before the first Team event.
+ * @param event Session event to project.
+ * @returns Updated projection, or the unchanged state for an unrelated event.
+ */
 export function applyTeamProjection(
   state: TeamProjection | null,
   event: SessionEvent,

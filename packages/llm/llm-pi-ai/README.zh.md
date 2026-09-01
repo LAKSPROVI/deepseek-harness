@@ -91,7 +91,7 @@ profile 的 `models` 列表是*替换*该路由已安装 catalog，而不是扩�
 
 该声明会转换为 pi-ai 的 `Model.reasoning` + `thinkingLevelMap`，其中每个档位都被显式决定——未声明的档位一律固定为不支持，而不是留给 pi-ai 自己的默认规则：那套规则并不对称（键缺席对五个基础档位意味着「支持」，对 `xhigh`/`max` 却意味着「不支持」），也本不该要求 profile 作者了解。`off` 是唯一的三态键：不写它，选择器不提供 Off，显式请求 Off 会被拒绝——不点名任何档位的请求仍会在不带该参数的情况下发出，提供方随后做什么是它自己的默认行为；声明而不给值（`off:`），则会提供 Off，选中它时什么也不发送——对 `deepseek` 方言则是一个显式的 `thinking: {type: "disabled"}`——这同时覆盖完全不点名任何档位的请求；声明并给值（`off: none`），该值就会作为档位参数在协议中发送。没有任何写法能把 catalog 映射中的键恢复为「未设置」：这份声明就是对外提供的全部，因此把你要保留的 catalog 档位重述出来。
 
-精确模型 id `kr/gpt-5.6-sol-thinking-agentic` 在已配置路由上使用已验证的覆盖：选择器只提供 `off`、`low`、`medium`、`high`、`xhigh` 与 `max`；没有显式选择或路由默认值时，`off` 是该模型的默认档位，分派把它映射为 `none`，其余档位映射为自身。显式选择或路由默认值仍然优先。`minimal` 对其他模型仍然有效，但该 id 会在网络 I/O 前拒绝它。这是显式的模型验证，并非从端点 discovery 推断能力；已审计的 catalog 快照报告空的档位列表。
+精确模型 id `kr/gpt-5.6-sol-thinking-agentic` 在已配置路由上使用已验证的覆盖：选择器只提供 `off`、`low`、`medium`、`high`、`xhigh` 与 `max`；没有显式选择或路由默认值时，`off` 是该模型的默认档位，分派把它映射为 `none`，其余档位映射为自身。显式选择或路由默认值仍然优先。`minimal` 对其他模型仍然有效，但该 id 会在网络 I/O 前拒绝它。这是显式的模型验证，并非从端点 discovery 推断能力；已审计的 catalog 快照报告空的档位列表。跨 package 变更与活动验证遵循[模型能力运行手册](../../../docs/cookbook/model-capability-agent-runbook.zh.md)。
 
 ### 协议兼容开关
 
