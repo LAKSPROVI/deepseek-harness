@@ -2,7 +2,18 @@
 
 English | [中文](operating-agent-teams.zh.md)
 
-Use this procedure when an agent or maintainer coordinates a task through the `agent-teams` preset. The [user guide](../user/guide/agent-teams.md) owns Web UI operation; the [subsystem reference](../subsystems/agent-team.md) owns durable forms and APIs.
+Use this procedure when an agent or maintainer coordinates a task through the `agent-teams` preset, displayed as **Equipe de agentes**. The [user guide](../user/guide/agent-teams.md) owns Web UI operation; the [subsystem reference](../subsystems/agent-team.md) owns durable forms and APIs.
+
+The browser presents Brazilian Portuguese controls while model tools and domain values remain stable:
+
+| Web control | Model/domain operation |
+|---|---|
+| **Criar integrante** | `spawn_teammate` / `spawnTeammate()` |
+| **Orientar integrante → Apenas deixar na fila** | `send_message` / quiet delivery |
+| **Orientar integrante → Acordar e orientar** | `followup_task` / wakeup delivery |
+| **Interromper tarefa** | `interrupt_agent` / `interrupt()` |
+| **Iniciar debate** | `team_debate_start` / `startDebate()` |
+| **Pausar protocolo**, **Retomar protocolo**, **Avançar fase**, **Concluir debate** | `team_debate_update` with `pause`, `resume`, `advance`, or `complete` |
 
 ## 1. Decide whether to form a Team
 
@@ -12,7 +23,7 @@ Before spawning, state the shared objective, the deliverable, and the stop condi
 
 ## 2. Design the roster
 
-Give each teammate an immutable lower-kebab-case name, one responsibility, and one output. Use `fresh` when the role needs only its prompt; use `fork` when it needs the Lead's completed history. Select provider/model/persona explicitly when diversity is part of the assignment; omitted values inherit once at creation and do not track later Lead changes.
+Give each teammate an immutable lower-kebab-case name, one responsibility, and one output. Use `fresh` when the role needs only its prompt; use `fork` when it needs the Lead's completed history. When diversity is part of the assignment, choose a configured provider and one of its advertised models in **Criar integrante**, then add a persona when the role needs one. **Herdar provider e modelo da líder** inherits the Lead route once at creation; explicit selections remain attached to the teammate and do not track later Lead changes.
 
 A useful roster assigns different failure modes:
 

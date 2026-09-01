@@ -1,4 +1,4 @@
-# 使用 Agent Teams 协调工作
+# 使用 Equipe de agentes 操作 Agent Teams
 
 [English](agent-teams.md) | 中文
 
@@ -16,7 +16,7 @@ Agent Teams 让一名 Lead 在同一工作区内协调最多九名具名 teammat
 
 Lead 是第一个参与者。roster 上限是一名 Lead 加九名 teammate。所有成员共享工作区，并立即看到文件变更。
 
-## 3. 打开 Agent Teams 标签页
+## 3. 打开 Equipe de agentes 标签页
 
 第一个 prompt 获准后，在 **Chat** 与 **Trajectory** 旁打开 **Equipe de agentes**。操作视图使用巴西葡萄牙语标签，包含：
 
@@ -38,8 +38,8 @@ Lead 是第一个参与者。roster 上限是一名 Lead 加九名 teammate。�
 | **Descrição** | roster 与 child catalog 中显示的简短职责。 |
 | **Instrução inicial** | teammate 的第一个目标；写明预期输出与证据。 |
 | **Contexto** | **Começar sem histórico** 不带 Lead 历史；**Copiar histórico concluído** 只复制一次 Lead 已完成 turn 前缀。 |
-| **Provider de LLM** | provider id；留空会在创建时使用 Lead 路由。 |
-| **Modelo** | 该 provider 的 model id；留空会在创建时使用 Lead model。 |
+| **Provider de LLM** | 选择一个已配置 provider，或保留 **Herdar provider e modelo da líder**，在创建时继承 Lead 路由。 |
+| **Modelo** | 从所选 provider 中选择一个 model；显式 provider 必须同时选择显式 model。 |
 | **Persona** | 只属于该 teammate 的附加 system persona。 |
 
 创建职责不同的角色，不要复制多个通用 agent。实用的三人 roster 是 Lead、implementer 与使用不同 model 或 provider 的 verifier。provisioning 失败也会占用 name，因此修复路由后必须使用新 name。

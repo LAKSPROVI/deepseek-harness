@@ -436,6 +436,16 @@
   font-weight: 400;
 }
 
+.routeNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 11px;
+  line-height: 16px;
+}
+
 .fieldWide,
 .formActions,
 .participants {

@@ -133,7 +133,7 @@ const homeAndGuide = pairedPages([
   {
     source: 'docs/user/guide/agent-teams.md',
     route: 'guide/agent-teams.md',
-    label: { root: '使用 Agent Teams', en: 'Use Agent Teams' },
+    label: { root: 'Equipe de agentes（Agent Teams）', en: 'Equipe de agentes (Agent Teams)' },
     sidebar: { root: 'zh-guide', en: 'en-guide' },
     section: { root: '入门', en: 'Guide' },
     order: 3,

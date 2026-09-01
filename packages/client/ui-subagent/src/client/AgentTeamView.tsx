@@ -12,6 +12,7 @@ import type {
   TeamProjection,
   UpdateTeamDebateRequest,
 } from '@deepseek-ai/dsh-agent-team/client'
+import type { SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
@@ -20,6 +21,8 @@ import css from './AgentTeamView.module.css'
 
 /** Browser actions supplied by the ui-subagent registration. */
 export interface AgentTeamActions {
+  /** Load the Lead Session's provider-grouped model directory. */
+  loadModels: () => Promise<SessionModels>
   /** Read the runtime-enriched roster for the current Team. */
   members: () => Promise<RemoteResult<TeamMemberView[]>>
   /** Create one durable teammate. */
@@ -200,6 +203,7 @@ export function AgentTeamView({
   sessionId,
   useProjection,
   useSessions,
+  loadModels,
   members,
   spawn,
   guide,
@@ -211,12 +215,34 @@ export function AgentTeamView({
   const sessions = useSessions(state => state)
   const [runtimeMembers, setRuntimeMembers] = useState<TeamMemberView[] | null>(null)
   const [spawnDraft, setSpawnDraft] = useState<SpawnDraft>(EMPTY_SPAWN)
+  const [modelDirectory, setModelDirectory] = useState<SessionModels | null>(null)
+  const [modelDirectoryStatus, setModelDirectoryStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [modelDirectoryError, setModelDirectoryError] = useState<string | null>(null)
   const [guideDraft, setGuideDraft] = useState<GuideDraft>(EMPTY_GUIDE)
   const [debateDraft, setDebateDraft] = useState<DebateDraft>(EMPTY_DEBATE)
   const [debateNote, setDebateNote] = useState('')
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [error, setError] = useState<string | null>(null)
   const pendingRef = useRef<PendingAction | null>(null)
+
+  const refreshModelDirectory = useCallback(async () => {
+    setModelDirectoryStatus('loading')
+    setModelDirectoryError(null)
+    try {
+      const directory = await loadModels()
+      setModelDirectory(directory)
+      setModelDirectoryStatus('ready')
+    } catch (cause: unknown) {
+      setModelDirectoryStatus('error')
+      setModelDirectoryError(cause instanceof Error ? cause.message : 'Não foi possível carregar providers e modelos.')
+    }
+  }, [loadModels])
+
+  const teamEnabled = projection !== undefined
+  useEffect(() => {
+    if (!teamEnabled) return
+    void refreshModelDirectory()
+  }, [refreshModelDirectory, teamEnabled])
 
   const refreshMembers = useCallback(async (showPending = false) => {
     if (showPending && pendingRef.current !== null) return false
@@ -311,14 +337,20 @@ export function AgentTeamView({
     event.preventDefault()
     const llmProvider = optionalText(spawnDraft.llmProvider)
     const model = optionalText(spawnDraft.model)
+    if (llmProvider !== undefined) {
+      const provider = modelDirectory?.groups.find(group => group.id === llmProvider)
+      if (model === undefined || provider?.models.some(candidate => candidate.id === model) !== true) {
+        setError('Selecione um modelo válido para o provider escolhido.')
+        return
+      }
+    }
     const persona = optionalText(spawnDraft.persona)
     const request: SpawnTeamMemberRemoteRequest = {
       name: spawnDraft.name.trim(),
       description: spawnDraft.description.trim(),
       prompt: spawnDraft.prompt.trim(),
       context: spawnDraft.context,
-      ...llmProvider === undefined ? {} : { llmProvider },
-      ...model === undefined ? {} : { model },
+      ...llmProvider === undefined || model === undefined ? {} : { llmProvider, model },
       ...persona === undefined ? {} : { persona },
     }
     const controller = new AbortController()
@@ -390,6 +422,11 @@ export function AgentTeamView({
   const debate = projection?.debate ?? null
   const activeCount = roster.filter(member => member.status === 'running').length
   const openTaskCount = tasks.filter(task => task.status !== 'completed').length
+  const selectedProvider = modelDirectory?.groups.find(group => group.id === spawnDraft.llmProvider)
+  const explicitRouteComplete = spawnDraft.llmProvider === '' || (
+    selectedProvider !== undefined
+    && selectedProvider.models.some(model => model.id === spawnDraft.model)
+  )
   const formsDisabled = pending !== null
   const canSpawn = roster.length < 10
 
@@ -690,18 +727,48 @@ export function AgentTeamView({
                 </label>
                 <label>
                   <span>Provider de LLM <em>opcional</em></span>
-                  <input value={spawnDraft.llmProvider} onChange={(event) => { setSpawnDraft(current => ({ ...current, llmProvider: event.target.value })) }} placeholder="herdar da líder" />
+                  <select
+                    value={spawnDraft.llmProvider}
+                    disabled={modelDirectoryStatus === 'loading'}
+                    onChange={(event) => {
+                      setSpawnDraft(current => ({ ...current, llmProvider: event.target.value, model: '' }))
+                    }}
+                  >
+                    <option value="">Herdar provider e modelo da líder</option>
+                    {modelDirectory?.groups.map(group => (
+                      <option value={group.id} key={group.id}>{group.name}</option>
+                    ))}
+                  </select>
                 </label>
                 <label>
-                  <span>Modelo <em>opcional</em></span>
-                  <input value={spawnDraft.model} onChange={(event) => { setSpawnDraft(current => ({ ...current, model: event.target.value })) }} placeholder="herdar da líder" />
+                  <span>Modelo <em>obrigatório com provider</em></span>
+                  <select
+                    value={spawnDraft.model}
+                    disabled={modelDirectoryStatus === 'loading' || spawnDraft.llmProvider === ''}
+                    onChange={(event) => { setSpawnDraft(current => ({ ...current, model: event.target.value })) }}
+                  >
+                    <option value="">{spawnDraft.llmProvider === '' ? 'Herdado com o provider' : 'Selecione um modelo'}</option>
+                    {selectedProvider?.models.map(model => (
+                      <option value={model.id} key={model.id}>{model.name}</option>
+                    ))}
+                  </select>
                 </label>
+                {(modelDirectoryError !== null || (modelDirectory?.failures.length ?? 0) > 0) && (
+                  <div className={`${css.routeNotice} ${css.fieldWide}`} role="status">
+                    <span>
+                      {modelDirectoryError === null
+                        ? `${String(modelDirectory?.failures.length ?? 0)} provider(s) não puderam carregar; os demais continuam disponíveis.`
+                        : `Catálogo indisponível: ${modelDirectoryError} A herança da rota da líder continua disponível.`}
+                    </span>
+                    <button type="button" className={css.textButton} onClick={() => { void refreshModelDirectory() }}>Tentar novamente</button>
+                  </div>
+                )}
                 <label className={css.fieldWide}>
                   <span>Persona <em>opcional</em></span>
                   <textarea value={spawnDraft.persona} onChange={(event) => { setSpawnDraft(current => ({ ...current, persona: event.target.value })) }} rows={3} placeholder="Instrução de sistema adicional para este integrante" />
                 </label>
                 <div className={css.formActions}>
-                  <button type="submit" className={css.primaryButton} disabled={formsDisabled || !canSpawn}>
+                  <button type="submit" className={css.primaryButton} disabled={formsDisabled || !canSpawn || !explicitRouteComplete}>
                     {pending === 'spawn' ? 'Criando…' : 'Criar integrante'}
                   </button>
                 </div>

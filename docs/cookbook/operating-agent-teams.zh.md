@@ -2,7 +2,18 @@
 
 [English](operating-agent-teams.md) | 中文
 
-当 agent 或维护者通过 `agent-teams` preset 协调任务时，使用本流程。[用户指南](../user/guide/agent-teams.zh.md)负责 Web UI 操作；[子系统参考](../subsystems/agent-team.zh.md)负责持久形式与 API。
+当 agent 或维护者通过界面显示为 **Equipe de agentes** 的 `agent-teams` preset 协调任务时，使用本流程。[用户指南](../user/guide/agent-teams.zh.md)负责 Web UI 操作；[子系统参考](../subsystems/agent-team.zh.md)负责持久形式与 API。
+
+浏览器显示巴西葡萄牙语 control，而模型工具与领域值保持稳定：
+
+| Web control | 模型／领域操作 |
+|---|---|
+| **Criar integrante** | `spawn_teammate`／`spawnTeammate()` |
+| **Orientar integrante → Apenas deixar na fila** | `send_message`／quiet delivery |
+| **Orientar integrante → Acordar e orientar** | `followup_task`／wakeup delivery |
+| **Interromper tarefa** | `interrupt_agent`／`interrupt()` |
+| **Iniciar debate** | `team_debate_start`／`startDebate()` |
+| **Pausar protocolo**、**Retomar protocolo**、**Avançar fase**、**Concluir debate** | `team_debate_update`，action 为 `pause`、`resume`、`advance` 或 `complete` |
 
 ## 1. 决定是否组建 Team
 
@@ -12,7 +23,7 @@ spawn 前先说明共享目标、交付物与停止条件。Lead 始终负责拆
 
 ## 2. 设计 roster
 
-为每名 teammate 设置不可变的小写 kebab-case name、一项职责和一项输出。角色只需要自身 prompt 时使用 `fresh`；需要 Lead 已完成历史时使用 `fork`。多样性属于任务要求时，显式选择 provider/model/persona；省略值只在创建时继承一次，不会跟随 Lead 后续变更。
+为每名 teammate 设置不可变的小写 kebab-case name、一项职责和一项输出。角色只需要自身 prompt 时使用 `fresh`；需要 Lead 已完成历史时使用 `fork`。多样性属于任务要求时，在 **Criar integrante** 中选择已配置 provider 及其公布的一个 model；角色需要时再添加 persona。**Herdar provider e modelo da líder** 只在创建时继承一次 Lead 路由；显式选择继续归属于该 teammate，不会跟随 Lead 后续变更。
 
 实用的 roster 让不同成员承担不同失败模式：
 

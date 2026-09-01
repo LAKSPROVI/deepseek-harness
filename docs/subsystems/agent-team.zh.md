@@ -95,12 +95,14 @@ interface TeamTaskSnapshot {
 |---|---|---|
 | Host 领域 | [`packages/subagent/agent-team`](../../packages/subagent/agent-team/README.zh.md) | Team 身份、roster、mailbox、任务 DAG、debate 状态、恢复、projection 与浏览器 Remote method。 |
 | 模型 adapter | [`packages/subagent/tool-agent-team`](../../packages/subagent/tool-agent-team/README.zh.md) | Team 策略与 13 个 scoped tool；只由 `agent-teams` preset 挂载。 |
-| Agent preset | [`apps/cli/config/agent-presets/agent-teams`](../../apps/cli/config/agent-presets/agent-teams/agent.cordis.yml) | 一个 Session 的 Lead persona 与模型可见 Team composition。 |
-| 浏览器 view | [`packages/client/ui-subagent`](../../packages/client/ui-subagent/README.zh.md) | roster、task 与 debate 显示，以及 spawn、guidance、interrupt 和 debate control。 |
+| Agent preset | [`apps/cli/config/agent-presets/agent-teams`](../../apps/cli/config/agent-presets/agent-teams/agent.cordis.yml) | 一个 Session 的 Lead persona 与模型可见 Team composition；界面显示为 **Equipe de agentes**。 |
+| 浏览器 view | [`packages/client/ui-subagent`](../../packages/client/ui-subagent/README.zh.md) | 巴西葡萄牙语 **Integrantes**、**Tarefas** 与 **Debate** 显示；从 Lead Session 的 `session.models` directory 加载的 provider／model selector；以及 teammate、guidance、interrupt 和 debate control。 |
 | transport assembly | `@deepseek-ai/dsh-api-remotes` 与 Typert | 通过通用 Session-aware Host gateway 生成 `agentTeams` Client Remote。 |
 | 持久 carrier | Lead Session log 与 `agentTeam` projection | replay 的 source of truth；projection 是浏览器安全的 read model。 |
 
 Host composition 即使对普通 preset 也挂载领域服务，让恢复与 projection 只有一个进程级拥有方。`agent-teams` preset 只增加模型 adapter 与协作策略，从而不把 Team schema 和 prompt 成本带进无关 Session。
+
+本地化仅限 presentation。浏览器用巴西葡萄牙语呈现 member status（`em execução`、`ocioso`、`inativo`、`em criação`、`falhou`）、debate phase（`posições`、`crítica`、`réplica`、`verificação`、`síntese`）与 debate status（`ativo`、`pausado`、`concluído`）。持久 snapshot、Remote payload、tool 与 CAS mutation 继续使用 `running`、`idle`、`inactive`、`provisioning`、`failed`、`positions`、`critique`、`rebuttal`、`verification`、`synthesis`、`active`、`paused` 与 `completed`。用户输入文本和 provider diagnostic 不会翻译。
 
 ## 操作与数据流
 

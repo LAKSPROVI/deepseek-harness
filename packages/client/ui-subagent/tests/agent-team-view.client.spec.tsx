@@ -6,6 +6,7 @@ import type {
   TeamMemberView,
   TeamProjection,
 } from '@deepseek-ai/dsh-agent-team/client'
+import type { SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
 import type {
   SessionId,
   SessionListState,
@@ -24,6 +25,27 @@ afterEach(() => {
 
 const LEAD = 'lead-session' as SessionId
 const WORKER = 'worker-session' as SessionId
+
+function modelDirectory(over: Partial<SessionModels> = {}): SessionModels {
+  return {
+    current: { provider: 'deepseek', model: 'deepseek-chat' },
+    routable: true,
+    groups: [{
+      id: 'deepseek',
+      name: 'DeepSeek',
+      models: [{ id: 'deepseek-chat', name: 'DeepSeek Chat' }],
+    }, {
+      id: 'openai',
+      name: 'OpenAI',
+      models: [
+        { id: 'gpt-5', name: 'GPT-5' },
+        { id: 'gpt-5-mini', name: 'GPT-5 mini' },
+      ],
+    }],
+    failures: [],
+    ...over,
+  }
+}
 
 function debate(over: Partial<TeamDebateSnapshot> = {}): TeamDebateSnapshot {
   return {
@@ -130,6 +152,7 @@ function sessionState(): SessionListState {
 
 function actions(over: Partial<AgentTeamActions> = {}): AgentTeamActions {
   return {
+    loadModels: vi.fn<AgentTeamActions['loadModels']>(() => Promise.resolve(modelDirectory())),
     members: vi.fn<AgentTeamActions['members']>(() => Promise.resolve({ ok: true, value: runtimeMembers() })),
     spawn: vi.fn<AgentTeamActions['spawn']>(() => Promise.resolve({ ok: true, value: {} })),
     guide: vi.fn<AgentTeamActions['guide']>(() => Promise.resolve({ ok: true, value: {} })),
@@ -207,7 +230,9 @@ describe('AgentTeamView', () => {
     fireEvent.change(screen.getByLabelText('Descrição'), { target: { value: 'Reviews the proposal' } })
     fireEvent.change(screen.getByLabelText('Instrução inicial'), { target: { value: 'Find release risks.' } })
     fireEvent.change(screen.getByLabelText('Contexto'), { target: { value: 'fork' } })
+    await screen.findByRole('option', { name: 'OpenAI' })
     fireEvent.change(screen.getByLabelText(/Provider de LLM/), { target: { value: 'openai' } })
+    expect(screen.getByRole('option', { name: 'GPT-5 mini' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText(/Modelo/), { target: { value: 'gpt-5' } })
     fireEvent.change(screen.getByLabelText(/Persona/), { target: { value: 'Adversarial reviewer' } })
     fireEvent.click(screen.getByRole('button', { name: 'Criar integrante' }))
@@ -232,6 +257,33 @@ describe('AgentTeamView', () => {
     await waitFor(() => {
       expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Criar integrante' }).disabled).toBe(false)
     })
+  })
+
+  it('keeps inherited routing available when the model catalog fails and retries on demand', async () => {
+    const loadModels = vi.fn<AgentTeamActions['loadModels']>()
+      .mockRejectedValueOnce(new Error('catalog offline'))
+      .mockResolvedValueOnce(modelDirectory())
+    const spawn = vi.fn<AgentTeamActions['spawn']>(() => Promise.resolve({ ok: true, value: {} }))
+    render(<AgentTeamView {...viewProps(null, actions({ loadModels, spawn }))} />)
+
+    expect(await screen.findByText(/Catálogo indisponível: catalog offline/)).toBeTruthy()
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: /Provider de LLM/ }).value).toBe('')
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'inherited' } })
+    fireEvent.change(screen.getByLabelText('Descrição'), { target: { value: 'Uses the Lead route' } })
+    fireEvent.change(screen.getByLabelText('Instrução inicial'), { target: { value: 'Review the decision.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Criar integrante' }))
+
+    await waitFor(() => {
+      expect(spawn).toHaveBeenCalledWith({
+        name: 'inherited',
+        description: 'Uses the Lead route',
+        prompt: 'Review the decision.',
+        context: 'fresh',
+      }, expect.any(AbortSignal))
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
+    expect(await screen.findByRole('option', { name: 'OpenAI' })).toBeTruthy()
+    expect(loadModels).toHaveBeenCalledTimes(2)
   })
 
   it('starts a debate and submits revision-bound protocol updates', async () => {

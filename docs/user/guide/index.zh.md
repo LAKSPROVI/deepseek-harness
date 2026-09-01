@@ -34,11 +34,11 @@ Agent（智能体）可以读取和编辑工作区文件、运行命令、委派
 
 ## 协调 Team
 
-当任务需要不同角色、模型 provider 或人工控制 debate 时，使用 [Agent Teams](./agent-teams.zh.md)。该指南涵盖 teammate route、guidance、protocol control、持久化与恢复。
+当任务需要不同角色、模型 provider 或人工控制 debate 时，使用 [**Equipe de agentes** Agent Teams view](./agent-teams.zh.md)。该指南涵盖 teammate route、巴西葡萄牙语 control、guidance、protocol transition、持久化与恢复。
 
 ## 继续使用
 
-- [使用 Agent Teams 协调工作](./agent-teams.zh.md)
+- [使用 Equipe de agentes 操作 Agent Teams](./agent-teams.zh.md)
 - [配置模型](./providers.zh.md)
 - [了解提示词库](../../../packages/client/ui-prompt-library/README.zh.md)
 - [阅读附件参考](../../subsystems/attachment.zh.md)

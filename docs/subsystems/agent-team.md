@@ -95,12 +95,14 @@ The `agentTeam` projection exposes durable member snapshots, non-deleted task sn
 |---|---|---|
 | Host domain | [`packages/subagent/agent-team`](../../packages/subagent/agent-team/README.md) | Team identity, roster, mailbox, task DAG, debate state, recovery, projection, and browser Remote methods. |
 | Model adapter | [`packages/subagent/tool-agent-team`](../../packages/subagent/tool-agent-team/README.md) | Team policy and 13 scoped tools; mounted only by the `agent-teams` preset. |
-| Agent preset | [`apps/cli/config/agent-presets/agent-teams`](../../apps/cli/config/agent-presets/agent-teams/agent.cordis.yml) | Lead persona and model-visible Team composition for one Session. |
-| Browser view | [`packages/client/ui-subagent`](../../packages/client/ui-subagent/README.md) | Roster, task, and debate display plus spawn, guidance, interruption, and debate controls. |
+| Agent preset | [`apps/cli/config/agent-presets/agent-teams`](../../apps/cli/config/agent-presets/agent-teams/agent.cordis.yml) | Lead persona and model-visible Team composition for one Session; displayed as **Equipe de agentes**. |
+| Browser view | [`packages/client/ui-subagent`](../../packages/client/ui-subagent/README.md) | Brazilian Portuguese **Integrantes**, **Tarefas**, and **Debate** displays; provider/model selectors loaded from the Lead Session's `session.models` directory; teammate, guidance, interruption, and debate controls. |
 | Transport assembly | `@deepseek-ai/dsh-api-remotes` and Typert | Generated `agentTeams` Client Remote over the generic Session-aware Host gateway. |
 | Durable carrier | Lead Session log and `agentTeam` projection | Source of truth for replay; the projection is the browser-safe read model. |
 
 The Host composition mounts the domain service even for ordinary presets so recovery and projection have one process-wide owner. The `agent-teams` preset adds only the model adapter and collaboration policy, keeping Team schemas and prompt cost out of unrelated Sessions.
+
+Localization is confined to presentation. The browser renders member states (`em execução`, `ocioso`, `inativo`, `em criação`, `falhou`), debate phases (`posições`, `crítica`, `réplica`, `verificação`, `síntese`), and debate states (`ativo`, `pausado`, `concluído`) in Brazilian Portuguese. Durable snapshots, Remote payloads, tools, and compare-and-set mutations retain `running`, `idle`, `inactive`, `provisioning`, `failed`, `positions`, `critique`, `rebuttal`, `verification`, `synthesis`, `active`, `paused`, and `completed`. User-authored text and provider diagnostics are not translated.
 
 ## Operation and data flow
 

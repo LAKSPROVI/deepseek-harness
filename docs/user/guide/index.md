@@ -34,11 +34,11 @@ The attachment limit is a transport and storage limit, not a promise that the se
 
 ## Coordinate a team
 
-Use [Agent Teams](./agent-teams.md) when a task benefits from distinct roles, model providers, or a human-controlled debate. The guide covers teammate routes, guidance, protocol controls, persistence, and recovery.
+Use the [**Equipe de agentes** Agent Teams view](./agent-teams.md) when a task benefits from distinct roles, model providers, or a human-controlled debate. The guide covers teammate routes, Brazilian Portuguese controls, guidance, protocol transitions, persistence, and recovery.
 
 ## Continue
 
-- [Coordinate work with Agent Teams](./agent-teams.md)
+- [Operate Equipe de agentes with Agent Teams](./agent-teams.md)
 - [Configure models](./providers.md)
 - [Understand the prompt library](../../../packages/client/ui-prompt-library/README.md)
 - [Read the attachment reference](../../subsystems/attachment.md)

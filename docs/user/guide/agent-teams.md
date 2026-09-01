@@ -1,4 +1,4 @@
-# Coordinate work with Agent Teams
+# Operate Equipe de agentes with Agent Teams
 
 English | [中文](agent-teams.zh.md)
 
@@ -16,7 +16,7 @@ Choose a workspace, select the **Equipe de agentes** Agent preset, and create a 
 
 The Lead is participant 1. The maximum roster is the Lead plus nine teammates. All members share the workspace and see file changes immediately.
 
-## 3. Open the Agent Teams tab
+## 3. Open the Equipe de agentes tab
 
 After the first prompt is accepted, open **Equipe de agentes** beside **Chat** and **Trajectory**. The operational view uses Brazilian Portuguese labels and contains:
 
@@ -38,8 +38,8 @@ In **Criar integrante**, fill these fields:
 | **Descrição** | Short responsibility shown in the roster and child catalog. |
 | **Instrução inicial** | The teammate's first objective. Include expected output and evidence. |
 | **Contexto** | **Começar sem histórico** starts without Lead history. **Copiar histórico concluído** copies the Lead's completed-turn prefix once. |
-| **Provider de LLM** | Provider id. Leave the field empty to use the Lead route at creation. |
-| **Modelo** | Model id for that provider. Leave the field empty to use the Lead model at creation. |
+| **Provider de LLM** | Select a configured provider, or keep **Herdar provider e modelo da líder** to inherit the Lead route at creation. |
+| **Modelo** | Select one model from the chosen provider. An explicit provider requires an explicit model. |
 | **Persona** | Additional system persona for this teammate only. |
 
 Create distinct roles rather than duplicate generalists. A practical three-person roster is a Lead, an implementer, and a verifier using a different model or provider. Failed provisioning still reserves the name, so correct the route and use a new name.

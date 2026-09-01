@@ -54,7 +54,7 @@ roster 同时报告持久 provisioning／failed phase 与实时 `running`／`idl
 
 结构化 debate 是一个持久快照，包含 CAS revision、participant name、round、phase、status 与 transition history。phase 依次为 `positions`、`critique`、`rebuttal`、`verification` 和 `synthesis`。只有 Lead 可以启动或更新 debate；更新必须携带其 id 与 expected revision，并执行 `pause`、`resume`、`advance` 或 `complete`。status 为 `active`、`paused` 或 `completed`。暂停会阻止 protocol 推进，但不会中断已经运行的 turn。
 
-`agentTeam` Session projection 向浏览器 consumer 提供持久 member snapshot、未删除 task snapshot 与当前 debate，并明确排除 queued mailbox 内容。`ui-subagent` Web view 将该 projection 与实时 roster status 结合，提供 roster、只读 task 与 debate 显示，以及 spawn、guidance、interrupt 和 debate 控制。
+`agentTeam` Session projection 向浏览器 consumer 提供持久 member snapshot、未删除 task snapshot 与当前 debate，并明确排除 queued mailbox 内容。`ui-subagent` Web view 将该 projection 与实时 roster status 结合，以巴西葡萄牙语呈现 **Equipe de agentes** 标签页：**Integrantes**、**Tarefas**、**Debate**、**Criar integrante**、**Orientar integrante**、**Interromper tarefa**，以及 Lead 授权的 debate transition。presentation label 不会改变持久 status／phase／action value、生成式 Remote payload、用户输入文本或 provider diagnostic。
 
 `waitForChange()` 可以等待注册后发生的下一条 roster、task、mailbox、debate 或实时 status 边，时长范围为 10 秒到 1 小时；它只报告等待是否超时，也不会回放调用前已经发生的变化。运行时 dispose 会释放当前等待，并使后续等待不经超时立即返回。调用方需要在唤醒或超时后重新读取权威状态。取消会保留 Error reason；非 Error reason 则通过 `TEAM_WAIT_ABORTED` 以结构化检查结果报告，不再强制转成 object 字符串。`interrupt()` 仅限 Lead，并委托 continuable-subagent 的 interrupt 路径以 `keepInbox` 只取消 live teammate 的当前 turn；它既不释放任务 owner，也不删除持久 mail。
 

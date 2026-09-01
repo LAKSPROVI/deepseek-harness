@@ -26,7 +26,7 @@
 
 插件监听 Agent publication，并通过对应 Agent scope 安装注册。因此，fresh 创建与 cold resume 都会在第一次模型请求前获得相同工具／提示词集合。Agent dispose 和插件 HMR 会移除全部 scoped 注册；重新加载插件会为仍 live 的每个成员安装一套新注册，而不改变 continuation Activation。
 
-Web UI 位于 `ui-subagent`，不属于该模型 adapter。它呈现 projection 提供的 roster、只读任务板与 debate timeline，并提供 spawn、guidance、interrupt 以及 Lead 授权的 debate transition 控制。
+Web UI 位于 `ui-subagent`，不属于该模型 adapter。其巴西葡萄牙语 **Equipe de agentes** control 调用相同操作：**Criar integrante** 对应 `spawn_teammate`；**Orientar integrante** 下的 quiet 与 waking 选项对应 `send_message` 与 `followup_task`；**Interromper tarefa** 对应 `interrupt_agent`；**Iniciar debate**、**Pausar protocolo**、**Retomar protocolo**、**Avançar fase** 与 **Concluir debate** 对应结构化 debate tool。翻译后的 UI 不改变 tool name 或 argument。
 
 ## 模型体验
 

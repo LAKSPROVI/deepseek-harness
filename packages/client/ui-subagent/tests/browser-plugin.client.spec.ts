@@ -1,5 +1,6 @@
 /** ui-subagent browser half: catalog actions and read-only composer routing. */
 import { Context } from '@deepseek-ai/cordis'
+import type { SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { describe, expect, it } from 'vitest'
 import {
@@ -29,6 +30,17 @@ function summary(partial: Partial<SessionSummary> & { id: SessionId }): SessionS
 }
 
 const sid = (id: string) => id as SessionId
+
+const MODEL_DIRECTORY: SessionModels = {
+  current: { provider: 'deepseek', model: 'deepseek-chat' },
+  routable: true,
+  groups: [{
+    id: 'openai',
+    name: 'OpenAI',
+    models: [{ id: 'gpt-5', name: 'GPT-5' }],
+  }],
+  failures: [],
+}
 
 /** Fake root sessions face for catalog actions. */
 function sessionsWith(sessions: SessionSummary[]) {
@@ -72,7 +84,17 @@ async function fullBench(sessions: SessionSummary[]) {
   const ctx = new Context()
   const face = sessionsWith(sessions)
   ctx.provide('sessions', face)
-  ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
+  ctx.provide('connection', {
+    api: {
+      sessions: {
+        models: ({ sessionId }: { sessionId: SessionId }) => Promise.resolve({
+          result: { ok: true as const, value: { ...MODEL_DIRECTORY, requestedFor: sessionId } },
+        }),
+      },
+      settings: {},
+    },
+    isLoopback: false,
+  } as never)
   const success = (value: unknown) => Promise.resolve({ ok: true as const, value })
   const agentTeams = {
     members: () => success([]),
@@ -103,7 +125,7 @@ const FAMILY: SessionSummary[] = [
 
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'slots', 'remote', 'remote.agentTeams', 'locale'])
+    expect(inject).toEqual(['connection', 'sessions', 'slots', 'remote', 'remote.agentTeams', 'locale'])
   })
 
   it('keeps deferred Agent Team Remote actions inside the injected parent service', async () => {
@@ -113,6 +135,10 @@ describe('apply', () => {
     const actions = (teamEntry.inject as unknown as (id: SessionId) => AgentTeamViewInjected)(sid('parent'))
 
     await expect(actions.members()).resolves.toEqual({ ok: true, value: [] })
+    await expect(actions.loadModels()).resolves.toMatchObject({
+      groups: MODEL_DIRECTORY.groups,
+      requestedFor: sid('parent'),
+    })
   })
 
   it('registers catalog actions and selects read-only subagent composers from session facts', async () => {

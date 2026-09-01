@@ -1,4 +1,5 @@
 /** Web subagent catalog, navigation, and addressed-session composer owner. */
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type {
   ClientContext, SessionId, SubagentAddress,
 } from '@deepseek-ai/dsh-client-runtime/client'
@@ -29,7 +30,7 @@ export type {
 } from './SubagentReadOnlyComposer.tsx'
 
 /** Required services for conversation slots, Team mutations, and session navigation. */
-export const inject = ['sessions', 'slots', 'remote', 'remote.agentTeams', 'locale']
+export const inject = ['connection', 'sessions', 'slots', 'remote', 'remote.agentTeams', 'locale']
 
 /** Claim the composer for one-shot history or an unavailable continuation owner. */
 function selectReadOnlySubagent(owner: ComposerChainProps): SubagentReadOnlyMatch | null {
@@ -49,9 +50,15 @@ function selectReadOnlySubagent(owner: ComposerChainProps): SubagentReadOnlyMatc
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-subagent: dictionaries')
+  const connection = ctx.get('connection') as ConnectionHandle
   const sessions = ctx.sessions
   const t = ctx.locale.bind(NS)
   const teamActions = (sessionId: SessionId): AgentTeamViewInjected => ({
+    loadModels: async () => {
+      const { result } = await connection.api.sessions.models({ sessionId })
+      if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+      return result.value
+    },
     members: async () => await ctx.remote.agentTeams.members(sessionId),
     spawn: async (request, signal) => await ctx.remote.agentTeams.spawn(sessionId, request, signal),
     guide: async (request, signal) => await ctx.remote.agentTeams.guide(sessionId, request, signal),

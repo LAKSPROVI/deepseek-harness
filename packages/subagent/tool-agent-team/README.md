@@ -26,7 +26,7 @@ Every tool requires the exact calling `Agent`. `spawn_teammate`, `interrupt_agen
 
 The plugin listens to Agent publication and installs its registrations through that Agent's scope. Fresh creation and cold resume therefore receive the same tool/prompt set before the first model request. Agent disposal and plugin HMR remove every scoped registration; reloading the plugin installs one fresh set in each still-live member without changing its continuation Activation.
 
-The Web UI lives in `ui-subagent`, not this model adapter. It presents the projected roster, read-only task board, and debate timeline, with controls for spawn, guidance, interruption, and Lead-authorized debate transitions.
+The Web UI lives in `ui-subagent`, not this model adapter. Its Brazilian Portuguese **Equipe de agentes** controls invoke the same operations: **Criar integrante** maps to `spawn_teammate`; quiet and waking choices under **Orientar integrante** map to `send_message` and `followup_task`; **Interromper tarefa** maps to `interrupt_agent`; and **Iniciar debate**, **Pausar protocolo**, **Retomar protocolo**, **Avançar fase**, and **Concluir debate** map to the structured-debate tools. The translated UI does not change tool names or arguments.
 
 ## Model Experience
 
