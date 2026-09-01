@@ -108,12 +108,47 @@ function optionalText(value: string): string | undefined {
   return trimmed === '' ? undefined : trimmed
 }
 
-function readable(value: string): string {
-  return value.replaceAll('_', ' ')
+const MEMBER_STATUS_LABELS: Record<TeamMemberView['status'], string> = {
+  running: 'em execução',
+  idle: 'ocioso',
+  inactive: 'inativo',
+  provisioning: 'em criação',
+  failed: 'falhou',
+}
+
+const MEMBER_ROLE_LABELS: Record<TeamMemberView['role'], string> = {
+  lead: 'líder',
+  teammate: 'integrante',
+}
+
+const MEMBER_CONTEXT_LABELS: Record<NonNullable<TeamMemberView['context']>, string> = {
+  fresh: 'contexto novo',
+  fork: 'histórico copiado',
+}
+
+const TASK_STATUS_LABELS: Record<TeamProjection['tasks'][number]['status'], string> = {
+  pending: 'pendente',
+  in_progress: 'em andamento',
+  completed: 'concluída',
+  deleted: 'excluída',
+}
+
+const DEBATE_PHASE_LABELS: Record<TeamDebatePhase, string> = {
+  positions: 'posições',
+  critique: 'crítica',
+  rebuttal: 'réplica',
+  verification: 'verificação',
+  synthesis: 'síntese',
+}
+
+const DEBATE_STATUS_LABELS: Record<TeamDebateSnapshot['status'], string> = {
+  active: 'ativo',
+  paused: 'pausado',
+  completed: 'concluído',
 }
 
 function resultError(result: RemoteResult<unknown>): string | null {
-  return result.ok ? null : `${result.error.message} (${result.error.code})`
+  return result.ok ? null : `Não foi possível concluir a ação: ${result.error.message} (${result.error.code})`
 }
 
 function statusClass(status: TeamMemberView['status']): string {
@@ -199,7 +234,7 @@ export function AgentTeamView({
       setRuntimeMembers(result.value)
       return true
     } catch (cause: unknown) {
-      if (showPending) setError(cause instanceof Error ? cause.message : 'Unable to load Team members.')
+      if (showPending) setError(cause instanceof Error ? `Não foi possível carregar os integrantes: ${cause.message}` : 'Não foi possível carregar os integrantes da equipe.')
       return false
     } finally {
       if (showPending) {
@@ -234,7 +269,7 @@ export function AgentTeamView({
       if (message !== null) setError(message)
       return result
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : 'The Agent Teams action failed.')
+      setError(cause instanceof Error ? `A ação da equipe falhou: ${cause.message}` : 'A ação da equipe de agentes falhou.')
       return undefined
     } finally {
       pendingRef.current = null
@@ -341,10 +376,10 @@ export function AgentTeamView({
     return (
       <div className={css.root} data-agent-team-view>
         <section className={css.empty} aria-labelledby={fieldId(sessionId, 'empty-title')}>
-          <span className={css.emptyMark} aria-hidden="true">AT</span>
+          <span className={css.emptyMark} aria-hidden="true">EA</span>
           <div>
-            <h2 id={fieldId(sessionId, 'empty-title')}>Agent Teams is not enabled</h2>
-            <p>Mount the Agent Teams host capability for this session to coordinate teammates, tasks, and debates.</p>
+            <h2 id={fieldId(sessionId, 'empty-title')}>Equipe de agentes não habilitada</h2>
+            <p>Habilite o recurso Agent Teams nesta sessão para coordenar integrantes, tarefas e debates.</p>
           </div>
         </section>
       </div>
@@ -362,27 +397,27 @@ export function AgentTeamView({
     <div className={css.root} data-agent-team-view>
       <header className={css.hero}>
         <div>
-          <p className={css.eyebrow}>Agent Teams</p>
-          <h2>Coordinate the team</h2>
-          <p className={css.heroCopy}>Observe up to ten agents, guide durable work, and advance a structured debate.</p>
+          <p className={css.eyebrow}>Equipe de agentes</p>
+          <h2>Coordene a equipe</h2>
+          <p className={css.heroCopy}>Acompanhe até dez agentes, oriente o trabalho persistente e conduza um debate estruturado.</p>
         </div>
-        <dl className={css.metrics} aria-label="Team summary">
-          <div><dt>Members</dt><dd>{roster.length}/10</dd></div>
-          <div><dt>Running</dt><dd>{activeCount}</dd></div>
-          <div><dt>Open tasks</dt><dd>{openTaskCount}</dd></div>
+        <dl className={css.metrics} aria-label="Resumo da equipe">
+          <div><dt>Integrantes</dt><dd>{roster.length}/10</dd></div>
+          <div><dt>Em execução</dt><dd>{activeCount}</dd></div>
+          <div><dt>Tarefas abertas</dt><dd>{openTaskCount}</dd></div>
         </dl>
       </header>
 
       {projection === null && (
         <div className={css.optInNotice}>
-          No durable Team activity yet. Spawn the first teammate or start a debate to opt this session in.
+          Ainda não há atividade persistida. Crie o primeiro integrante ou inicie um debate para ativar esta sessão.
         </div>
       )}
 
       {error !== null && (
         <div className={css.error} role="alert">
           <span>{error}</span>
-          <button type="button" className={css.textButton} onClick={() => { setError(null) }}>Dismiss</button>
+          <button type="button" className={css.textButton} onClick={() => { setError(null) }}>Fechar</button>
         </div>
       )}
 
@@ -391,8 +426,8 @@ export function AgentTeamView({
           <section className={css.panel} aria-labelledby={fieldId(sessionId, 'roster-title')}>
             <div className={css.sectionHeader}>
               <div>
-                <p className={css.sectionKicker}>Runtime roster</p>
-                <h3 id={fieldId(sessionId, 'roster-title')}>Members</h3>
+                <p className={css.sectionKicker}>Equipe em tempo real</p>
+                <h3 id={fieldId(sessionId, 'roster-title')}>Integrantes</h3>
               </div>
               <button
                 type="button"
@@ -400,10 +435,10 @@ export function AgentTeamView({
                 disabled={formsDisabled}
                 onClick={() => { void refreshMembers(true) }}
               >
-                {pending === 'members' ? 'Refreshing…' : 'Refresh status'}
+                {pending === 'members' ? 'Atualizando…' : 'Atualizar status'}
               </button>
             </div>
-            <div className={css.roster} role="list" aria-label="Agent Team members">
+            <div className={css.roster} role="list" aria-label="Integrantes da equipe de agentes">
               {roster.map(member => (
                 <article className={css.memberCard} role="listitem" key={member.id}>
                   <div className={css.memberIdentity}>
@@ -411,21 +446,21 @@ export function AgentTeamView({
                     <div className={css.memberCopy}>
                       <div className={css.memberTitleRow}>
                         <strong>{member.name}</strong>
-                        <span className={css.roleBadge}>{member.role}</span>
+                        <span className={css.roleBadge}>{MEMBER_ROLE_LABELS[member.role]}</span>
                         {member.persona !== undefined && (
                           <span className={css.personaBadge} title={member.persona}>Persona</span>
                         )}
                       </div>
-                      <p>{member.description ?? (member.role === 'lead' ? 'Team coordinator' : 'No description')}</p>
+                      <p>{member.description ?? (member.role === 'lead' ? 'Coordena a equipe' : 'Sem descrição')}</p>
                     </div>
                   </div>
                   <div className={css.memberFacts}>
-                    <span className={css.statusLabel}>{readable(member.status)}</span>
-                    <span title="Subagent transport">{member.provider ?? 'host'}</span>
-                    <span title="LLM provider and model">
-                      {[member.llmProvider, member.model].filter(Boolean).join(' / ') || 'Inherited model'}
+                    <span className={css.statusLabel}>{MEMBER_STATUS_LABELS[member.status]}</span>
+                    <span title="Transporte do subagente">{member.provider ?? 'host'}</span>
+                    <span title="Provider e modelo de LLM">
+                      {[member.llmProvider, member.model].filter(Boolean).join(' / ') || 'Modelo herdado'}
                     </span>
-                    {member.context !== undefined && <span>{member.context} context</span>}
+                    {member.context !== undefined && <span>{MEMBER_CONTEXT_LABELS[member.context]}</span>}
                   </div>
                   {member.diagnostics.length > 0 && (
                     <p className={css.diagnostic}>{member.diagnostics.join(' · ')}</p>
@@ -437,9 +472,9 @@ export function AgentTeamView({
                         className={css.dangerButton}
                         disabled={formsDisabled || member.status !== 'running'}
                         onClick={() => { void handleInterrupt(member.name) }}
-                        aria-label={`Interrupt ${member.name}'s active turn`}
+                        aria-label={`Interromper a tarefa atual de ${member.name}`}
                       >
-                        {pending === `interrupt:${member.name}` ? 'Interrupting…' : 'Interrupt turn'}
+                        {pending === `interrupt:${member.name}` ? 'Interrompendo…' : 'Interromper tarefa'}
                       </button>
                     </div>
                   )}
@@ -451,29 +486,29 @@ export function AgentTeamView({
           <section className={css.panel} aria-labelledby={fieldId(sessionId, 'tasks-title')}>
             <div className={css.sectionHeader}>
               <div>
-                <p className={css.sectionKicker}>Durable task DAG</p>
-                <h3 id={fieldId(sessionId, 'tasks-title')}>Tasks</h3>
+                <p className={css.sectionKicker}>Fluxo persistente de tarefas</p>
+                <h3 id={fieldId(sessionId, 'tasks-title')}>Tarefas</h3>
               </div>
               <span className={css.countBadge}>{tasks.length}</span>
             </div>
             {tasks.length === 0 ? (
-              <p className={css.emptyCopy}>No Team tasks have been recorded.</p>
+              <p className={css.emptyCopy}>Nenhuma tarefa da equipe foi registrada.</p>
             ) : (
               <div className={css.taskList}>
                 {tasks.map(task => (
                   <article className={css.taskCard} key={task.id}>
                     <div className={css.taskHeader}>
                       <strong>{task.subject}</strong>
-                      <span className={`${css.taskStatus} ${css[`task_${task.status}`]}`}>{readable(task.status)}</span>
+                      <span className={`${css.taskStatus} ${css[`task_${task.status}`]}`}>{TASK_STATUS_LABELS[task.status]}</span>
                     </div>
                     {task.description !== '' && <p>{task.description}</p>}
                     <dl className={css.taskFacts}>
-                      <div><dt>Owner</dt><dd>{task.ownerId === undefined ? 'Unassigned' : memberNameById.get(task.ownerId) ?? task.ownerId}</dd></div>
-                      <div><dt>Revision</dt><dd>{task.revision}</dd></div>
-                      <div><dt>Blocked by</dt><dd>{task.blockedBy.length === 0 ? 'None' : task.blockedBy.join(', ')}</dd></div>
+                      <div><dt>Responsável</dt><dd>{task.ownerId === undefined ? 'Não atribuída' : memberNameById.get(task.ownerId) ?? task.ownerId}</dd></div>
+                      <div><dt>Revisão</dt><dd>{task.revision}</dd></div>
+                      <div><dt>Bloqueada por</dt><dd>{task.blockedBy.length === 0 ? 'Nenhuma' : task.blockedBy.join(', ')}</dd></div>
                     </dl>
                     {task.writeScopes.length > 0 && (
-                      <div className={css.scopeList} aria-label="Advisory write scopes">
+                      <div className={css.scopeList} aria-label="Escopos de escrita recomendados">
                         {task.writeScopes.map(scope => <code key={scope}>{scope}</code>)}
                       </div>
                     )}
@@ -486,32 +521,32 @@ export function AgentTeamView({
           <section className={css.panel} aria-labelledby={fieldId(sessionId, 'debate-title')}>
             <div className={css.sectionHeader}>
               <div>
-                <p className={css.sectionKicker}>Structured deliberation</p>
+                <p className={css.sectionKicker}>Deliberação estruturada</p>
                 <h3 id={fieldId(sessionId, 'debate-title')}>Debate</h3>
               </div>
-              {debate !== null && <span className={css.countBadge}>Round {debate.round}/{debate.maxRounds}</span>}
+              {debate !== null && <span className={css.countBadge}>Rodada {debate.round}/{debate.maxRounds}</span>}
             </div>
 
             {debate === null ? (
               <form className={css.form} onSubmit={(event) => { void handleDebateStart(event) }}>
                 <label className={css.fieldWide}>
-                  <span>Topic</span>
+                  <span>Tema</span>
                   <textarea
                     value={debateDraft.topic}
                     onChange={(event) => { setDebateDraft(current => ({ ...current, topic: event.target.value })) }}
                     rows={3}
                     required
-                    placeholder="State the decision or question the team should debate."
+                    placeholder="Descreva a decisão ou pergunta que a equipe deve debater."
                   />
                 </label>
                 <fieldset className={css.participants}>
-                  <legend>Participants</legend>
+                  <legend>Participantes</legend>
                   <label>
                     <input type="checkbox" checked disabled />
-                    <span>lead</span>
+                    <span>líder</span>
                   </label>
                   {teammateNames.length === 0 ? (
-                    <p>Spawn at least one teammate before starting a debate.</p>
+                    <p>Crie ao menos um integrante antes de iniciar o debate.</p>
                   ) : teammateNames.map(name => (
                     <label key={name}>
                       <input
@@ -531,7 +566,7 @@ export function AgentTeamView({
                   ))}
                 </fieldset>
                 <label className={css.compactField}>
-                  <span>Maximum rounds</span>
+                  <span>Máximo de rodadas</span>
                   <input
                     type="number"
                     min={1}
@@ -547,7 +582,7 @@ export function AgentTeamView({
                     className={css.primaryButton}
                     disabled={formsDisabled || debateDraft.topic.trim() === '' || debateDraft.participants.length === 0}
                   >
-                    {pending === 'debate-start' ? 'Starting…' : 'Start debate'}
+                    {pending === 'debate-start' ? 'Iniciando…' : 'Iniciar debate'}
                   </button>
                 </div>
               </form>
@@ -555,30 +590,30 @@ export function AgentTeamView({
               <div className={css.debate}>
                 <div className={css.debateSummary}>
                   <div>
-                    <span className={`${css.debateStatus} ${css[`debate_${debate.status}`]}`}>{debate.status}</span>
+                    <span className={`${css.debateStatus} ${css[`debate_${debate.status}`]}`}>{DEBATE_STATUS_LABELS[debate.status]}</span>
                     <strong>{debate.topic}</strong>
                   </div>
                   <p>{debate.participants.join(', ')}</p>
                 </div>
-                <ol className={css.phaseTimeline} aria-label="Debate phases">
+                <ol className={css.phaseTimeline} aria-label="Fases do debate">
                   {DEBATE_PHASES.map((phase, index) => {
                     const currentIndex = DEBATE_PHASES.indexOf(debate.phase)
                     const state = index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming'
                     return (
                       <li className={css[`phase_${state}`]} key={phase} aria-current={state === 'current' ? 'step' : undefined}>
                         <span>{index + 1}</span>
-                        <strong>{readable(phase)}</strong>
+                        <strong>{DEBATE_PHASE_LABELS[phase]}</strong>
                       </li>
                     )
                   })}
                 </ol>
                 {debate.history.length > 0 && (
-                  <ol className={css.transitionList} aria-label="Debate transition history">
+                  <ol className={css.transitionList} aria-label="Histórico de transições do debate">
                     {debate.history.map(transition => (
                       <li key={transition.revision}>
-                        <span>R{transition.round} · {readable(transition.phase)}</span>
+                        <span>R{transition.round} · {DEBATE_PHASE_LABELS[transition.phase]}</span>
                         <strong>{transition.actor}</strong>
-                        <span>{transition.status}</span>
+                        <span>{DEBATE_STATUS_LABELS[transition.status]}</span>
                         {transition.note !== undefined && <p>{transition.note}</p>}
                       </li>
                     ))}
@@ -587,25 +622,25 @@ export function AgentTeamView({
                 {debate.status !== 'completed' && (
                   <div className={css.debateControls}>
                     <label className={css.fieldWide}>
-                      <span>Transition note <em>optional</em></span>
+                      <span>Nota da transição <em>opcional</em></span>
                       <input
                         type="text"
                         value={debateNote}
                         onChange={(event) => { setDebateNote(event.target.value) }}
-                        placeholder="Record why the protocol is changing."
+                        placeholder="Registre por que o protocolo está mudando."
                       />
                     </label>
                     <div className={css.buttonRow}>
                       {debate.status === 'active' ? (
-                        <button type="button" className={css.secondaryButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('pause') }}>Pause protocol</button>
+                        <button type="button" className={css.secondaryButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('pause') }}>Pausar protocolo</button>
                       ) : (
-                        <button type="button" className={css.secondaryButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('resume') }}>Resume protocol</button>
+                        <button type="button" className={css.secondaryButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('resume') }}>Retomar protocolo</button>
                       )}
-                      <button type="button" className={css.primaryButton} disabled={formsDisabled || debate.status !== 'active'} onClick={() => { void handleDebateUpdate('advance') }}>Advance phase</button>
-                      <button type="button" className={css.dangerButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('complete') }}>Complete debate</button>
+                      <button type="button" className={css.primaryButton} disabled={formsDisabled || debate.status !== 'active'} onClick={() => { void handleDebateUpdate('advance') }}>Avançar fase</button>
+                      <button type="button" className={css.dangerButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('complete') }}>Concluir debate</button>
                     </div>
                     <p className={css.protocolNote}>
-                      Pausing blocks protocol advancement. It does not cancel turns that are already active.
+                      Pausar impede o avanço do protocolo, mas não cancela tarefas que já estão em execução.
                     </p>
                   </div>
                 )}
@@ -614,28 +649,28 @@ export function AgentTeamView({
           </section>
         </main>
 
-        <aside className={css.sideColumn} aria-label="Team controls">
+        <aside className={css.sideColumn} aria-label="Controles da equipe">
           <section className={css.panel} aria-labelledby={fieldId(sessionId, 'spawn-title')}>
             <div className={css.sectionHeader}>
               <div>
-                <p className={css.sectionKicker}>Provision</p>
-                <h3 id={fieldId(sessionId, 'spawn-title')}>Spawn teammate</h3>
+                <p className={css.sectionKicker}>Adicionar integrante</p>
+                <h3 id={fieldId(sessionId, 'spawn-title')}>Criar integrante</h3>
               </div>
             </div>
             {!canSpawn ? (
-              <p className={css.emptyCopy}>The ten-agent observation limit has been reached.</p>
+              <p className={css.emptyCopy}>O limite de dez agentes foi atingido.</p>
             ) : (
               <form className={css.form} onSubmit={(event) => { void handleSpawn(event) }}>
                 <label>
-                  <span>Name</span>
-                  <input value={spawnDraft.name} onChange={(event) => { setSpawnDraft(current => ({ ...current, name: event.target.value })) }} required placeholder="researcher" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" />
+                  <span>Nome</span>
+                  <input value={spawnDraft.name} onChange={(event) => { setSpawnDraft(current => ({ ...current, name: event.target.value })) }} required placeholder="pesquisador" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" />
                 </label>
                 <label>
-                  <span>Description</span>
-                  <input value={spawnDraft.description} onChange={(event) => { setSpawnDraft(current => ({ ...current, description: event.target.value })) }} required placeholder="Investigates constraints" />
+                  <span>Descrição</span>
+                  <input value={spawnDraft.description} onChange={(event) => { setSpawnDraft(current => ({ ...current, description: event.target.value })) }} required placeholder="Investiga restrições e riscos" />
                 </label>
                 <label className={css.fieldWide}>
-                  <span>Initial prompt</span>
+                  <span>Instrução inicial</span>
                   <textarea
                     value={spawnDraft.prompt}
                     onChange={(event) => {
@@ -643,30 +678,31 @@ export function AgentTeamView({
                     }}
                     required
                     rows={4}
+                    placeholder="Defina o objetivo, a entrega esperada e as evidências necessárias."
                   />
                 </label>
                 <label>
-                  <span>Context</span>
+                  <span>Contexto</span>
                   <select value={spawnDraft.context} onChange={(event) => { setSpawnDraft(current => ({ ...current, context: event.target.value as SpawnDraft['context'] })) }}>
-                    <option value="fresh">Fresh</option>
-                    <option value="fork">Fork completed history</option>
+                    <option value="fresh">Começar sem histórico</option>
+                    <option value="fork">Copiar histórico concluído</option>
                   </select>
                 </label>
                 <label>
-                  <span>LLM provider <em>optional</em></span>
-                  <input value={spawnDraft.llmProvider} onChange={(event) => { setSpawnDraft(current => ({ ...current, llmProvider: event.target.value })) }} placeholder="inherit" />
+                  <span>Provider de LLM <em>opcional</em></span>
+                  <input value={spawnDraft.llmProvider} onChange={(event) => { setSpawnDraft(current => ({ ...current, llmProvider: event.target.value })) }} placeholder="herdar da líder" />
                 </label>
                 <label>
-                  <span>Model <em>optional</em></span>
-                  <input value={spawnDraft.model} onChange={(event) => { setSpawnDraft(current => ({ ...current, model: event.target.value })) }} placeholder="inherit" />
+                  <span>Modelo <em>opcional</em></span>
+                  <input value={spawnDraft.model} onChange={(event) => { setSpawnDraft(current => ({ ...current, model: event.target.value })) }} placeholder="herdar da líder" />
                 </label>
                 <label className={css.fieldWide}>
-                  <span>Persona <em>optional</em></span>
-                  <textarea value={spawnDraft.persona} onChange={(event) => { setSpawnDraft(current => ({ ...current, persona: event.target.value })) }} rows={3} placeholder="Additional system persona for this teammate" />
+                  <span>Persona <em>opcional</em></span>
+                  <textarea value={spawnDraft.persona} onChange={(event) => { setSpawnDraft(current => ({ ...current, persona: event.target.value })) }} rows={3} placeholder="Instrução de sistema adicional para este integrante" />
                 </label>
                 <div className={css.formActions}>
                   <button type="submit" className={css.primaryButton} disabled={formsDisabled || !canSpawn}>
-                    {pending === 'spawn' ? 'Spawning…' : 'Spawn teammate'}
+                    {pending === 'spawn' ? 'Criando…' : 'Criar integrante'}
                   </button>
                 </div>
               </form>
@@ -676,13 +712,13 @@ export function AgentTeamView({
           <section className={css.panel} aria-labelledby={fieldId(sessionId, 'guide-title')}>
             <div className={css.sectionHeader}>
               <div>
-                <p className={css.sectionKicker}>Durable mailbox</p>
-                <h3 id={fieldId(sessionId, 'guide-title')}>Guide teammate</h3>
+                <p className={css.sectionKicker}>Caixa de mensagens persistente</p>
+                <h3 id={fieldId(sessionId, 'guide-title')}>Orientar integrante</h3>
               </div>
             </div>
             <form className={css.form} onSubmit={(event) => { void handleGuide(event) }}>
               <label>
-                <span>Target</span>
+                <span>Destinatário</span>
                 <select
                   value={guideDraft.target}
                   onChange={(event) => {
@@ -691,24 +727,24 @@ export function AgentTeamView({
                   required
                   disabled={teammateNames.length === 0}
                 >
-                  {teammateNames.length === 0 && <option value="">No teammates</option>}
+                  {teammateNames.length === 0 && <option value="">Nenhum integrante</option>}
                   {teammateNames.map(name => <option value={name} key={name}>{name}</option>)}
                 </select>
               </label>
               <label>
-                <span>Delivery</span>
+                <span>Entrega</span>
                 <select value={guideDraft.delivery} onChange={(event) => { setGuideDraft(current => ({ ...current, delivery: event.target.value as GuideDraft['delivery'] })) }}>
-                  <option value="wakeup">Wake and guide</option>
-                  <option value="quiet">Queue quietly</option>
+                  <option value="wakeup">Acordar e orientar</option>
+                  <option value="quiet">Apenas deixar na fila</option>
                 </select>
               </label>
               <label className={css.fieldWide}>
-                <span>Guidance</span>
-                <textarea value={guideDraft.content} onChange={(event) => { setGuideDraft(current => ({ ...current, content: event.target.value })) }} required rows={4} placeholder="Add constraints, corrections, or the next objective." />
+                <span>Orientação</span>
+                <textarea value={guideDraft.content} onChange={(event) => { setGuideDraft(current => ({ ...current, content: event.target.value })) }} required rows={4} placeholder="Adicione restrições, correções ou o próximo objetivo." />
               </label>
               <div className={css.formActions}>
                 <button type="submit" className={css.primaryButton} disabled={formsDisabled || guideDraft.target === '' || guideDraft.content.trim() === ''}>
-                  {pending === 'guide' ? 'Sending…' : 'Send guidance'}
+                  {pending === 'guide' ? 'Enviando…' : 'Enviar orientação'}
                 </button>
               </div>
             </form>

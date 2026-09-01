@@ -163,38 +163,38 @@ function viewProps(
 describe('AgentTeamView', () => {
   it('distinguishes an absent projection from an enabled Team with no durable activity', () => {
     const absent = render(<AgentTeamView {...viewProps(undefined)} />)
-    expect(screen.getByRole('heading', { name: 'Agent Teams is not enabled' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Members' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Equipe de agentes não habilitada' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Integrantes' })).toBeNull()
     absent.unmount()
 
     render(<AgentTeamView {...viewProps(null)} />)
-    expect(screen.getByText(/No durable Team activity yet/)).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Members' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Spawn teammate' })).toBeTruthy()
+    expect(screen.getByText(/Ainda não há atividade persistida/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Integrantes' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Criar integrante' })).toBeTruthy()
   })
 
-  it('renders runtime roster details, durable tasks, and the debate timeline', async () => {
+  it('renders Portuguese runtime details, durable tasks, and the debate timeline', async () => {
     render(<AgentTeamView {...viewProps(projection())} />)
 
-    const roster = await screen.findByRole('list', { name: 'Agent Team members' })
+    const roster = await screen.findByRole('list', { name: 'Integrantes da equipe de agentes' })
     expect(within(roster).getByText('researcher')).toBeTruthy()
     expect(within(roster).getByText('openai / gpt-5')).toBeTruthy()
     expect(within(roster).getByText('Persona')).toBeTruthy()
     expect(within(roster).getByTitle('Skeptical release reviewer')).toBeTruthy()
-    expect(within(roster).getByText('running')).toBeTruthy()
+    expect(within(roster).getByText('em execução')).toBeTruthy()
 
-    const tasks = screen.getByRole('heading', { name: 'Tasks' }).closest('section')
+    const tasks = screen.getByRole('heading', { name: 'Tarefas' }).closest('section')
     if (tasks === null) throw new Error('Tasks section not found')
     expect(within(tasks).getByText('Audit release blockers')).toBeTruthy()
-    expect(within(tasks).getByText('in progress')).toBeTruthy()
+    expect(within(tasks).getByText('em andamento')).toBeTruthy()
     expect(within(tasks).getByText('task-0')).toBeTruthy()
     expect(within(tasks).getByText('packages/release')).toBeTruthy()
 
     expect(screen.getByText('Choose the release strategy')).toBeTruthy()
-    expect(screen.getByText('Round 1/3')).toBeTruthy()
-    expect(screen.getByText('critique')).toBeTruthy()
+    expect(screen.getByText('Rodada 1/3')).toBeTruthy()
+    expect(screen.getByText('crítica')).toBeTruthy()
     expect(screen.getByText('Initial positions recorded')).toBeTruthy()
-    expect(screen.getByText(/Pausing blocks protocol advancement/)).toBeTruthy()
+    expect(screen.getByText(/Pausar impede o avanço do protocolo/)).toBeTruthy()
   })
 
   it('submits an LLM-specific spawn request and keeps the form single-flight while pending', async () => {
@@ -203,14 +203,14 @@ describe('AgentTeamView', () => {
     const actionFace = actions({ spawn })
     render(<AgentTeamView {...viewProps(null, actionFace)} />)
 
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'critic' } })
-    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Reviews the proposal' } })
-    fireEvent.change(screen.getByLabelText('Initial prompt'), { target: { value: 'Find release risks.' } })
-    fireEvent.change(screen.getByLabelText('Context'), { target: { value: 'fork' } })
-    fireEvent.change(screen.getByLabelText(/LLM provider/), { target: { value: 'openai' } })
-    fireEvent.change(screen.getByLabelText(/Model/), { target: { value: 'gpt-5' } })
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'critic' } })
+    fireEvent.change(screen.getByLabelText('Descrição'), { target: { value: 'Reviews the proposal' } })
+    fireEvent.change(screen.getByLabelText('Instrução inicial'), { target: { value: 'Find release risks.' } })
+    fireEvent.change(screen.getByLabelText('Contexto'), { target: { value: 'fork' } })
+    fireEvent.change(screen.getByLabelText(/Provider de LLM/), { target: { value: 'openai' } })
+    fireEvent.change(screen.getByLabelText(/Modelo/), { target: { value: 'gpt-5' } })
     fireEvent.change(screen.getByLabelText(/Persona/), { target: { value: 'Adversarial reviewer' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Spawn teammate' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Criar integrante' }))
 
     expect(spawn).toHaveBeenCalledTimes(1)
     expect(spawn.mock.calls[0]?.[0]).toEqual({
@@ -223,14 +223,14 @@ describe('AgentTeamView', () => {
       persona: 'Adversarial reviewer',
     })
     expect(spawn.mock.calls[0]?.[1]).toBeInstanceOf(AbortSignal)
-    const pendingButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Spawning…' })
+    const pendingButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Criando…' })
     expect(pendingButton.disabled).toBe(true)
     fireEvent.click(pendingButton)
     expect(spawn).toHaveBeenCalledTimes(1)
 
     await act(async () => { settle({ ok: true, value: {} }) })
     await waitFor(() => {
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Spawn teammate' }).disabled).toBe(false)
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Criar integrante' }).disabled).toBe(false)
     })
   })
 
@@ -239,10 +239,10 @@ describe('AgentTeamView', () => {
     const startActions = actions({ debateStart })
     const startView = render(<AgentTeamView {...viewProps(projection({ debate: null }), startActions)} />)
 
-    fireEvent.change(screen.getByLabelText('Topic'), { target: { value: '  Select a release path  ' } })
+    fireEvent.change(screen.getByLabelText('Tema'), { target: { value: '  Select a release path  ' } })
     fireEvent.click(screen.getByLabelText('researcher'))
-    fireEvent.change(screen.getByLabelText('Maximum rounds'), { target: { value: '5' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Start debate' }))
+    fireEvent.change(screen.getByLabelText('Máximo de rodadas'), { target: { value: '5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar debate' }))
 
     await waitFor(() => {
       expect(debateStart).toHaveBeenCalledWith({
@@ -255,8 +255,8 @@ describe('AgentTeamView', () => {
 
     const debateUpdate = vi.fn<AgentTeamActions['debateUpdate']>(() => Promise.resolve({ ok: true, value: debate() }))
     render(<AgentTeamView {...viewProps(projection(), actions({ debateUpdate }))} />)
-    fireEvent.change(screen.getByLabelText(/Transition note/), { target: { value: 'Review evidence first' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Advance phase' }))
+    fireEvent.change(screen.getByLabelText(/Nota da transição/), { target: { value: 'Review evidence first' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Avançar fase' }))
 
     await waitFor(() => {
       expect(debateUpdate).toHaveBeenCalledWith({
@@ -275,13 +275,13 @@ describe('AgentTeamView', () => {
     }))
     render(<AgentTeamView {...viewProps(projection(), actions({ guide }))} />)
 
-    fireEvent.change(screen.getByLabelText('Guidance'), { target: { value: 'Verify the rollback plan.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send guidance' }))
+    fireEvent.change(screen.getByLabelText('Orientação'), { target: { value: 'Verify the rollback plan.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar orientação' }))
 
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('guidance rejected (team-busy)')
-    expect(screen.getByRole('heading', { name: 'Members' })).toBeTruthy()
-    fireEvent.click(within(alert).getByRole('button', { name: 'Dismiss' }))
+    expect(alert.textContent).toContain('Não foi possível concluir a ação: guidance rejected (team-busy)')
+    expect(screen.getByRole('heading', { name: 'Integrantes' })).toBeTruthy()
+    fireEvent.click(within(alert).getByRole('button', { name: 'Fechar' }))
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })

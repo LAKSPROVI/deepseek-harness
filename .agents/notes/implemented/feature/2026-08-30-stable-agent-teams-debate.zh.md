@@ -36,7 +36,7 @@ Lead Session 以完整 `team/debate` snapshot 保存一个当前 structured deba
 
 `agentTeam` Session projection 是浏览器安全的完整值，包含 member、task 与当前 debate。它有意排除 queued mailbox content，因为 pending peer mail 属于投递状态，可能包含尚未进入 target Session 的内容，并且 Team control 不需要它。
 
-Web conversation Team tab 从 history tail 读取初始 projection，并从通用 `session/projection` frame 接收后续值。mutation 使用生成的 `agentTeams` Remote 与当前 projected revision；Client plugin 同时注入 deferred Slot action 所访问的父级 `remote` Service，以及控制 activation 的 `remote.agentTeams` namespace。legacy Host API proxy 因此保持领域无关，也不增加 Team-specific HTTP、SSE 或 WebSocket 约定。
+Web conversation Team tab 从 history tail 读取初始 projection，并从通用 `session/projection` frame 接收后续值。preset、标签页、control、phase 与 status label、帮助、无障碍文本和本地错误使用巴西葡萄牙语；protocol value、identifier、用户输入内容与 provider diagnostic 保持不变。mutation 使用生成的 `agentTeams` Remote 与当前 projected revision；Client plugin 同时注入 deferred Slot action 所访问的父级 `remote` Service，以及控制 activation 的 `remote.agentTeams` namespace。legacy Host API proxy 因此保持领域无关，也不增加 Team-specific HTTP、SSE 或 WebSocket 约定。
 
 生成式 Typert Remote 是供 Client bundle 消费的已构建 Host artifact。因此 assembled validation 会先生成并构建 Host module，再构建 Client 与 Web shell，随后操作已有 `dsh web` 进程，而不是替代用的 Vite server。只运行 source test 不能证明正在运行的 GUI 与其生成式 Remote 一致。
 

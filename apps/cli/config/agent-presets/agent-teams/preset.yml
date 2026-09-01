@@ -1,3 +1,3 @@
-name: 智能体团队
+name: Equipe de agentes
 order: 3
-description: 最多 10 个参与者的结构化团队辩论；每位队友可选择不同的提供商、模型和角色。
+description: Debate estruturado com até 10 participantes; cada integrante pode usar provider, modelo e persona diferentes.
