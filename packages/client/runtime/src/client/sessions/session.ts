@@ -31,6 +31,11 @@ import { SessionQueueMirror } from './queue-mirror.ts'
 /** Messages requested per history page. */
 export const PAGE_MESSAGES = 50
 
+/** The fetch carrier's transient cold-start timeout response. */
+function isHistoryTimeout(error: RpcError): boolean {
+  return error.code === 'internal' && error.message === 'signal timed out'
+}
+
 /** Manager-owned observers of a Session object's local state edges. */
 export interface SessionOptions {
   /** Catalog-discovered address selecting non-activating subagent transport. */
@@ -647,6 +652,10 @@ export class Session implements SessionFace {
     try {
       let { result } = await this.history({ maxMessages: PAGE_MESSAGES })
       if (generation !== this.openGeneration) return
+      if (!result.ok && this.address === undefined && isHistoryTimeout(result.error)) {
+        result = (await this.history({ maxMessages: PAGE_MESSAGES })).result
+        if (generation !== this.openGeneration) return
+      }
       if (!result.ok) {
         this.openState = 'error'
         this.openError = result.error

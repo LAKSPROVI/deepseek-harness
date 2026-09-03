@@ -807,7 +807,6 @@ export function InputBar({
               ref={attachmentInputRef}
               className={css.imageInput}
               type="file"
-              accept={fileLimits === undefined ? 'image/png,image/jpeg,image/webp,image/gif' : undefined}
               multiple
               tabIndex={-1}
               aria-hidden

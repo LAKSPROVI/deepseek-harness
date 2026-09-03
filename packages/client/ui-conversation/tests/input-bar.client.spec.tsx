@@ -242,15 +242,12 @@ function attachmentOwner(slotCalls: readonly { key: string; owner: unknown }[]):
 }
 
 describe('image draft rail', () => {
-  it('opens an unrestricted picker when the provider supports generic files', () => {
+  it('opens an unrestricted picker for any file type', () => {
     const addAttachments = vi.fn(() => null)
-    const result = bench({
-      addAttachments,
-      fileLimits: { maxFileBytes: 1024, maxFilesPerMessage: 4, maxMessageFileBytes: 4096 },
-    })
+    const result = bench({ addAttachments })
     const input = result.view.container.querySelector<HTMLInputElement>('input[type="file"]')!
     const open = vi.spyOn(input, 'click')
-    const file = new File(['<svg/>'], 'diagram.svg', { type: 'image/svg+xml' })
+    const file = new File(['server { listen 80; }'], 'nginx.conf', { type: 'text/plain' })
 
     fireEvent.click(result.view.getByRole('button', { name: '添加附件' }))
     expect(open).toHaveBeenCalledOnce()
@@ -260,14 +257,6 @@ describe('image draft rail', () => {
     fireEvent.change(input, { target: { files: [file] } })
     expect(addAttachments).toHaveBeenCalledWith([file])
     expect(input.value).toBe('')
-  })
-
-  it('keeps the raster filter when the provider is image-only', () => {
-    const result = bench({ addAttachments: vi.fn(() => null) })
-    const input = result.view.container.querySelector<HTMLInputElement>('input[type="file"]')!
-
-    fireEvent.click(result.view.getByRole('button', { name: '添加附件' }))
-    expect(input.accept).toBe('image/png,image/jpeg,image/webp,image/gif')
   })
 
   it('collects clipboard files while preserving text from a mixed paste', () => {
