@@ -3,6 +3,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { admitEncodedAttachments } from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -19,6 +20,8 @@ import { TeamTaskBoard } from './task-board.ts'
 import { TeamId, TeamTaskId } from './types.ts'
 import type {
   Config,
+  ContributeTeamDebateRemoteRequest,
+  ContributeTeamDebateRequest,
   CreateTeamTaskRequest,
   GuideTeamMemberRemoteRequest,
   SendTeamMessageRequest,
@@ -26,7 +29,9 @@ import type {
   SpawnTeamMemberRemoteRequest,
   SpawnTeammateRequest,
   SpawnTeammateResult,
+  StartTeamDebateRemoteRequest,
   StartTeamDebateRequest,
+  TeamDebateContentBlock,
   TeamDebateSnapshot,
   TeamMemberView,
   TeamTaskView,
@@ -137,7 +142,12 @@ export class TeamService extends TypertRemoteService {
       this.config.maxMessageBytes,
     )
     this.tasks = new TeamTaskBoard(this.journal, this.config.maxTasks)
-    this.debates = new TeamDebateBoard(this.journal, this.roster, this.config.maxDebateRounds)
+    this.debates = new TeamDebateBoard(
+      this.journal,
+      this.roster,
+      this.config.maxDebateRounds,
+      this.config.maxMessageBytes,
+    )
 
     ctx.inject(['sessionProjections'], (projectionCtx) => {
       projectionCtx.sessionProjections.register<'agentTeam', import('./types.ts').TeamProjection | null>({
@@ -191,9 +201,10 @@ export class TeamService extends TypertRemoteService {
     request: SpawnTeamMemberRemoteRequest,
     signal: AbortSignal,
   ): Promise<SpawnTeammateResult> {
+    const { attachments, prompt, ...member } = request
     return await this.spawnTeammate(agent, {
-      ...request,
-      prompt: [{ type: 'text', text: request.prompt }],
+      ...member,
+      prompt: await this.admitRemoteContent(agent, prompt, attachments),
       provider: request.context === 'fork' ? this.config.forkProvider : this.config.freshProvider,
       signal,
     })
@@ -232,9 +243,10 @@ export class TeamService extends TypertRemoteService {
     request: GuideTeamMemberRemoteRequest,
     signal: AbortSignal,
   ): Promise<SendTeamMessageResult> {
+    const { attachments, content, ...message } = request
     return await this.sendMessage(agent, {
-      ...request,
-      content: [{ type: 'text', text: request.content }],
+      ...message,
+      content: await this.admitRemoteContent(agent, content, attachments),
       signal,
     })
   }
@@ -288,14 +300,47 @@ export class TeamService extends TypertRemoteService {
   }
 
   /**
-   * Create one active structured debate.
+   * Create one active structured debate from admitted evidence.
    * @param agent - exact live Lead Agent authorizing creation.
-   * @param request - topic, participants, and round limit.
+   * @param request - topic, durable evidence, participants, and round limit.
    * @returns the committed initial debate snapshot.
    */
-  @Remote('debateStart')
   async startDebate(agent: Agent, request: StartTeamDebateRequest): Promise<TeamDebateSnapshot> {
     return await this.debates.start(agent, request)
+  }
+
+  /** Create one debate from browser-authored evidence. */
+  @Remote('debateStart')
+  async remoteStartDebate(
+    agent: Agent,
+    request: StartTeamDebateRemoteRequest,
+  ): Promise<TeamDebateSnapshot> {
+    const { attachments, ...debate } = request
+    return await this.startDebate(agent, {
+      ...debate,
+      evidence: await this.admitRemoteContent(agent, '', attachments),
+    })
+  }
+
+  /** Append one admitted participant contribution. */
+  async contributeDebate(
+    agent: Agent,
+    request: ContributeTeamDebateRequest,
+  ): Promise<TeamDebateSnapshot> {
+    return await this.debates.contribute(agent, request)
+  }
+
+  /** Append one browser-authored participant contribution. */
+  @Remote('debateContribute')
+  async remoteContributeDebate(
+    agent: Agent,
+    request: ContributeTeamDebateRemoteRequest,
+  ): Promise<TeamDebateSnapshot> {
+    const { attachments, content, ...contribution } = request
+    return await this.contributeDebate(agent, {
+      ...contribution,
+      content: await this.admitRemoteContent(agent, content, attachments),
+    })
   }
 
   /**
@@ -339,6 +384,26 @@ export class TeamService extends TypertRemoteService {
    */
   tryMembership(agent: Agent): TeamMembership | undefined {
     return this.roster.tryMembership(agent)
+  }
+
+  /** Admit browser attachments against the calling Session before durable Team use. */
+  private async admitRemoteContent(
+    agent: Agent,
+    text: string,
+    inputs: readonly import('@deepseek-ai/dsh-attachment/types').EncodedAttachment[] | undefined,
+  ): Promise<TeamDebateContentBlock[]> {
+    const attachments = inputs ?? []
+    let blocks: TeamDebateContentBlock[] = []
+    if (attachments.length > 0) {
+      const store = this.ctx.get('attachments')
+      if (store === undefined) {
+        throw new TeamError('attachments are unavailable in this deployment', 'TEAM_ATTACHMENTS_UNAVAILABLE')
+      }
+      blocks = [...await admitEncodedAttachments(store, String(agent.session.id), attachments)]
+    }
+    const normalized = text.trim()
+    if (normalized !== '') blocks.push({ type: 'text', text: normalized })
+    return blocks
   }
 
   /** Queue one contained recovery pass after publication has unwound. */

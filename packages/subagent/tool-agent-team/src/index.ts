@@ -36,7 +36,7 @@ Prefer read/edit/write for file changes. If a file operation returns FS_STALE_VE
 
 Use send_message for quiet information that must not start an idle teammate. Use followup_task when the target should run another turn. A delivered peer item starts with its stable message id and sender name. A successful send is already durable even when its result says queued; do not resend it. Shared-task workflow is list, get, claim with the current revision, perform the work, then complete. Task readiness never starts an owner. Before wait_agent, use list_agents and make sure another required member is running or provisioning; use followup_task first when the required member is inactive. wait_agent observes only changes after that call starts, never wakes a member, and returns noProgress immediately when no other member can produce a change. Re-list after wakeup or timeout.
 
-A structured debate follows positions, critique, rebuttal, verification, and synthesis in order. The Lead starts and advances the durable debate with compare-and-set revisions after required participants finish each phase. Pausing a debate blocks protocol advancement but does not cancel an admitted model turn; use interrupt_agent separately for that. The Lead must wait for required teammates and complete synthesis before giving the final answer.`
+A structured debate follows positions, critique, rebuttal, verification, and synthesis in order. Read the current debate, then every listed participant records exactly one consolidated contribution for the current round and phase with team_debate_contribute. The Lead advances only after all required contributions exist; stale revisions require another team_debate_get before retrying. Pausing blocks protocol advancement but does not cancel an admitted model turn; use interrupt_agent separately. The Lead completes synthesis before giving the final answer.`
 
 const ACTIVE_WAIT_STATUSES: ReadonlySet<TeamMemberView['status']> = new Set(['running', 'provisioning'])
 const NO_ACTIVE_PEER_MESSAGE = 'No other Team member is running or provisioning. wait_agent cannot make progress or wake inactive teammates. Re-list with list_agents and team_task_list, then use followup_task to wake each required inactive teammate before waiting again.'
@@ -135,19 +135,80 @@ const TASK_LIST_VALUE_SCHEMA = {
   },
 } as const
 
+const DEBATE_PHASE_SCHEMA = {
+  type: 'string', enum: ['positions', 'critique', 'rebuttal', 'verification', 'synthesis'],
+} as const
+
+const DEBATE_CONTENT_SCHEMA = {
+  oneOf: [{
+    type: 'object', additionalProperties: false,
+    properties: {
+      type: { type: 'string', const: 'text', required: true },
+      text: { type: 'string', required: true },
+    },
+  }, {
+    type: 'object', additionalProperties: false,
+    properties: {
+      type: { type: 'string', const: 'image', required: true },
+      attachment: {
+        type: 'object', required: true, additionalProperties: false,
+        properties: {
+          attachmentId: { type: 'string', required: true },
+          mediaType: { type: 'string', required: true },
+          bytes: { type: 'integer', required: true },
+          width: { type: 'integer', required: true },
+          height: { type: 'integer', required: true },
+          name: { type: 'string' },
+          originalDimensions: {
+            type: 'object', additionalProperties: false,
+            properties: {
+              width: { type: 'integer', required: true },
+              height: { type: 'integer', required: true },
+            },
+          },
+        },
+      },
+    },
+  }, {
+    type: 'object', additionalProperties: false,
+    properties: {
+      type: { type: 'string', const: 'file', required: true },
+      attachment: {
+        type: 'object', required: true, additionalProperties: false,
+        properties: {
+          attachmentId: { type: 'string', required: true },
+          mediaType: { type: 'string', required: true },
+          bytes: { type: 'integer', required: true },
+          name: { type: 'string' },
+        },
+      },
+    },
+  }],
+} as const
+
 const DEBATE_TRANSITION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
     revision: { type: 'integer', required: true },
     round: { type: 'integer', required: true },
-    phase: {
-      type: 'string', required: true,
-      enum: ['positions', 'critique', 'rebuttal', 'verification', 'synthesis'],
-    },
+    phase: { ...DEBATE_PHASE_SCHEMA, required: true },
     status: { type: 'string', required: true, enum: ['active', 'paused', 'completed'] },
     actor: { type: 'string', required: true },
     note: { type: 'string' },
+  },
+} as const
+
+const DEBATE_CONTRIBUTION_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    sequence: { type: 'integer', required: true },
+    revision: { type: 'integer', required: true },
+    round: { type: 'integer', required: true },
+    phase: { ...DEBATE_PHASE_SCHEMA, required: true },
+    author: { type: 'string', required: true },
+    content: { type: 'array', required: true, items: DEBATE_CONTENT_SCHEMA },
+    createdAt: { type: 'integer', required: true },
   },
 } as const
 
@@ -158,14 +219,13 @@ const DEBATE_VIEW_SCHEMA = {
     id: { type: 'string', required: true },
     revision: { type: 'integer', required: true },
     topic: { type: 'string', required: true },
+    evidence: { type: 'array', required: true, items: DEBATE_CONTENT_SCHEMA },
     status: { type: 'string', required: true, enum: ['active', 'paused', 'completed'] },
-    phase: {
-      type: 'string', required: true,
-      enum: ['positions', 'critique', 'rebuttal', 'verification', 'synthesis'],
-    },
+    phase: { ...DEBATE_PHASE_SCHEMA, required: true },
     round: { type: 'integer', required: true },
     maxRounds: { type: 'integer', required: true },
     participants: { type: 'array', required: true, items: { type: 'string' } },
+    contributions: { type: 'array', required: true, items: DEBATE_CONTRIBUTION_SCHEMA },
     history: { type: 'array', required: true, items: DEBATE_TRANSITION_SCHEMA },
   },
 } as const
@@ -371,6 +431,24 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       async execute(_args, exec) {
         const debate = ctx.agentTeams.getDebate(callingAgent(exec.agent, 'team_debate_get'))
         return Promise.resolve(debate === undefined ? {} : { debate })
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_debate_contribute',
+      description: 'Record the calling participant\'s durable contribution to the current debate phase.',
+      parameters: {
+        debate_id: { type: 'string', required: true, description: 'Current debate id.' },
+        expected_revision: { type: 'integer', required: true, description: 'Current debate revision.' },
+        content: { type: 'string', required: true, description: 'One consolidated contribution for the current round and phase.' },
+      },
+      output: jsonOutput(DEBATE_VIEW_SCHEMA),
+      async execute(args, exec) {
+        return await ctx.agentTeams.contributeDebate(callingAgent(exec.agent, 'team_debate_contribute'), {
+          debateId: TeamDebateId(args.debate_id),
+          expectedRevision: args.expected_revision,
+          content: [{ type: 'text', text: args.content }],
+        })
       },
     })))
 

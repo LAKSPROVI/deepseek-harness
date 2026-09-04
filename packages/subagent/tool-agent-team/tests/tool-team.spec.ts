@@ -30,6 +30,7 @@ const TOOL_NAMES = [
   'interrupt_agent',
   'team_debate_start',
   'team_debate_get',
+  'team_debate_contribute',
   'team_debate_update',
   'team_task_create',
   'team_task_list',
@@ -201,11 +202,33 @@ describe('dsh-tool-team', () => {
       expected_revision: paused.revision,
       action: 'advance',
     })).isError).toBe(true)
-    expect(JSON.parse(text(await execute(ctx, lead, 'team_debate_update', {
+    const resumed = JSON.parse(text(await execute(ctx, lead, 'team_debate_update', {
       debate_id: initial.id,
       expected_revision: paused.revision,
       action: 'resume',
-    })))).toMatchObject({ revision: 3, status: 'active' })
+    }))) as { revision: number }
+    expect(resumed).toMatchObject({ revision: 3, status: 'active' })
+
+    const leadContribution = JSON.parse(text(await execute(ctx, lead, 'team_debate_contribute', {
+      debate_id: initial.id,
+      expected_revision: resumed.revision,
+      content: 'Prefer the staged release because rollback stays bounded.',
+    }))) as { revision: number }
+    const workerContribution = JSON.parse(text(await execute(ctx, child, 'team_debate_contribute', {
+      debate_id: initial.id,
+      expected_revision: leadContribution.revision,
+      content: 'Challenge: the migration still needs a compatibility window.',
+    }))) as { revision: number }
+    expect(JSON.parse(text(await execute(ctx, child, 'team_debate_get', {}))))
+      .toMatchObject({ debate: { revision: workerContribution.revision, contributions: [
+        { sequence: 1, author: 'lead', phase: 'positions' },
+        { sequence: 2, author: 'debate-worker', phase: 'positions' },
+      ] } })
+    expect(JSON.parse(text(await execute(ctx, lead, 'team_debate_update', {
+      debate_id: initial.id,
+      expected_revision: workerContribution.revision,
+      action: 'advance',
+    })))).toMatchObject({ phase: 'critique', revision: workerContribution.revision + 1 })
 
     await execute(ctx, lead, 'interrupt_agent', { target: 'debate-worker' })
     await waitNoAgent(ctx, childId)

@@ -3,9 +3,11 @@ import {
   type FormEvent,
 } from 'react'
 import type {
+  ContributeTeamDebateRemoteRequest,
   GuideTeamMemberRemoteRequest,
   SpawnTeamMemberRemoteRequest,
-  StartTeamDebateRequest,
+  StartTeamDebateRemoteRequest,
+  TeamDebateContentBlock,
   TeamDebatePhase,
   TeamDebateSnapshot,
   TeamMemberView,
@@ -13,14 +15,31 @@ import type {
   UpdateTeamDebateRequest,
 } from '@deepseek-ai/dsh-agent-team/client'
 import type { SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
-import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ConvViewProps, DraftAttachmentId } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { SavedTeamTemplate } from '../team-settings.ts'
+import { formatAttachmentBytes, normalizeTeamMemberName } from './team-helpers.ts'
+import type { TeamTemplateState } from './team-store.ts'
 import { NS } from './locales.ts'
 import css from './AgentTeamView.module.css'
 
+/** Browser-only attachment descriptor safe for component state. */
+export interface TeamDraftAttachment {
+  id: DraftAttachmentId
+  kind: 'image' | 'file'
+  name: string
+  bytes: number
+  previewUrl?: string
+}
+
 /** Browser actions supplied by the ui-subagent registration. */
 export interface AgentTeamActions {
+  hooks: {
+    /** Durable reusable teammate templates projected through Settings. */
+    teamTemplates: ObservableSnapshot<TeamTemplateState>
+  }
   /** Load the Lead Session's provider-grouped model directory. */
   loadModels: () => Promise<SessionModels>
   /** Read the runtime-enriched roster for the current Team. */
@@ -41,19 +60,40 @@ export interface AgentTeamActions {
   ) => Promise<RemoteResult<{ previousStatus: 'running' | 'idle' | 'inactive' }>>
   /** Start one structured Team debate. */
   debateStart: (
-    request: StartTeamDebateRequest,
+    request: StartTeamDebateRemoteRequest,
+  ) => Promise<RemoteResult<TeamDebateSnapshot>>
+  /** Append the human Lead's contribution to the current phase. */
+  debateContribute: (
+    request: ContributeTeamDebateRemoteRequest,
   ) => Promise<RemoteResult<TeamDebateSnapshot>>
   /** Apply one compare-and-set debate transition. */
   debateUpdate: (
     request: UpdateTeamDebateRequest,
   ) => Promise<RemoteResult<TeamDebateSnapshot>>
+  /** Register browser-selected files and return display-only descriptors. */
+  createAttachments: (files: readonly File[]) => readonly TeamDraftAttachment[]
+  /** Encode registered drafts for one Team Remote call. */
+  serializeAttachments: (
+    ids: readonly DraftAttachmentId[],
+    signal?: AbortSignal,
+  ) => Promise<NonNullable<SpawnTeamMemberRemoteRequest['attachments']>>
+  /** Release registered drafts after success or explicit removal. */
+  releaseAttachments: (ids: readonly DraftAttachmentId[]) => void
+  /** Resolve one durable debate attachment to a session-authorized URL. */
+  resolveAttachment: (
+    attachment: Extract<TeamDebateContentBlock, { type: 'image' | 'file' }>['attachment'],
+  ) => Promise<string>
+  /** Persist the current reusable teammate configuration. */
+  saveTemplate: (template: Omit<SavedTeamTemplate, 'id'>) => Promise<void>
+  /** Remove one reusable teammate configuration. */
+  deleteTemplate: (id: string) => Promise<void>
 }
 
 /** Alias used by the slot registration's inject factory. */
 export type AgentTeamViewInjected = AgentTeamActions
 
 /** Complete props of the Agent Teams conversation view. */
-export type AgentTeamViewProps = ConvViewProps & AgentTeamActions & PropsLocale<typeof NS>
+export type AgentTeamViewProps = ConvViewProps & InjectFace<AgentTeamActions> & PropsLocale<typeof NS>
 
 type PendingAction =
   | 'members'
@@ -61,7 +101,10 @@ type PendingAction =
   | 'guide'
   | `interrupt:${string}`
   | 'debate-start'
+  | 'debate-contribute'
   | 'debate-update'
+  | 'template-save'
+  | `template-delete:${string}`
 
 interface SpawnDraft {
   name: string
@@ -198,6 +241,78 @@ function fieldId(sessionId: string, name: string): string {
   return `agent-team-${sessionId}-${name}`
 }
 
+interface AttachmentInputProps {
+  label: string
+  attachments: readonly TeamDraftAttachment[]
+  disabled: boolean
+  onFiles: (files: readonly File[]) => void
+  onRemove: (id: DraftAttachmentId) => void
+}
+
+function AttachmentInput({ label, attachments, disabled, onFiles, onRemove }: AttachmentInputProps) {
+  return (
+    <div className={`${css.attachmentInput} ${css.fieldWide}`}>
+      <label className={css.attachmentPicker}>
+        <span>{label}</span>
+        <input
+          type="file"
+          multiple
+          disabled={disabled}
+          onChange={(event) => {
+            const files = [...(event.target.files ?? [])]
+            event.target.value = ''
+            if (files.length > 0) onFiles(files)
+          }}
+        />
+      </label>
+      {attachments.length > 0 && (
+        <div className={css.draftAttachments} role="list" aria-label={`${label}: arquivos selecionados`}>
+          {attachments.map(attachment => (
+            <div className={css.attachmentCard} role="listitem" key={attachment.id}>
+              {attachment.previewUrl === undefined
+                ? <span className={css.fileMark} aria-hidden="true">ARQ</span>
+                : <img src={attachment.previewUrl} alt="" />}
+              <span><strong>{attachment.name}</strong><small>{formatAttachmentBytes(attachment.bytes)}</small></span>
+              <button type="button" className={css.textButton} disabled={disabled} onClick={() => { onRemove(attachment.id) }}>Remover</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface DurableBlockProps {
+  block: TeamDebateContentBlock
+  resolveAttachment: AgentTeamActions['resolveAttachment']
+}
+
+function DurableBlock({ block, resolveAttachment }: DurableBlockProps) {
+  const [url, setUrl] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    if (block.type === 'text') return
+    let active = true
+    void resolveAttachment(block.attachment).then((resolved) => {
+      if (active) setUrl(resolved)
+    }).catch(() => {
+      if (active) setFailed(true)
+    })
+    return () => { active = false }
+  }, [block, resolveAttachment])
+  if (block.type === 'text') return <p className={css.contributionText}>{block.text}</p>
+  const name = block.attachment.name ?? (block.type === 'image' ? 'imagem' : 'arquivo')
+  if (failed) return <span className={css.attachmentUnavailable}>{name} · indisponível</span>
+  if (block.type === 'image') {
+    return url === null
+      ? <span className={css.attachmentUnavailable}>{name} · carregando…</span>
+      : <a className={css.historicalImage} href={url} target="_blank" rel="noreferrer"><img src={url} alt={name} /><span>{name} · {formatAttachmentBytes(block.attachment.bytes)}</span></a>
+  }
+  return url === null
+    ? <span className={css.attachmentUnavailable}>{name} · preparando download…</span>
+    : <a className={css.historicalFile} href={url} download={name}><span className={css.fileMark} aria-hidden="true">ARQ</span><span>{name} · {formatAttachmentBytes(block.attachment.bytes)}</span></a>
+}
+
 /** Agent Teams roster, task board, debate protocol, and operator controls. */
 export function AgentTeamView({
   sessionId,
@@ -209,12 +324,27 @@ export function AgentTeamView({
   guide,
   interrupt,
   debateStart,
+  debateContribute,
   debateUpdate,
+  createAttachments,
+  serializeAttachments,
+  releaseAttachments,
+  resolveAttachment,
+  saveTemplate,
+  deleteTemplate,
+  useTeamTemplates,
 }: AgentTeamViewProps) {
   const projection = useProjection('agentTeam')
   const sessions = useSessions(state => state)
+  const templateState = useTeamTemplates(state => state)
   const [runtimeMembers, setRuntimeMembers] = useState<TeamMemberView[] | null>(null)
   const [spawnDraft, setSpawnDraft] = useState<SpawnDraft>(EMPTY_SPAWN)
+  const [spawnAttachments, setSpawnAttachments] = useState<TeamDraftAttachment[]>([])
+  const [guideAttachments, setGuideAttachments] = useState<TeamDraftAttachment[]>([])
+  const [debateAttachments, setDebateAttachments] = useState<TeamDraftAttachment[]>([])
+  const [contributionAttachments, setContributionAttachments] = useState<TeamDraftAttachment[]>([])
+  const [contributionText, setContributionText] = useState('')
+  const [templateTitle, setTemplateTitle] = useState('')
   const [modelDirectory, setModelDirectory] = useState<SessionModels | null>(null)
   const [modelDirectoryStatus, setModelDirectoryStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [modelDirectoryError, setModelDirectoryError] = useState<string | null>(null)
@@ -224,6 +354,36 @@ export function AgentTeamView({
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [error, setError] = useState<string | null>(null)
   const pendingRef = useRef<PendingAction | null>(null)
+  const attachmentIdsRef = useRef(new Set<DraftAttachmentId>())
+
+  useEffect(() => () => {
+    releaseAttachments([...attachmentIdsRef.current])
+    attachmentIdsRef.current.clear()
+  }, [releaseAttachments])
+
+  const addAttachments = useCallback((
+    files: readonly File[],
+    setter: (update: (current: TeamDraftAttachment[]) => TeamDraftAttachment[]) => void,
+  ) => {
+    const created = [...createAttachments(files)]
+    for (const attachment of created) attachmentIdsRef.current.add(attachment.id)
+    setter(current => [...current, ...created])
+  }, [createAttachments])
+
+  const removeAttachment = useCallback((
+    id: DraftAttachmentId,
+    setter: (update: (current: TeamDraftAttachment[]) => TeamDraftAttachment[]) => void,
+  ) => {
+    releaseAttachments([id])
+    attachmentIdsRef.current.delete(id)
+    setter(current => current.filter(attachment => attachment.id !== id))
+  }, [releaseAttachments])
+
+  const releaseSubmitted = useCallback((attachments: readonly TeamDraftAttachment[]) => {
+    const ids = attachments.map(attachment => attachment.id)
+    releaseAttachments(ids)
+    for (const id of ids) attachmentIdsRef.current.delete(id)
+  }, [releaseAttachments])
 
   const refreshModelDirectory = useCallback(async () => {
     setModelDirectoryStatus('loading')
@@ -335,6 +495,15 @@ export function AgentTeamView({
 
   const handleSpawn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const name = normalizeTeamMemberName(spawnDraft.name)
+    if (name === '' || name === 'lead') {
+      setError('Informe um nome que gere um identificador válido e diferente de lead.')
+      return
+    }
+    if (roster.some(member => member.name === name)) {
+      setError(`O identificador ${name} já pertence a um integrante e não pode ser reutilizado.`)
+      return
+    }
     const llmProvider = optionalText(spawnDraft.llmProvider)
     const model = optionalText(spawnDraft.model)
     if (llmProvider !== undefined) {
@@ -344,33 +513,48 @@ export function AgentTeamView({
         return
       }
     }
-    const persona = optionalText(spawnDraft.persona)
-    const request: SpawnTeamMemberRemoteRequest = {
-      name: spawnDraft.name.trim(),
-      description: spawnDraft.description.trim(),
-      prompt: spawnDraft.prompt.trim(),
-      context: spawnDraft.context,
-      ...llmProvider === undefined || model === undefined ? {} : { llmProvider, model },
-      ...persona === undefined ? {} : { persona },
-    }
     const controller = new AbortController()
-    const result = await runAction('spawn', () => spawn(request, controller.signal))
+    const result = await runAction('spawn', async () => {
+      const attachments = await serializeAttachments(spawnAttachments.map(item => item.id), controller.signal)
+      const persona = optionalText(spawnDraft.persona)
+      const request: SpawnTeamMemberRemoteRequest = {
+        name,
+        description: spawnDraft.description.trim(),
+        prompt: spawnDraft.prompt.trim(),
+        context: spawnDraft.context,
+        ...(attachments.length === 0 ? {} : { attachments }),
+        ...llmProvider === undefined || model === undefined ? {} : { llmProvider, model },
+        ...persona === undefined ? {} : { persona },
+      }
+      return await spawn(request, controller.signal)
+    })
     if (result?.ok) {
+      releaseSubmitted(spawnAttachments)
+      setSpawnAttachments([])
       setSpawnDraft(EMPTY_SPAWN)
+      setTemplateTitle('')
       await refreshMembers()
     }
   }
 
   const handleGuide = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const request: GuideTeamMemberRemoteRequest = {
-      target: guideDraft.target,
-      content: guideDraft.content.trim(),
-      delivery: guideDraft.delivery,
-    }
     const controller = new AbortController()
-    const result = await runAction('guide', () => guide(request, controller.signal))
-    if (result?.ok) setGuideDraft(current => ({ ...current, content: '' }))
+    const result = await runAction('guide', async () => {
+      const attachments = await serializeAttachments(guideAttachments.map(item => item.id), controller.signal)
+      const request: GuideTeamMemberRemoteRequest = {
+        target: guideDraft.target,
+        content: guideDraft.content.trim(),
+        delivery: guideDraft.delivery,
+        ...(attachments.length === 0 ? {} : { attachments }),
+      }
+      return await guide(request, controller.signal)
+    })
+    if (result?.ok) {
+      releaseSubmitted(guideAttachments)
+      setGuideAttachments([])
+      setGuideDraft(current => ({ ...current, content: '' }))
+    }
   }
 
   const handleInterrupt = async (targetName: string) => {
@@ -381,13 +565,41 @@ export function AgentTeamView({
   const handleDebateStart = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const maxRounds = Number(debateDraft.maxRounds)
-    const request: StartTeamDebateRequest = {
-      topic: debateDraft.topic.trim(),
-      participants: ['lead', ...debateDraft.participants],
-      ...(Number.isSafeInteger(maxRounds) && maxRounds > 0 ? { maxRounds } : {}),
+    const result = await runAction('debate-start', async () => {
+      const attachments = await serializeAttachments(debateAttachments.map(item => item.id))
+      const request: StartTeamDebateRemoteRequest = {
+        topic: debateDraft.topic.trim(),
+        participants: ['lead', ...debateDraft.participants],
+        ...(attachments.length === 0 ? {} : { attachments }),
+        ...(Number.isSafeInteger(maxRounds) && maxRounds > 0 ? { maxRounds } : {}),
+      }
+      return await debateStart(request)
+    })
+    if (result?.ok) {
+      releaseSubmitted(debateAttachments)
+      setDebateAttachments([])
+      setDebateDraft(EMPTY_DEBATE)
     }
-    const result = await runAction('debate-start', () => debateStart(request))
-    if (result?.ok) setDebateDraft(EMPTY_DEBATE)
+  }
+
+  const handleDebateContribute = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const debate = projection?.debate
+    if (debate === null || debate === undefined) return
+    const result = await runAction('debate-contribute', async () => {
+      const attachments = await serializeAttachments(contributionAttachments.map(item => item.id))
+      return await debateContribute({
+        debateId: debate.id,
+        expectedRevision: debate.revision,
+        content: contributionText.trim(),
+        ...(attachments.length === 0 ? {} : { attachments }),
+      })
+    })
+    if (result?.ok) {
+      releaseSubmitted(contributionAttachments)
+      setContributionAttachments([])
+      setContributionText('')
+    }
   }
 
   const handleDebateUpdate = async (action: UpdateTeamDebateRequest['action']) => {
@@ -402,6 +614,60 @@ export function AgentTeamView({
     }
     const result = await runAction('debate-update', () => debateUpdate(request))
     if (result?.ok) setDebateNote('')
+  }
+
+  const applyTemplate = (template: SavedTeamTemplate) => {
+    setSpawnDraft({
+      name: template.name,
+      description: template.description,
+      prompt: template.prompt,
+      context: template.context,
+      llmProvider: template.llmProvider ?? '',
+      model: template.model ?? '',
+      persona: template.persona ?? '',
+    })
+    setTemplateTitle(template.title)
+  }
+
+  const handleSaveTemplate = async () => {
+    if (pendingRef.current !== null || templateTitle.trim() === '') return
+    pendingRef.current = 'template-save'
+    setPending('template-save')
+    setError(null)
+    try {
+      const llmProvider = optionalText(spawnDraft.llmProvider)
+      const model = optionalText(spawnDraft.model)
+      await saveTemplate({
+        title: templateTitle.trim(),
+        name: spawnDraft.name.trim(),
+        description: spawnDraft.description.trim(),
+        prompt: spawnDraft.prompt.trim(),
+        context: spawnDraft.context,
+        ...llmProvider === undefined || model === undefined ? {} : { llmProvider, model },
+        ...optionalText(spawnDraft.persona) === undefined ? {} : { persona: spawnDraft.persona.trim() },
+      })
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? `Não foi possível salvar o modelo: ${cause.message}` : 'Não foi possível salvar o modelo de integrante.')
+    } finally {
+      pendingRef.current = null
+      setPending(null)
+    }
+  }
+
+  const handleDeleteTemplate = async (id: string) => {
+    const key = `template-delete:${id}` as const
+    if (pendingRef.current !== null) return
+    pendingRef.current = key
+    setPending(key)
+    setError(null)
+    try {
+      await deleteTemplate(id)
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? `Não foi possível excluir o modelo: ${cause.message}` : 'Não foi possível excluir o modelo de integrante.')
+    } finally {
+      pendingRef.current = null
+      setPending(null)
+    }
   }
 
   if (projection === undefined) {
@@ -429,6 +695,14 @@ export function AgentTeamView({
   )
   const formsDisabled = pending !== null
   const canSpawn = roster.length < 10
+  const normalizedSpawnName = normalizeTeamMemberName(spawnDraft.name)
+  const currentAuthors = new Set(debate?.contributions
+    .filter(item => item.round === debate.round && item.phase === debate.phase)
+    .map(item => item.author) ?? [])
+  const missingParticipants = debate?.participants.filter(name => !currentAuthors.has(name)) ?? []
+  const leadCanContribute = debate !== null && debate.status === 'active'
+    && debate.participants.includes('lead') && !currentAuthors.has('lead')
+  const phaseComplete = debate !== null && missingParticipants.length === 0
 
   return (
     <div className={css.root} data-agent-team-view>
@@ -613,6 +887,13 @@ export function AgentTeamView({
                     required
                   />
                 </label>
+                <AttachmentInput
+                  label="Evidências iniciais"
+                  attachments={debateAttachments}
+                  disabled={formsDisabled}
+                  onFiles={(files) => { addAttachments(files, setDebateAttachments) }}
+                  onRemove={(id) => { removeAttachment(id, setDebateAttachments) }}
+                />
                 <div className={css.formActions}>
                   <button
                     type="submit"
@@ -644,6 +925,62 @@ export function AgentTeamView({
                     )
                   })}
                 </ol>
+                <div className={`${css.readiness} ${phaseComplete ? css.readinessComplete : ''}`} role="status">
+                  <strong>{phaseComplete ? 'Pronto para avançar' : 'Aguardando contribuições'}</strong>
+                  <span>{phaseComplete ? 'Todos os participantes registraram sua fala nesta etapa.' : `Faltam: ${missingParticipants.join(', ')}`}</span>
+                </div>
+                {debate.evidence.length > 0 && (
+                  <section className={css.evidence} aria-label="Evidências iniciais do debate">
+                    <h4>Evidências iniciais</h4>
+                    <div className={css.contentBlocks}>
+                      {debate.evidence.map((block, index) => <DurableBlock block={block} resolveAttachment={resolveAttachment} key={`evidence-${String(index)}`} />)}
+                    </div>
+                  </section>
+                )}
+                <section className={css.transcript} aria-labelledby={fieldId(sessionId, 'transcript-title')}>
+                  <div className={css.transcriptHeader}>
+                    <h4 id={fieldId(sessionId, 'transcript-title')}>Transcrição do debate</h4>
+                    <span>{debate.contributions.length} contribuições</span>
+                  </div>
+                  {debate.contributions.length === 0 ? (
+                    <p className={css.emptyCopy}>Nenhuma contribuição registrada ainda.</p>
+                  ) : (
+                    <ol className={css.contributionList}>
+                      {debate.contributions.map(contribution => (
+                        <li key={contribution.sequence}>
+                          <header>
+                            <strong>{contribution.author}</strong>
+                            <span>Rodada {contribution.round} · {DEBATE_PHASE_LABELS[contribution.phase]}</span>
+                            <time dateTime={new Date(contribution.createdAt).toISOString()}>{new Date(contribution.createdAt).toLocaleString('pt-BR')}</time>
+                          </header>
+                          <div className={css.contentBlocks}>
+                            {contribution.content.map((block, index) => <DurableBlock block={block} resolveAttachment={resolveAttachment} key={`${String(contribution.sequence)}-${String(index)}`} />)}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </section>
+                {leadCanContribute && (
+                  <form className={css.contributionForm} onSubmit={(event) => { void handleDebateContribute(event) }}>
+                    <label className={css.fieldWide}>
+                      <span>Contribuição da líder</span>
+                      <textarea value={contributionText} onChange={(event) => { setContributionText(event.target.value) }} rows={4} placeholder={`Registre uma contribuição consolidada para ${DEBATE_PHASE_LABELS[debate.phase]}.`} />
+                    </label>
+                    <AttachmentInput
+                      label="Anexos da contribuição"
+                      attachments={contributionAttachments}
+                      disabled={formsDisabled}
+                      onFiles={(files) => { addAttachments(files, setContributionAttachments) }}
+                      onRemove={(id) => { removeAttachment(id, setContributionAttachments) }}
+                    />
+                    <div className={css.formActions}>
+                      <button type="submit" className={css.primaryButton} disabled={formsDisabled || (contributionText.trim() === '' && contributionAttachments.length === 0)}>
+                        {pending === 'debate-contribute' ? 'Registrando…' : 'Registrar contribuição'}
+                      </button>
+                    </div>
+                  </form>
+                )}
                 {debate.history.length > 0 && (
                   <ol className={css.transitionList} aria-label="Histórico de transições do debate">
                     {debate.history.map(transition => (
@@ -673,8 +1010,8 @@ export function AgentTeamView({
                       ) : (
                         <button type="button" className={css.secondaryButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('resume') }}>Retomar protocolo</button>
                       )}
-                      <button type="button" className={css.primaryButton} disabled={formsDisabled || debate.status !== 'active'} onClick={() => { void handleDebateUpdate('advance') }}>Avançar fase</button>
-                      <button type="button" className={css.dangerButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('complete') }}>Concluir debate</button>
+                      <button type="button" className={css.primaryButton} disabled={formsDisabled || debate.status !== 'active' || !phaseComplete} onClick={() => { void handleDebateUpdate('advance') }}>Avançar fase</button>
+                      <button type="button" className={css.dangerButton} disabled={formsDisabled || debate.status !== 'active' || debate.phase !== 'synthesis' || !phaseComplete} onClick={() => { void handleDebateUpdate('complete') }}>Concluir debate</button>
                     </div>
                     <p className={css.protocolNote}>
                       Pausar impede o avanço do protocolo, mas não cancela tarefas que já estão em execução.
@@ -698,10 +1035,40 @@ export function AgentTeamView({
               <p className={css.emptyCopy}>O limite de dez agentes foi atingido.</p>
             ) : (
               <form className={css.form} onSubmit={(event) => { void handleSpawn(event) }}>
-                <label>
-                  <span>Nome</span>
-                  <input value={spawnDraft.name} onChange={(event) => { setSpawnDraft(current => ({ ...current, name: event.target.value })) }} required placeholder="pesquisador" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" />
-                </label>
+                <div className={`${css.templateLibrary} ${css.fieldWide}`}>
+                  <div className={css.templateHeader}>
+                    <span>Modelos de integrante</span>
+                    <small>{templateState.templates.length}/50 salvos</small>
+                  </div>
+                  {templateState.templates.length === 0 ? (
+                    <p className={css.emptyCopy}>Salve esta configuração para reutilizá-la em outras sessões.</p>
+                  ) : (
+                    <div className={css.templateList} role="list">
+                      {templateState.templates.map(template => (
+                        <div role="listitem" key={template.id}>
+                          <button type="button" className={css.templateButton} disabled={formsDisabled} onClick={() => { applyTemplate(template) }}>
+                            <strong>{template.title}</strong><span>{template.name}</span>
+                          </button>
+                          <button type="button" className={css.textButton} disabled={formsDisabled} aria-label={`Excluir modelo ${template.title}`} onClick={() => { void handleDeleteTemplate(template.id) }}>Excluir</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {templateState.error !== null && <p className={css.templateError}>{templateState.error}</p>}
+                </div>
+                <div className={css.formGroup}>
+                  <label htmlFor={fieldId(sessionId, 'spawn-name')}>
+                    <span>Nome</span>
+                  </label>
+                  <input
+                    id={fieldId(sessionId, 'spawn-name')}
+                    value={spawnDraft.name}
+                    onChange={(event) => { setSpawnDraft(current => ({ ...current, name: event.target.value })) }}
+                    required
+                    placeholder="Pesquisador jurídico"
+                  />
+                  <small className={css.fieldHint}>ID técnico: <code>{normalizedSpawnName || '—'}</code></small>
+                </div>
                 <label>
                   <span>Descrição</span>
                   <input value={spawnDraft.description} onChange={(event) => { setSpawnDraft(current => ({ ...current, description: event.target.value })) }} required placeholder="Investiga restrições e riscos" />
@@ -718,6 +1085,13 @@ export function AgentTeamView({
                     placeholder="Defina o objetivo, a entrega esperada e as evidências necessárias."
                   />
                 </label>
+                <AttachmentInput
+                  label="Imagens e arquivos da instrução"
+                  attachments={spawnAttachments}
+                  disabled={formsDisabled}
+                  onFiles={(files) => { addAttachments(files, setSpawnAttachments) }}
+                  onRemove={(id) => { removeAttachment(id, setSpawnAttachments) }}
+                />
                 <label>
                   <span>Contexto</span>
                   <select value={spawnDraft.context} onChange={(event) => { setSpawnDraft(current => ({ ...current, context: event.target.value as SpawnDraft['context'] })) }}>
@@ -767,8 +1141,17 @@ export function AgentTeamView({
                   <span>Persona <em>opcional</em></span>
                   <textarea value={spawnDraft.persona} onChange={(event) => { setSpawnDraft(current => ({ ...current, persona: event.target.value })) }} rows={3} placeholder="Instrução de sistema adicional para este integrante" />
                 </label>
+                <div className={`${css.templateSave} ${css.fieldWide}`}>
+                  <label>
+                    <span>Nome do modelo reutilizável</span>
+                    <input value={templateTitle} onChange={(event) => { setTemplateTitle(event.target.value) }} placeholder="Ex.: Pesquisador jurídico completo" />
+                  </label>
+                  <button type="button" className={css.secondaryButton} disabled={formsDisabled || !templateState.writable || templateTitle.trim() === '' || spawnDraft.name.trim() === '' || spawnDraft.description.trim() === '' || spawnDraft.prompt.trim() === '' || !explicitRouteComplete} onClick={() => { void handleSaveTemplate() }}>
+                    {pending === 'template-save' ? 'Salvando…' : 'Salvar modelo'}
+                  </button>
+                </div>
                 <div className={css.formActions}>
-                  <button type="submit" className={css.primaryButton} disabled={formsDisabled || !canSpawn || !explicitRouteComplete}>
+                  <button type="submit" className={css.primaryButton} disabled={formsDisabled || !canSpawn || !explicitRouteComplete || normalizedSpawnName === '' || normalizedSpawnName === 'lead'}>
                     {pending === 'spawn' ? 'Criando…' : 'Criar integrante'}
                   </button>
                 </div>
@@ -807,10 +1190,17 @@ export function AgentTeamView({
               </label>
               <label className={css.fieldWide}>
                 <span>Orientação</span>
-                <textarea value={guideDraft.content} onChange={(event) => { setGuideDraft(current => ({ ...current, content: event.target.value })) }} required rows={4} placeholder="Adicione restrições, correções ou o próximo objetivo." />
+                <textarea value={guideDraft.content} onChange={(event) => { setGuideDraft(current => ({ ...current, content: event.target.value })) }} rows={4} placeholder="Adicione restrições, correções ou o próximo objetivo." />
               </label>
+              <AttachmentInput
+                label="Imagens e arquivos da orientação"
+                attachments={guideAttachments}
+                disabled={formsDisabled}
+                onFiles={(files) => { addAttachments(files, setGuideAttachments) }}
+                onRemove={(id) => { removeAttachment(id, setGuideAttachments) }}
+              />
               <div className={css.formActions}>
-                <button type="submit" className={css.primaryButton} disabled={formsDisabled || guideDraft.target === '' || guideDraft.content.trim() === ''}>
+                <button type="submit" className={css.primaryButton} disabled={formsDisabled || guideDraft.target === '' || (guideDraft.content.trim() === '' && guideAttachments.length === 0)}>
                   {pending === 'guide' ? 'Enviando…' : 'Enviar orientação'}
                 </button>
               </div>

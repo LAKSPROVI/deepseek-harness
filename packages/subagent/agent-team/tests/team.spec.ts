@@ -509,21 +509,41 @@ describe('Team identity and provisioning', () => {
       debateId: debate.id, expectedRevision: 1, action: 'advance',
     })).rejects.toMatchObject({ code: 'TEAM_DEBATE_STALE' })
 
+    await expect(ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: debate.revision, action: 'advance',
+    })).rejects.toMatchObject({ code: 'TEAM_DEBATE_INCOMPLETE' })
+
     const expected = [
       ['critique', 1], ['rebuttal', 1], ['verification', 1], ['synthesis', 1],
       ['positions', 2], ['critique', 2], ['rebuttal', 2], ['verification', 2], ['synthesis', 2],
     ] as const
     for (const [phase, round] of expected) {
+      debate = await ctx.agentTeams.contributeDebate(lead, {
+        debateId: debate.id, expectedRevision: debate.revision, content: content(`lead ${debate.phase}`),
+      })
+      debate = await ctx.agentTeams.contributeDebate(worker, {
+        debateId: debate.id, expectedRevision: debate.revision, content: content(`worker ${debate.phase}`),
+      })
       debate = await ctx.agentTeams.updateDebate(lead, {
         debateId: debate.id, expectedRevision: debate.revision, action: 'advance',
       })
       expect(debate).toMatchObject({ phase, round, status: 'active' })
     }
+    debate = await ctx.agentTeams.contributeDebate(lead, {
+      debateId: debate.id, expectedRevision: debate.revision, content: content('lead final synthesis'),
+    })
+    await expect(ctx.agentTeams.contributeDebate(lead, {
+      debateId: debate.id, expectedRevision: debate.revision, content: content('duplicate'),
+    })).rejects.toMatchObject({ code: 'TEAM_DEBATE_CONTRIBUTION_EXISTS' })
+    debate = await ctx.agentTeams.contributeDebate(worker, {
+      debateId: debate.id, expectedRevision: debate.revision, content: content('worker final synthesis'),
+    })
     debate = await ctx.agentTeams.updateDebate(lead, {
       debateId: debate.id, expectedRevision: debate.revision, action: 'complete', note: 'human accepted synthesis',
     })
     expect(debate).toMatchObject({ status: 'completed', phase: 'synthesis', round: 2 })
-    expect(debate.history).toHaveLength(debate.revision)
+    expect(debate.contributions).toHaveLength(20)
+    expect(debate.history.length + debate.contributions.length).toBe(debate.revision)
     expect(ctx.agentTeams.getDebate(lead)).toEqual(debate)
 
     ctx.agentTeams.interrupt(lead, 'debate-worker')

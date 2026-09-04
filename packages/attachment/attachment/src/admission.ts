@@ -2,14 +2,17 @@
 
 import { Buffer } from 'node:buffer'
 import { AttachmentError } from './error.ts'
-import type { AttachmentStore } from './index.ts'
+import { AttachmentStore } from './index.ts'
 import type {
+  AdmittedAttachmentBlock,
+  EncodedAttachment,
   EncodedFileAttachment,
   EncodedImageAttachment,
   FileAttachmentRef,
   ImageAttachmentRef,
   SaveFileAttachment,
   SaveImageAttachment,
+  UploadedFileAttachment,
 } from './types.ts'
 
 /** Decode one upload payload while rejecting non-canonical base64 forms. */
@@ -73,4 +76,59 @@ export async function admitEncodedFiles(
   files: readonly EncodedFileAttachment[],
 ): Promise<readonly FileAttachmentRef[]> {
   return attachments.saveFiles(files.map(fileSaveInput))
+}
+
+/** Read one admitted reference whose index came from the matching encoded group. */
+function admittedAt<T>(values: readonly T[], index: number): T {
+  const value = values[index]
+  if (value === undefined) throw new Error('attachment admission changed the submitted cardinality')
+  return value
+}
+
+/**
+ * Admit one mixed image and file vector, then restore its submitted order.
+ * Uploaded-file receipts are authenticated against `scope`; encoded payloads
+ * pass through the same batch policies as every other attachment entry point.
+ * @param attachments - the attachment store owning image and file policy.
+ * @param scope - opaque owner identity bound into uploaded-file receipts.
+ * @param inputs - complete mixed attachment vector in display order.
+ * @returns frozen durable blocks in the same order as `inputs`.
+ */
+export async function admitEncodedAttachments(
+  attachments: AttachmentStore,
+  scope: string,
+  inputs: readonly EncodedAttachment[],
+): Promise<readonly AdmittedAttachmentBlock[]> {
+  const images: EncodedImageAttachment[] = []
+  const encodedFiles: EncodedFileAttachment[] = []
+  const uploadedFiles: UploadedFileAttachment[] = []
+  const order: Array<{ readonly type: 'image' | 'encoded-file' | 'uploaded-file'; readonly index: number }> = []
+  for (const input of inputs) {
+    if (input.type === 'image') {
+      order.push({ type: 'image', index: images.length })
+      images.push(input)
+    } else if ('data' in input) {
+      order.push({ type: 'encoded-file', index: encodedFiles.length })
+      encodedFiles.push(input)
+    } else {
+      order.push({ type: 'uploaded-file', index: uploadedFiles.length })
+      const { type: _type, ...upload } = input
+      uploadedFiles.push(upload)
+    }
+  }
+  const [imageRefs, encodedRefs, uploadedRefs] = await Promise.all([
+    images.length === 0 ? [] : admitEncodedImages(attachments, images),
+    encodedFiles.length === 0 ? [] : admitEncodedFiles(attachments, encodedFiles),
+    uploadedFiles.length === 0 ? [] : attachments.authorizeUploadedFiles(scope, uploadedFiles),
+  ])
+  if (encodedRefs.length > 0 || uploadedRefs.length > 0) {
+    AttachmentStore.prototype.validateFileReferences.call(attachments, [...encodedRefs, ...uploadedRefs])
+  }
+  return Object.freeze(order.map((entry): AdmittedAttachmentBlock => {
+    if (entry.type === 'image') {
+      return Object.freeze({ type: 'image', attachment: admittedAt(imageRefs, entry.index) })
+    }
+    const refs = entry.type === 'encoded-file' ? encodedRefs : uploadedRefs
+    return Object.freeze({ type: 'file', attachment: admittedAt(refs, entry.index) })
+  }))
 }

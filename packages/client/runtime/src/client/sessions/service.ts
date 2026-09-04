@@ -374,6 +374,14 @@ export class SessionRuntime implements ISessions {
   }
 
   /**
+   * Explicitly mark a session as unread (re-arming the completion / unread reminder).
+   * @param id - listed session id.
+   */
+  markUnread(id: SessionId): void {
+    this.manager.markUnread(id)
+  }
+
+  /**
    * Open a healthy catalog child through its direct-parent address.
    * @param address - catalog-derived parent and child ids.
    */

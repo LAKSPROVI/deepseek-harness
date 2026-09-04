@@ -44,6 +44,16 @@ export interface UploadedFileAttachment {
   attachment: FileAttachmentRef
 }
 
+/** One image or generic file submitted through a browser wire request. */
+export type EncodedAttachment =
+  | ({ readonly type: 'image' } & EncodedImageAttachment)
+  | ({ readonly type: 'file' } & (EncodedFileAttachment | UploadedFileAttachment))
+
+/** One durable image or file block after attachment-store admission. */
+export type AdmittedAttachmentBlock =
+  | { readonly type: 'image'; readonly attachment: ImageAttachmentRef }
+  | { readonly type: 'file'; readonly attachment: FileAttachmentRef }
+
 /** Request to validate and durably commit one opaque file. */
 export interface SaveFileAttachment {
   /** Exact file bytes; providers must not execute, decode, or extract them. */

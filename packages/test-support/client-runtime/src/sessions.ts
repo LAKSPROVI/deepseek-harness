@@ -422,6 +422,11 @@ export class TestSessions implements ISessions {
     })
   }
 
+  /** Mark a session unread; test stub tracks calls. */
+  markUnread(id: SessionId): void {
+    this.calls.push({ method: 'open', args: ['markUnread', id] })
+  }
+
   /** Open an existing fixture through its catalog address. */
   openSubagent(address: SubagentAddress): void {
     this.calls.push({ method: 'openSubagent', args: [address] })

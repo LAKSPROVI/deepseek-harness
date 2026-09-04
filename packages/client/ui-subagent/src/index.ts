@@ -5,5 +5,19 @@
  * dsh.client declaration.
  */
 
-/** Host plugin body — no host-side behavior for this source plugin. */
-export function apply(): void {}
+import type { Context } from '@deepseek-ai/cordis'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import {
+  TEAM_TEMPLATE_SETTINGS_NAMESPACE, TeamTemplateSettingsSchema, validateTeamTemplateSettings,
+} from './team-settings.ts'
+
+/** Register reusable teammate templates when Host settings are available. */
+export function apply(ctx: Context): void {
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.register(
+      settingsNamespace(TEAM_TEMPLATE_SETTINGS_NAMESPACE),
+      TeamTemplateSettingsSchema,
+      { validate: validateTeamTemplateSettings },
+    )
+  })
+}

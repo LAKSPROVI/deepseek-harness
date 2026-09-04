@@ -16,11 +16,13 @@ function debate(revision = 1): TeamDebateSnapshot {
     id: TeamDebateId('debate-one'),
     revision,
     topic: 'Choose the safer design',
+    evidence: [],
     status: 'active',
     phase: revision === 1 ? 'positions' : 'critique',
     round: 1,
     maxRounds: 2,
     participants: ['lead', 'worker-one'],
+    contributions: [],
     history: revision === 1
       ? [{ revision: 1, round: 1, phase: 'positions', status: 'active', actor: 'lead' }]
       : [

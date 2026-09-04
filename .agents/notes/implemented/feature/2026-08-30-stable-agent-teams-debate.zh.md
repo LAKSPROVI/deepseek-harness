@@ -28,15 +28,17 @@ Host service 由 base composition 挂载，因此持久 Team 状态与浏览器 
 
 ## Structured debate
 
-Lead Session 以完整 `team/debate` snapshot 保存一个当前 structured debate。debate 携带稳定 id、单调 revision、topic、participant name、round、maximum rounds、status、current phase 与紧凑 transition history。phase 顺序为 `positions`、`critique`、`rebuttal`、`verification`、`synthesis`；从最终 synthesis 推进时，要么开始下一 round，要么在达到 round cap 时完成 debate。
+Lead Session 以完整 `team/debate` snapshot 保存一个当前 structured debate。debate 携带稳定 id、单调 revision、topic、participant name、round、maximum rounds、status、current phase、初始多模态 evidence block、发言 contribution 记录与紧凑 transition history。phase 顺序为 `positions`、`critique`、`rebuttal`、`verification`、`synthesis`。debate contribution 支持文本、图片与文件 content block。所有分配给当前 phase 的参与者必须在当前 round 内提交发言，之后才能提交 `advance` 或 `complete`。从最终 synthesis 推进时，要么开始下一 round，要么在达到 round cap 时完成 debate。
 
-创建与 transition 操作仅由 Lead 授权。每次 transition 都提供 expected revision，并在状态陈旧时失败。`pause` 与 `resume` 改变持久 debate status，不会取消 Agent turn 或修改其 inbox；`interrupt` 仍是独立的 subagent 操作，用于取消当前 turn。human control 通过生成的 Remote 调用相同的持久操作，而模型工具仍受 `agent-teams` preset 限定。
+创建、发言 contribution 与 transition 操作由 Lead 或参与者相应授权。每次变更都提供 expected revision，并在状态陈旧时失败。`team_debate_contribute` 允许模型 teammate 与人类 Lead 提交多模态发言。`pause` 与 `resume` 改变持久 debate status，不会取消 Agent turn 或修改其 inbox；`interrupt` 仍是独立的 subagent 操作，用于取消当前 turn。human control 通过生成的 Remote 调用相同的持久操作，而 14 个模型工具仍受 `agent-teams` preset 限定。
 
 ## Projection and Web controls
 
-`agentTeam` Session projection 是浏览器安全的完整值，包含 member、task 与当前 debate。它有意排除 queued mailbox content，因为 pending peer mail 属于投递状态，可能包含尚未进入 target Session 的内容，并且 Team control 不需要它。
+`agentTeam` Session projection 是浏览器安全的完整值，包含 member、task 与当前 debate（含结构化 evidence 与发言 contribution）。它有意排除 queued mailbox content，因为 pending peer mail 属于投递状态，可能包含尚未进入 target Session 的内容，并且 Team control 不需要它。
 
-Web conversation Team tab 从 history tail 读取初始 projection，并从通用 `session/projection` frame 接收后续值。创建 teammate 时会加载 Lead Session 既有的 `session.models` directory，并显示关联的 provider／model selector；继承会省略两个 route 字段，显式 provider 必须选择一个已公布 model。catalog 整体失败时仍可继承创建并 retry，单个 provider 失败时仍保留成功 group。preset、标签页、control、phase 与 status label、帮助、无障碍文本和本地错误使用巴西葡萄牙语；protocol value、identifier、用户输入内容与 provider diagnostic 保持不变。mutation 使用生成的 `agentTeams` Remote 与当前 projected revision；Client plugin 同时注入 deferred Slot action 所访问的父级 `remote` Service，以及控制 activation 的 `remote.agentTeams` namespace。legacy Host API proxy 因此保持领域无关，也不增加 Team-specific HTTP、SSE 或 WebSocket 约定。
+Web conversation Team tab 从 history tail 读取初始 projection，并从通用 `session/projection` frame 接收后续值。创建 teammate 时会加载 Lead Session 既有的 `session.models` directory，显示关联的 provider／model selector，提供自然名称标准化（实时推导技术 lower-kebab-case ID），并连接由 Host `settings`（`agent-team-templates`）支持的持久模板库以跨 session 保存和复用 teammate 配置。teammate prompt、operator guidance、debate evidence 与人类 debate contribution 支持多模态 draft attachment（图片和通用文件），并在提交时序列化为 base64 payload block。legacy Host API proxy 授权下载 `team/debate` 事件引用的附件，而不会暴露非消息事件。
+
+preset、标签页、control、phase 与 status label、debate transcript、readiness indicator、帮助、无障碍文本和本地错误使用巴西葡萄牙语；protocol value、identifier、用户输入内容与 provider diagnostic 保持不变。mutation 使用生成的 `agentTeams` Remote 与当前 projected revision；Client plugin 同时注入 deferred Slot action 所访问的父级 `remote` Service，以及控制 activation 的 `remote.agentTeams` namespace。legacy Host API proxy 因此保持领域无关，也不增加 Team-specific HTTP、SSE 或 WebSocket 约定。
 
 生成式 Typert Remote 是供 Client bundle 消费的已构建 Host artifact。因此 assembled validation 会先生成并构建 Host module，再构建 Client 与 Web shell，随后操作已有 `dsh web` 进程，而不是替代用的 Vite server。只运行 source test 不能证明正在运行的 GUI 与其生成式 Remote 一致。
 

@@ -52,11 +52,21 @@ function debate(over: Partial<TeamDebateSnapshot> = {}): TeamDebateSnapshot {
     id: 'debate-1' as TeamDebateSnapshot['id'],
     revision: 4,
     topic: 'Choose the release strategy',
+    evidence: [],
     status: 'active',
     phase: 'critique',
     round: 1,
     maxRounds: 3,
     participants: ['researcher'],
+    contributions: [{
+      sequence: 1,
+      revision: 3,
+      round: 1,
+      phase: 'critique',
+      author: 'researcher',
+      content: [{ type: 'text', text: 'The rollback window needs a compatibility check.' }],
+      createdAt: 1_700_000_000_000,
+    }],
     history: [{
       revision: 2,
       round: 1,
@@ -151,7 +161,13 @@ function sessionState(): SessionListState {
 }
 
 function actions(over: Partial<AgentTeamActions> = {}): AgentTeamActions {
+  const templateSnapshot = {
+    status: 'ready' as const, templates: [], writable: true, saving: false, error: null,
+  }
   return {
+    hooks: {
+      teamTemplates: { getSnapshot: () => templateSnapshot, subscribe: () => () => {} },
+    },
     loadModels: vi.fn<AgentTeamActions['loadModels']>(() => Promise.resolve(modelDirectory())),
     members: vi.fn<AgentTeamActions['members']>(() => Promise.resolve({ ok: true, value: runtimeMembers() })),
     spawn: vi.fn<AgentTeamActions['spawn']>(() => Promise.resolve({ ok: true, value: {} })),
@@ -161,7 +177,14 @@ function actions(over: Partial<AgentTeamActions> = {}): AgentTeamActions {
       value: { previousStatus: 'running' },
     })),
     debateStart: vi.fn<AgentTeamActions['debateStart']>(() => Promise.resolve({ ok: true, value: debate() })),
+    debateContribute: vi.fn<AgentTeamActions['debateContribute']>(() => Promise.resolve({ ok: true, value: debate() })),
     debateUpdate: vi.fn<AgentTeamActions['debateUpdate']>(() => Promise.resolve({ ok: true, value: debate() })),
+    createAttachments: vi.fn<AgentTeamActions['createAttachments']>(() => []),
+    serializeAttachments: vi.fn<AgentTeamActions['serializeAttachments']>(() => Promise.resolve([])),
+    releaseAttachments: vi.fn<AgentTeamActions['releaseAttachments']>(),
+    resolveAttachment: vi.fn<AgentTeamActions['resolveAttachment']>(() => Promise.resolve('blob:test')),
+    saveTemplate: vi.fn<AgentTeamActions['saveTemplate']>(() => Promise.resolve()),
+    deleteTemplate: vi.fn<AgentTeamActions['deleteTemplate']>(() => Promise.resolve()),
     ...over,
   }
 }
@@ -171,6 +194,7 @@ function viewProps(
   actionFace: AgentTeamActions = actions(),
 ): AgentTeamViewProps {
   const sessions = sessionState()
+  const { hooks, ...callbacks } = actionFace
   return {
     sessionId: LEAD,
     useProjection: () => value,
@@ -179,7 +203,8 @@ function viewProps(
     inspect: null,
     onInspectDone: vi.fn(),
     t: ((key: string) => key) as AgentTeamViewProps['t'],
-    ...actionFace,
+    useTeamTemplates: selector => selector(hooks.teamTemplates.getSnapshot()),
+    ...callbacks,
   } as AgentTeamViewProps
 }
 
@@ -237,7 +262,9 @@ describe('AgentTeamView', () => {
     fireEvent.change(screen.getByLabelText(/Persona/), { target: { value: 'Adversarial reviewer' } })
     fireEvent.click(screen.getByRole('button', { name: 'Criar integrante' }))
 
-    expect(spawn).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(spawn).toHaveBeenCalledTimes(1)
+    })
     expect(spawn.mock.calls[0]?.[0]).toEqual({
       name: 'critic',
       description: 'Reviews the proposal',
@@ -255,7 +282,8 @@ describe('AgentTeamView', () => {
 
     await act(async () => { settle({ ok: true, value: {} }) })
     await waitFor(() => {
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Criar integrante' }).disabled).toBe(false)
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Criar integrante' })).toBeTruthy()
+      expect(screen.getByLabelText<HTMLInputElement>('Nome').value).toBe('')
     })
   })
 
@@ -335,5 +363,162 @@ describe('AgentTeamView', () => {
     expect(screen.getByRole('heading', { name: 'Integrantes' })).toBeTruthy()
     fireEvent.click(within(alert).getByRole('button', { name: 'Fechar' }))
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('normalizes natural teammate names to technical kebab-case IDs on submit', async () => {
+    const spawn = vi.fn<AgentTeamActions['spawn']>(() => Promise.resolve({ ok: true, value: {} }))
+    render(<AgentTeamView {...viewProps(null, actions({ spawn }))} />)
+
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: '  Revisor Técnico - Sênior!  ' } })
+    expect(screen.getByText('revisor-tecnico-senior')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Descrição'), { target: { value: 'Audita conformidade' } })
+    fireEvent.change(screen.getByLabelText('Instrução inicial'), { target: { value: 'Verifique os prazos e acórdãos.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Criar integrante' }))
+
+    await waitFor(() => {
+      expect(spawn).toHaveBeenCalledWith({
+        name: 'revisor-tecnico-senior',
+        description: 'Audita conformidade',
+        prompt: 'Verifique os prazos e acórdãos.',
+        context: 'fresh',
+      }, expect.any(AbortSignal))
+    })
+  })
+
+  it('manages reusable teammate templates by applying saved values and deleting items', async () => {
+    const saveTemplate = vi.fn<AgentTeamActions['saveTemplate']>(() => Promise.resolve())
+    const deleteTemplate = vi.fn<AgentTeamActions['deleteTemplate']>(() => Promise.resolve())
+    const templateList = [{
+      id: 'template-juridico',
+      title: 'Advogado Especialista',
+      name: 'advogado-especialista',
+      description: 'Analisa teses',
+      prompt: 'Elabore a impugnação detalhada.',
+      context: 'fresh' as const,
+      llmProvider: 'openai',
+      model: 'gpt-5',
+      persona: 'Especialista em direito processual',
+    }]
+    const hooks = {
+      teamTemplates: {
+        getSnapshot: () => ({
+          status: 'ready' as const,
+          templates: templateList,
+          writable: true,
+          saving: false,
+          error: null,
+        }),
+        subscribe: () => () => {},
+      },
+    }
+    render(<AgentTeamView {...viewProps(null, actions({ hooks, saveTemplate, deleteTemplate }))} />)
+
+    await screen.findByRole('option', { name: 'OpenAI' })
+    expect(screen.getByText('Advogado Especialista')).toBeTruthy()
+    fireEvent.click(screen.getByText('Advogado Especialista'))
+
+    expect(screen.getByLabelText<HTMLInputElement>('Nome').value).toBe('advogado-especialista')
+    expect(screen.getByLabelText<HTMLInputElement>('Descrição').value).toBe('Analisa teses')
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Instrução inicial').value).toBe('Elabore a impugnação detalhada.')
+
+    fireEvent.change(screen.getByLabelText('Nome do modelo reutilizável'), { target: { value: 'Meu Novo Modelo' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar modelo' }))
+
+    await waitFor(() => {
+      expect(saveTemplate).toHaveBeenCalledWith({
+        title: 'Meu Novo Modelo',
+        name: 'advogado-especialista',
+        description: 'Analisa teses',
+        prompt: 'Elabore a impugnação detalhada.',
+        context: 'fresh',
+        llmProvider: 'openai',
+        model: 'gpt-5',
+        persona: 'Especialista em direito processual',
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir modelo Advogado Especialista' }))
+    await waitFor(() => {
+      expect(deleteTemplate).toHaveBeenCalledWith('template-juridico')
+    })
+  })
+
+  it('renders debate transcript, tracks missing participants, and enables phase advance only when complete', async () => {
+    const debateContribute = vi.fn<AgentTeamActions['debateContribute']>(() => Promise.resolve({ ok: true, value: debate() }))
+    const debateUpdate = vi.fn<AgentTeamActions['debateUpdate']>(() => Promise.resolve({ ok: true, value: debate() }))
+
+    const incompleteDebate = debate({
+      participants: ['lead', 'researcher'],
+      contributions: [{
+        sequence: 1,
+        revision: 3,
+        round: 1,
+        phase: 'critique',
+        author: 'researcher',
+        content: [{ type: 'text', text: 'Primeira contribuição do pesquisador.' }],
+        createdAt: 1_700_000_000_000,
+      }],
+    })
+
+    const { rerender } = render(
+      <AgentTeamView {...viewProps(projection({ debate: incompleteDebate }), actions({ debateContribute, debateUpdate }))} />,
+    )
+
+    expect(screen.getByText('Aguardando contribuições')).toBeTruthy()
+    expect(screen.getByText(/Faltam: lead/)).toBeTruthy()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Avançar fase' }).disabled).toBe(true)
+    expect(screen.getByText('Primeira contribuição do pesquisador.')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Contribuição da líder'), { target: { value: 'Síntese preliminar da liderança.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar contribuição' }))
+
+    await waitFor(() => {
+      expect(debateContribute).toHaveBeenCalledWith({
+        debateId: 'debate-1',
+        expectedRevision: 4,
+        content: 'Síntese preliminar da liderança.',
+      })
+    })
+
+    const completedDebate = debate({
+      participants: ['lead', 'researcher'],
+      contributions: [
+        {
+          sequence: 1,
+          revision: 3,
+          round: 1,
+          phase: 'critique',
+          author: 'researcher',
+          content: [{ type: 'text', text: 'Primeira contribuição do pesquisador.' }],
+          createdAt: 1_700_000_000_000,
+        },
+        {
+          sequence: 2,
+          revision: 4,
+          round: 1,
+          phase: 'critique',
+          author: 'lead',
+          content: [{ type: 'text', text: 'Síntese preliminar da liderança.' }],
+          createdAt: 1_700_000_001_000,
+        },
+      ],
+    })
+
+    rerender(<AgentTeamView {...viewProps(projection({ debate: completedDebate }), actions({ debateContribute, debateUpdate }))} />)
+
+    expect(screen.getByText('Pronto para avançar')).toBeTruthy()
+    expect(screen.getByText('Todos os participantes registraram sua fala nesta etapa.')).toBeTruthy()
+    const advanceButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Avançar fase' })
+    expect(advanceButton.disabled).toBe(false)
+    fireEvent.click(advanceButton)
+
+    await waitFor(() => {
+      expect(debateUpdate).toHaveBeenCalledWith({
+        debateId: 'debate-1',
+        expectedRevision: 4,
+        action: 'advance',
+      })
+    })
   })
 })

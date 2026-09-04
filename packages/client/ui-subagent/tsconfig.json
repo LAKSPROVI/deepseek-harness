@@ -27,6 +27,9 @@
       "path": "../ui-primitives"
     },
     {
+      "path": "../ui-settings"
+    },
+    {
       "path": "../ui-slots"
     },
     {
@@ -40,6 +43,12 @@
     },
     {
       "path": "../../api/remotes/tsconfig.client.json"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../../vendor/schemastery"
     },
     {
       "path": "../../runtime-diagnostics/invariants"

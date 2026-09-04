@@ -1,7 +1,8 @@
 /** Public Agent Teams identities, durable records, and service request values. */
 
+import type { EncodedAttachment } from '@deepseek-ai/dsh-attachment/types'
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
+import type { ContentBlock, FileBlock, ImageBlock, TextBlock } from '@deepseek-ai/dsh-llm/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-session-projection/types'
 
@@ -138,16 +139,33 @@ export interface TeamDebateTransition {
   readonly note?: string
 }
 
+/** Durable content admitted for debate evidence and contributions. */
+export type TeamDebateContentBlock = TextBlock | ImageBlock | FileBlock
+
+/** One participant's immutable contribution to an exact debate phase. */
+export interface TeamDebateContribution {
+  readonly sequence: number
+  readonly revision: number
+  readonly round: number
+  readonly phase: TeamDebatePhase
+  readonly author: string
+  readonly content: TeamDebateContentBlock[]
+  readonly createdAt: number
+}
+
 /** Whole durable debate value written on every mutation. */
 export interface TeamDebateSnapshot {
   readonly id: TeamDebateId
   readonly revision: number
   readonly topic: string
+  /** Topic evidence admitted before the debate starts. */
+  readonly evidence: TeamDebateContentBlock[]
   readonly status: TeamDebateStatus
   readonly phase: TeamDebatePhase
   readonly round: number
   readonly maxRounds: number
   readonly participants: string[]
+  readonly contributions: TeamDebateContribution[]
   readonly history: TeamDebateTransition[]
 }
 
@@ -159,11 +177,35 @@ export interface TeamProjection {
   readonly debate: TeamDebateSnapshot | null
 }
 
-/** Input for creating one structured debate. */
+/** Input for creating one structured debate from already admitted content. */
 export interface StartTeamDebateRequest {
   readonly topic: string
+  readonly evidence?: readonly TeamDebateContentBlock[]
   readonly participants: readonly string[]
   readonly maxRounds?: number
+}
+
+/** Browser Remote input for creating one structured debate. */
+export interface StartTeamDebateRemoteRequest {
+  readonly topic: string
+  readonly attachments?: readonly EncodedAttachment[]
+  readonly participants: readonly string[]
+  readonly maxRounds?: number
+}
+
+/** Input for one participant's contribution to the current debate phase. */
+export interface ContributeTeamDebateRequest {
+  readonly debateId: TeamDebateId
+  readonly expectedRevision: number
+  readonly content: readonly TeamDebateContentBlock[]
+}
+
+/** Browser Remote input for one human-authored debate contribution. */
+export interface ContributeTeamDebateRemoteRequest {
+  readonly debateId: TeamDebateId
+  readonly expectedRevision: number
+  readonly content: string
+  readonly attachments?: readonly EncodedAttachment[]
 }
 
 /** Supported debate mutations. */
@@ -222,6 +264,7 @@ export interface SpawnTeamMemberRemoteRequest {
   readonly name: string
   readonly description: string
   readonly prompt: string
+  readonly attachments?: readonly EncodedAttachment[]
   readonly context: 'fresh' | 'fork'
   readonly llmProvider?: string
   readonly model?: string
@@ -232,6 +275,7 @@ export interface SpawnTeamMemberRemoteRequest {
 export interface GuideTeamMemberRemoteRequest {
   readonly target: string
   readonly content: string
+  readonly attachments?: readonly EncodedAttachment[]
   readonly delivery: 'quiet' | 'wakeup'
 }
 

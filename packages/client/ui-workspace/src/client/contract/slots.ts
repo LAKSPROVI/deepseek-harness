@@ -114,6 +114,8 @@ export type WorkspaceBrowserInjected = {
   renameSession: (sessionId: SessionId, title: string) => Promise<void>
   /** Fork a Session at its last completed turn and open the child. */
   forkSession: (sessionId: SessionId) => void
+  /** Mark a Session as unread (re-arming the completion / unread reminder dot). */
+  markUnreadSession: (sessionId: SessionId) => void
   /** Rename a Host Workspace (rejects on name conflict; resolves on durability). */
   renameWorkspace: (workspaceId: WorkspaceId, title: string) => Promise<void>
   /** Delete only a Host Workspace registration; directory and Session logs remain. */

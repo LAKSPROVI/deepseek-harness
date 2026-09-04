@@ -413,6 +413,7 @@
 }
 
 .form label,
+.formGroup,
 .compactField,
 .participants {
   display: flex;
@@ -422,6 +423,7 @@
 }
 
 .form label > span,
+.formGroup label > span,
 .compactField > span,
 .participants legend {
   color: var(--dsw-alias-label-secondary);
@@ -817,6 +819,329 @@
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+.fieldHint {
+  color: var(--dsw-alias-label-caption);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.fieldHint code {
+  color: var(--dsw-alias-state-business-primary);
+  font-family: var(--dsw-font-mono);
+}
+
+.attachmentInput {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attachmentPicker {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px dashed var(--dsw-alias-border-l3);
+  border-radius: 7px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-2);
+  cursor: pointer;
+}
+
+.attachmentPicker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.draftAttachments,
+.contentBlocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attachmentCard,
+.historicalFile,
+.historicalImage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-2);
+  text-decoration: none;
+}
+
+.attachmentCard {
+  width: 100%;
+}
+
+.attachmentCard img,
+.historicalImage img {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.attachmentCard > span:not(.fileMark) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.attachmentCard strong,
+.attachmentCard small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentCard small,
+.historicalImage span,
+.historicalFile span:last-child,
+.attachmentUnavailable {
+  color: var(--dsw-alias-label-caption);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.fileMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 6px;
+  color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-tertiary);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.readiness {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  color: var(--dsw-alias-state-warn-label);
+  background: var(--dsw-alias-state-warn-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.readinessComplete {
+  color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-tertiary);
+}
+
+.evidence,
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.evidence h4,
+.transcript h4 {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.transcriptHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.transcriptHeader span {
+  color: var(--dsw-alias-label-caption);
+  font-size: 10px;
+}
+
+.contributionList {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contributionList > li {
+  padding: 11px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.contributionList header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.contributionList header strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+}
+
+.contributionList header time {
+  white-space: nowrap;
+}
+
+.contributionText {
+  width: 100%;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+}
+
+.historicalImage {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.historicalImage img {
+  width: min(240px, 100%);
+  height: auto;
+  max-height: 180px;
+}
+
+.contributionForm {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-state-business-secondary);
+  border-radius: 9px;
+  background: var(--dsw-alias-state-business-tertiary);
+}
+
+.contributionForm label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.contributionForm textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 82px;
+  padding: 8px 9px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-1);
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.templateLibrary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.templateHeader,
+.templateSave {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.templateHeader > span {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.templateHeader small,
+.templateError {
+  margin: 0;
+  color: var(--dsw-alias-label-caption);
+  font-size: 10px;
+}
+
+.templateError {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.templateList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 170px;
+  overflow: auto;
+}
+
+.templateList > div {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.templateButton {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-1);
+  cursor: pointer;
+}
+
+.templateButton strong,
+.templateButton span {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.templateButton span {
+  color: var(--dsw-alias-label-caption);
+}
+
+.templateSave label {
+  flex: 1;
 }
 
 @media (max-width: 1060px) {

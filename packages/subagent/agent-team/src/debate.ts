@@ -1,12 +1,14 @@
 /** Structured Team debate creation and compare-and-set transitions. */
 
 import { randomUUID } from 'node:crypto'
+import { Buffer } from 'node:buffer'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { TeamJournal } from './journal.ts'
 import type { TeamMembership, TeamRoster } from './roster.ts'
 import { TeamError } from './error.ts'
 import { TeamDebateId, TeamId } from './types.ts'
 import type {
+  ContributeTeamDebateRequest,
   StartTeamDebateRequest,
   TeamDebatePhase,
   TeamDebateSnapshot,
@@ -23,6 +25,7 @@ export class TeamDebateBoard {
     private readonly journal: TeamJournal,
     private readonly roster: TeamRoster,
     private readonly maxRounds: number,
+    private readonly maxContentBytes: number,
   ) {}
 
   /** Return the current durable debate, when present. */
@@ -40,15 +43,19 @@ export class TeamDebateBoard {
     }
     const participants = this.participants(membership, request.participants)
     const debateId = TeamDebateId(randomUUID())
+    const evidence = [...(request.evidence ?? [])]
+    if (evidence.length > 0) this.assertContent(evidence, 'debate evidence')
     const debate: TeamDebateSnapshot = {
       id: debateId,
       revision: 1,
       topic,
+      evidence,
       status: 'active',
       phase: 'positions',
       round: 1,
       maxRounds,
       participants,
+      contributions: [],
       history: [{ revision: 1, round: 1, phase: 'positions', status: 'active', actor: membership.name }],
     }
     return await this.journal.transact(membership.root.id, async () => {
@@ -65,6 +72,53 @@ export class TeamDebateBoard {
     })
   }
 
+  /** Append one participant contribution to the active phase. */
+  async contribute(caller: Agent, request: ContributeTeamDebateRequest): Promise<TeamDebateSnapshot> {
+    const membership = this.roster.membership(caller)
+    const content = [...request.content]
+    this.assertContent(content, 'debate contribution')
+    return await this.journal.transact(membership.root.id, async () => {
+      const current = this.journal.state(membership.root).debate
+      if (current === undefined) throw new TeamError('no Team debate exists', 'TEAM_DEBATE_NOT_FOUND')
+      this.assertCurrent(current, request.debateId, request.expectedRevision)
+      if (current.status !== 'active') {
+        throw new TeamError('contributions require an active Team debate', 'TEAM_DEBATE_TRANSITION')
+      }
+      if (!current.participants.includes(membership.name)) {
+        throw new TeamError(`Team member "${membership.name}" is not a debate participant`, 'TEAM_DEBATE_PARTICIPANT_REQUIRED')
+      }
+      const duplicate = current.contributions.some(contribution =>
+        contribution.round === current.round && contribution.phase === current.phase
+        && contribution.author === membership.name)
+      if (duplicate) {
+        throw new TeamError(
+          `Team member "${membership.name}" already contributed to round ${current.round} ${current.phase}`,
+          'TEAM_DEBATE_CONTRIBUTION_EXISTS',
+        )
+      }
+      const revision = current.revision + 1
+      const next: TeamDebateSnapshot = {
+        ...current,
+        revision,
+        contributions: [...current.contributions, {
+          sequence: current.contributions.length + 1,
+          revision,
+          round: current.round,
+          phase: current.phase,
+          author: membership.name,
+          content,
+          createdAt: Date.now(),
+        }],
+      }
+      await this.journal.appendAndFlush(membership.root, 'team/debate', {
+        version: 1,
+        teamId: TeamId(membership.root.id),
+        debate: next,
+      })
+      return next
+    })
+  }
+
   /** Apply one Lead-authorized compare-and-set transition. */
   async update(caller: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateSnapshot> {
     const membership = this.requireLead(caller)
@@ -72,12 +126,7 @@ export class TeamDebateBoard {
     return await this.journal.transact(membership.root.id, async () => {
       const current = this.journal.state(membership.root).debate
       if (current === undefined) throw new TeamError('no Team debate exists', 'TEAM_DEBATE_NOT_FOUND')
-      if (current.id !== request.debateId || current.revision !== request.expectedRevision) {
-        throw new TeamError(
-          `stale debate ref "${request.debateId}" revision ${request.expectedRevision}; current is "${current.id}" revision ${current.revision}`,
-          'TEAM_DEBATE_STALE',
-        )
-      }
+      this.assertCurrent(current, request.debateId, request.expectedRevision)
       const next = this.transition(current, request.action, membership.name, note)
       await this.journal.appendAndFlush(membership.root, 'team/debate', {
         version: 1,
@@ -111,6 +160,7 @@ export class TeamDebateBoard {
         break
       case 'advance': {
         if (current.status !== 'active') throw new TeamError('only an active debate can advance', 'TEAM_DEBATE_TRANSITION')
+        this.assertPhaseComplete(current)
         const index = PHASES.indexOf(current.phase)
         if (index < PHASES.length - 1) {
           const nextPhase = PHASES[index + 1]
@@ -130,6 +180,7 @@ export class TeamDebateBoard {
         if (current.status !== 'active' || current.phase !== 'synthesis') {
           throw new TeamError('a debate can complete only from active synthesis', 'TEAM_DEBATE_TRANSITION')
         }
+        this.assertPhaseComplete(current)
         status = 'completed'
         break
     }
@@ -148,6 +199,35 @@ export class TeamDebateBoard {
         actor,
         ...(note === undefined ? {} : { note }),
       }],
+    }
+  }
+
+  private assertCurrent(current: TeamDebateSnapshot, id: TeamDebateId, revision: number): void {
+    if (current.id === id && current.revision === revision) return
+    throw new TeamError(
+      `stale debate ref "${id}" revision ${revision}; current is "${current.id}" revision ${current.revision}`,
+      'TEAM_DEBATE_STALE',
+    )
+  }
+
+  private assertContent(content: readonly unknown[], subject: string): void {
+    if (content.length === 0) throw new TeamError(`${subject} must not be empty`, 'TEAM_INVALID_ARGUMENT')
+    const bytes = Buffer.byteLength(JSON.stringify(content), 'utf8')
+    if (bytes > this.maxContentBytes) {
+      throw new TeamError(`${subject} exceeds ${this.maxContentBytes} UTF-8 bytes`, 'TEAM_INVALID_ARGUMENT')
+    }
+  }
+
+  private assertPhaseComplete(current: TeamDebateSnapshot): void {
+    const authors = new Set(current.contributions
+      .filter(item => item.round === current.round && item.phase === current.phase)
+      .map(item => item.author))
+    const missing = current.participants.filter(name => !authors.has(name))
+    if (missing.length > 0) {
+      throw new TeamError(
+        `debate phase ${current.round}/${current.phase} still requires contributions from: ${missing.join(', ')}`,
+        'TEAM_DEBATE_INCOMPLETE',
+      )
     }
   }
 

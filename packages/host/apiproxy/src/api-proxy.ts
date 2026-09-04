@@ -168,18 +168,69 @@ type LoggedAttachment =
   | { type: 'image'; ref: ImageAttachmentRef }
   | { type: 'file'; ref: FileAttachmentRef }
 
-/** Resolve an attachment only from authoritative model-visible user-message content. */
-function referencedAttachment(events: readonly SessionEvent[], attachmentId: string): LoggedAttachment | undefined {
-  for (const event of events) {
-    if (event.type !== 'user/message') continue
-    for (const block of event.data.content) {
-      if (block.type === 'image' && String(block.attachment.attachmentId) === attachmentId) {
-        return { type: 'image', ref: block.attachment }
-      }
-      if (block.type === 'file' && String(block.attachment.attachmentId) === attachmentId) {
-        return { type: 'file', ref: block.attachment }
+/** Resolve one attachment from an explicitly authorized durable content vector. */
+function referencedContent(
+  content: readonly import('@deepseek-ai/dsh-llm').ContentBlock[],
+  attachmentId: string,
+): LoggedAttachment | undefined {
+  for (const block of content) {
+    if (block.type === 'image' && String(block.attachment.attachmentId) === attachmentId) {
+      return { type: 'image', ref: block.attachment }
+    }
+    if (block.type === 'file' && String(block.attachment.attachmentId) === attachmentId) {
+      return { type: 'file', ref: block.attachment }
+    }
+  }
+  return undefined
+}
+
+/** Read one Agent Teams debate event without coupling the Host to that optional plugin. */
+function referencedTeamDebateAttachment(event: SessionEvent, attachmentId: string): LoggedAttachment | undefined {
+  const envelope = event as unknown as { type?: unknown; data?: unknown }
+  if (envelope.type !== 'team/debate' || typeof envelope.data !== 'object' || envelope.data === null) return undefined
+  const debate = (envelope.data as { debate?: unknown }).debate
+  if (typeof debate !== 'object' || debate === null) return undefined
+  const candidate = debate as { evidence?: unknown; contributions?: unknown }
+  const vectors: unknown[] = [candidate.evidence]
+  if (Array.isArray(candidate.contributions)) {
+    for (const contribution of candidate.contributions) {
+      if (typeof contribution === 'object' && contribution !== null) {
+        vectors.push((contribution as { content?: unknown }).content)
       }
     }
+  }
+  for (const vector of vectors) {
+    if (!Array.isArray(vector)) continue
+    for (const value of vector) {
+      if (typeof value !== 'object' || value === null) continue
+      const block = value as { type?: unknown; attachment?: unknown }
+      if (typeof block.attachment !== 'object' || block.attachment === null) continue
+      const ref = block.attachment as Record<string, unknown>
+      if (ref['attachmentId'] !== attachmentId || typeof ref['bytes'] !== 'number'
+        || !Number.isSafeInteger(ref['bytes']) || ref['bytes'] < 0
+        || typeof ref['mediaType'] !== 'string'
+        || (ref['name'] !== undefined && typeof ref['name'] !== 'string')) continue
+      if (block.type === 'file') return { type: 'file', ref: ref as unknown as FileAttachmentRef }
+      if (block.type === 'image' && ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(ref['mediaType'])
+        && typeof ref['width'] === 'number' && Number.isSafeInteger(ref['width']) && ref['width'] > 0
+        && typeof ref['height'] === 'number' && Number.isSafeInteger(ref['height']) && ref['height'] > 0) {
+        return { type: 'image', ref: ref as unknown as ImageAttachmentRef }
+      }
+    }
+  }
+  return undefined
+}
+
+/** Resolve an attachment only from authoritative model-visible content. */
+function referencedAttachment(events: readonly SessionEvent[], attachmentId: string): LoggedAttachment | undefined {
+  for (const event of events) {
+    if (event.type === 'user/message') {
+      const found = referencedContent(event.data.content, attachmentId)
+      if (found !== undefined) return found
+      continue
+    }
+    const found = referencedTeamDebateAttachment(event, attachmentId)
+    if (found !== undefined) return found
   }
   return undefined
 }

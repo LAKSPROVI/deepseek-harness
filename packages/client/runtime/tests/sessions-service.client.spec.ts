@@ -94,6 +94,16 @@ describe('list store projection', () => {
     await Promise.resolve()
     expect(b.svc.list.getSnapshot().ids).toContain('s2')
   })
+
+  it('delegates markUnread to the manager', async () => {
+    const b = bench()
+    await feedList(b, [{ id: 's1' }])
+    b.svc.open(sid('s1'))
+    expect(b.svc.list.getSnapshot().byId[sid('s1')]?.completed).toBeUndefined()
+    b.svc.markUnread(sid('s1'))
+    await Promise.resolve()
+    expect(b.svc.list.getSnapshot().byId[sid('s1')]?.completed).toBe(true)
+  })
 })
 
 describe('search', () => {

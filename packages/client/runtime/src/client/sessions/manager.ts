@@ -226,6 +226,18 @@ export class SessionManager {
   }
 
   /**
+   * Explicitly mark a session as unread (re-arming the completion / unread reminder).
+   * @param sessionId - listed session id.
+   */
+  markUnread(sessionId: SessionId): void {
+    if (!this.summaries.some(s => s.sessionId === sessionId)) {
+      return
+    }
+    this.completedNotifications.add(sessionId)
+    this.notifier.notifyNow()
+  }
+
+  /**
    * Return the durable catalog address retained for one child.
    * @param sessionId - possible addressed child id.
    * @returns The direct-parent address, when navigation discovered one.

@@ -31,13 +31,20 @@ const teamTaskIdSchema = z.string().min(1).refine((value) => {
 }, { message: 'numeric task id suffix must be a safe integer' }).transform(value => toTeamTaskId(value))
 const teamMessageIdSchema = z.string().min(1).transform(value => toTeamMessageId(value))
 
-const coreContentBlockTypes = new Set(['text', 'reasoning', 'image', 'tool-call', 'tool-result'])
+const coreContentBlockTypes = new Set(['text', 'reasoning', 'image', 'file', 'tool-call', 'tool-result'])
 const imageAttachmentSchema = z.object({
   attachmentId: z.string().min(1),
   mediaType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
   bytes: nonNegativeSafeInteger,
   width: positiveSafeInteger,
   height: positiveSafeInteger,
+  name: z.string().optional(),
+  originalDimensions: z.object({ width: positiveSafeInteger, height: positiveSafeInteger }).strict().optional(),
+}).strict()
+const fileAttachmentSchema = z.object({
+  attachmentId: z.string().min(1),
+  mediaType: z.string(),
+  bytes: nonNegativeSafeInteger,
   name: z.string().optional(),
 }).strict()
 
@@ -47,6 +54,7 @@ const contentBlockSchema: z.ZodType<ContentBlock> = z.lazy(() => z.union([
   z.object({ type: z.literal('text'), text: z.string() }).strict(),
   z.object({ type: z.literal('reasoning'), text: z.string() }).strict(),
   z.object({ type: z.literal('image'), attachment: imageAttachmentSchema }).strict(),
+  z.object({ type: z.literal('file'), attachment: fileAttachmentSchema }).strict(),
   z.object({
     type: z.literal('tool-call'),
     id: z.string().min(1),
@@ -88,15 +96,26 @@ const teamDebateTransitionSchema = z.object({
   actor: z.string(),
   note: z.string().optional(),
 }).strict()
+const teamDebateContributionSchema = z.object({
+  sequence: positiveSafeInteger,
+  revision: positiveSafeInteger,
+  round: positiveSafeInteger,
+  phase: teamDebatePhaseSchema,
+  author: z.string(),
+  content: z.array(contentBlockSchema),
+  createdAt: nonNegativeSafeInteger,
+}).strict()
 const teamDebateSnapshotSchema = z.object({
   id: z.string().min(1).transform(value => value as TeamDebateSnapshot['id']),
   revision: positiveSafeInteger,
   topic: z.string(),
+  evidence: z.array(contentBlockSchema),
   status: teamDebateStatusSchema,
   phase: teamDebatePhaseSchema,
   round: positiveSafeInteger,
   maxRounds: positiveSafeInteger,
   participants: z.array(z.string()),
+  contributions: z.array(teamDebateContributionSchema),
   history: z.array(teamDebateTransitionSchema),
 }).strict() as z.ZodType<TeamDebateSnapshot>
 
@@ -301,9 +320,10 @@ export function applyTeamEvent(state: TeamFoldState, event: SessionEvent): void 
     case 'team/debate': {
       const debate = decoded.data.debate
       const prior = state.debate
+      const begins = debate.revision === 1 && debate.round === 1 && debate.phase === 'positions'
+        && debate.status === 'active' && debate.history.length === 1 && debate.contributions.length === 0
       if (prior === undefined) {
-        if (debate.revision !== 1 || debate.round !== 1 || debate.phase !== 'positions'
-          || debate.status !== 'active' || debate.history.length !== 1) {
+        if (!begins) {
           throw new Error(`team debate "${debate.id}" must begin as active revision-one positions in round 1`)
         }
       } else {
@@ -311,20 +331,35 @@ export function applyTeamEvent(state: TeamFoldState, event: SessionEvent): void 
           throw new Error(`team debate "${prior.id}" was replaced before completion`)
         }
         if (prior.id === debate.id) {
-          if (debate.revision !== prior.revision + 1 || debate.topic !== prior.topic
+          const historyAdded = debate.history.length - prior.history.length
+          const contributionAdded = debate.contributions.length - prior.contributions.length
+          const immutableChanged = debate.topic !== prior.topic
+            || JSON.stringify(debate.evidence) !== JSON.stringify(prior.evidence)
             || debate.maxRounds !== prior.maxRounds
             || debate.participants.join('\u0000') !== prior.participants.join('\u0000')
-            || debate.history.length !== prior.history.length + 1) {
+          const prefixesChanged = JSON.stringify(debate.history.slice(0, prior.history.length)) !== JSON.stringify(prior.history)
+            || JSON.stringify(debate.contributions.slice(0, prior.contributions.length)) !== JSON.stringify(prior.contributions)
+          if (debate.revision !== prior.revision + 1 || immutableChanged || prefixesChanged
+            || historyAdded + contributionAdded !== 1 || historyAdded < 0 || contributionAdded < 0) {
             throw new Error(`team debate "${debate.id}" changed immutable fields or skipped a revision`)
           }
-          const transition = debate.history.at(-1)
-          if (transition === undefined || transition.revision !== debate.revision
-            || transition.round !== debate.round || transition.phase !== debate.phase
-            || transition.status !== debate.status) {
-            throw new Error(`team debate "${debate.id}" history does not describe its current revision`)
+          if (historyAdded === 1) {
+            const transition = debate.history.at(-1)
+            if (transition === undefined || transition.revision !== debate.revision
+              || transition.round !== debate.round || transition.phase !== debate.phase
+              || transition.status !== debate.status) {
+              throw new Error(`team debate "${debate.id}" history does not describe its current revision`)
+            }
+          } else {
+            const contribution = debate.contributions.at(-1)
+            if (contribution === undefined || contribution.revision !== debate.revision
+              || contribution.sequence !== debate.contributions.length
+              || contribution.round !== prior.round || contribution.phase !== prior.phase
+              || debate.round !== prior.round || debate.phase !== prior.phase || debate.status !== prior.status) {
+              throw new Error(`team debate "${debate.id}" contribution does not describe its current revision`)
+            }
           }
-        } else if (debate.revision !== 1 || debate.status !== 'active'
-          || debate.phase !== 'positions' || debate.round !== 1 || debate.history.length !== 1) {
+        } else if (!begins) {
           throw new Error(`replacement team debate "${debate.id}" must begin at revision 1`)
         }
       }

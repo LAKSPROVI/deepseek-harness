@@ -102,10 +102,17 @@ async function fullBench(sessions: SessionSummary[]) {
     guide: () => success({}),
     interrupt: () => success({ previousStatus: 'idle' as const }),
     debateStart: () => success({}),
+    debateContribute: () => success({}),
     debateUpdate: () => success({}),
   }
   ctx.provide('remote', { $on: () => () => {}, agentTeams } as never)
   ctx.provide('remote.agentTeams', agentTeams as never)
+  ctx.provide('conversation', {
+    createDraftAttachments: () => [],
+    serializeDraftAttachments: () => Promise.resolve([]),
+    releaseDraftAttachment: () => {},
+    resolveAttachment: () => Promise.resolve('blob:test'),
+  } as never)
   ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   await provideSlotFaces(ctx)
   await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
@@ -125,7 +132,9 @@ const FAMILY: SessionSummary[] = [
 
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['connection', 'sessions', 'slots', 'remote', 'remote.agentTeams', 'locale'])
+    expect(inject).toEqual([
+      'connection', 'sessions', 'slots', 'remote', 'remote.agentTeams', 'locale', 'conversation', 'settingsScope',
+    ])
   })
 
   it('keeps deferred Agent Team Remote actions inside the injected parent service', async () => {

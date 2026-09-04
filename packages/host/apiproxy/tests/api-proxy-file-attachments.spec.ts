@@ -348,6 +348,60 @@ describe('generic file attachment authorization', () => {
     await ctx.fiber.dispose()
   })
 
+  it('authorizes only explicit debate content among optional Team events', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    const debateRef = {
+      attachmentId: 'debate-file', mediaType: 'application/pdf', bytes: 2, name: 'evidence.pdf',
+    }
+    const hiddenRef = {
+      attachmentId: 'task-file', mediaType: 'application/pdf', bytes: 2, name: 'hidden.pdf',
+    }
+    const readFile = vi.fn((ref: typeof debateRef) => Promise.resolve({ ref, data: Uint8Array.of(7, 8) }))
+    const readFileStream = vi.fn((ref: typeof debateRef) => Promise.resolve({
+      ref,
+      data: (async function* (): AsyncGenerator<Uint8Array> { yield Uint8Array.of(7, 8) })(),
+    }))
+    ctx.provide('attachments', { readFile, readFileStream } as never)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'files-native', model: 'route' }), cwd: '/tmp',
+    })
+    agent.session.append('team/debate' as never, {
+      version: 1,
+      teamId: sessionId,
+      debate: {
+        id: 'debate-one', revision: 1, topic: 'Review evidence', status: 'active', phase: 'positions',
+        round: 1, maxRounds: 1, participants: ['lead', 'worker'], contributions: [], history: [],
+        evidence: [{ type: 'file', attachment: debateRef }],
+      },
+    } as never)
+    agent.session.append('team/task' as never, {
+      version: 1, teamId: sessionId, task: { id: '1', attachment: hiddenRef },
+    } as never)
+
+    const admitted = await api.sessions.attachment(request({
+      sessionId, attachmentId: 'debate-file' as never,
+    }))
+    expect(admitted.result).toMatchObject({
+      ok: true, value: { type: 'file', attachment: debateRef, data: 'Bwg=' },
+    })
+    const download = await api.downloads.fileDownload(
+      { sessionId, attachmentId: debateRef.attachmentId as never }, new AbortController().signal)
+    expect(download.status).toBe(200)
+    await expect(download.arrayBuffer().then(value => [...new Uint8Array(value)])).resolves.toEqual([7, 8])
+
+    const denied = await api.sessions.attachment(request({
+      sessionId, attachmentId: 'task-file' as never,
+    }))
+    expect(denied.result).toMatchObject({
+      ok: false, error: { details: { reason: 'ATTACHMENT_NOT_REFERENCED' } },
+    })
+    expect((await api.downloads.fileDownload(
+      { sessionId, attachmentId: hiddenRef.attachmentId as never }, new AbortController().signal)).status).toBe(404)
+    expect(readFile).toHaveBeenCalledOnce()
+    expect(readFileStream).toHaveBeenCalledOnce()
+    await ctx.fiber.dispose()
+  })
+
   it('serves file bytes discriminated as file only when the session log references the id', async () => {
     const { ctx, agent, sessionId } = await harness()
     const ref = { attachmentId: 'file-authorized', mediaType: 'application/pdf', bytes: 2, name: 'brief.pdf' }

@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
-import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
-import type { ImageAttachmentRef, SaveImageAttachment } from '@deepseek-ai/dsh-attachment/types'
+import { admitEncodedAttachments, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
+import type {
+  FileAttachmentRef, ImageAttachmentRef, SaveImageAttachment,
+} from '@deepseek-ai/dsh-attachment/types'
 
 const PNG = 'AAAA' // canonical base64, 3 bytes
 
@@ -62,5 +64,48 @@ describe('admitEncodedImages', () => {
     const refused = Object.assign(new Error('Image batch exceeds the configured image-count limit.'), { code: 'TOO_MANY_IMAGES' })
     mocks.saveImages.mockRejectedValueOnce(refused)
     await expect(admitEncodedImages(store, [{ mediaType: 'image/png', data: PNG }])).rejects.toBe(refused)
+  })
+})
+
+describe('admitEncodedAttachments', () => {
+  it('authenticates uploads and restores mixed display order', async () => {
+    const image: ImageAttachmentRef = {
+      attachmentId: 'image-1' as ImageAttachmentRef['attachmentId'],
+      mediaType: 'image/png', bytes: 3, width: 1, height: 1, name: 'image.png',
+    }
+    const encodedFile: FileAttachmentRef = {
+      attachmentId: 'file-1' as FileAttachmentRef['attachmentId'],
+      mediaType: 'text/plain', bytes: 3, name: 'notes.txt',
+    }
+    const uploadedFile: FileAttachmentRef = {
+      attachmentId: 'file-2' as FileAttachmentRef['attachmentId'],
+      mediaType: 'application/pdf', bytes: 4, name: 'evidence.pdf',
+    }
+    const saveImages = vi.fn(() => Promise.resolve([image]))
+    const saveFiles = vi.fn(() => Promise.resolve([encodedFile]))
+    const authorizeUploadedFiles = vi.fn(() => Promise.resolve([uploadedFile]))
+    const store = {
+      fileLimits: { maxFileBytes: 8, maxFilesPerMessage: 2, maxMessageFileBytes: 8 },
+      saveImages,
+      saveFiles,
+      authorizeUploadedFiles,
+    } as unknown as AttachmentStore
+
+    const result = await admitEncodedAttachments(store, 'session-1', [
+      { type: 'file', uploadId: 'receipt', attachment: uploadedFile },
+      { type: 'image', mediaType: 'image/png', data: PNG, name: 'image.png' },
+      { type: 'file', mediaType: 'text/plain', data: PNG, name: 'notes.txt' },
+    ])
+
+    expect(authorizeUploadedFiles).toHaveBeenCalledWith(
+      'session-1', [{ uploadId: 'receipt', attachment: uploadedFile }],
+    )
+    expect(result).toEqual([
+      { type: 'file', attachment: uploadedFile },
+      { type: 'image', attachment: image },
+      { type: 'file', attachment: encodedFile },
+    ])
+    expect(Object.isFrozen(result)).toBe(true)
+    expect(result.every(Object.isFrozen)).toBe(true)
   })
 })

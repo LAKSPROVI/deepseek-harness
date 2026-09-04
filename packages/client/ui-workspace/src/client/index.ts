@@ -92,6 +92,9 @@ export function apply(ctx: ClientContext): void {
           // Fork or child-rename failure keeps the current selection.
         })
     },
+    markUnreadSession: (sessionId) => {
+      ctx.sessions.markUnread(sessionId)
+    },
     renameWorkspace: async (workspaceId, title) => { await ctx.workspaces.rename(workspaceId, title) },
     deleteWorkspace: async (workspaceId) => { await ctx.workspaces.delete(workspaceId) },
     insertWorkspaceBefore: async (workspaceId, beforeWorkspaceId) => {

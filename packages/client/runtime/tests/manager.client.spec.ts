@@ -1053,6 +1053,17 @@ describe('completed reminder', () => {
     expect(entry(manager, S2)?.completed).toBe(false)
   })
 
+  it('arms on markUnread and clears on select', () => {
+    const manager = new SessionManager(new FakeApiClient(), fakeRemote())
+    manager.handleHostEnvelope(added('h1', S1))
+    manager.select(S1)
+    expect(entry(manager, S1)?.completed).toBe(false)
+    manager.markUnread(S1)
+    expect(entry(manager, S1)?.completed).toBe(true)
+    manager.select(S1)
+    expect(entry(manager, S1)?.completed).toBe(false)
+  })
+
   it('never arms for the session being watched and re-arms after a switch-away re-run', () => {
     const manager = new SessionManager(new FakeApiClient(), fakeRemote())
     manager.handleHostEnvelope(added('h1', S1))

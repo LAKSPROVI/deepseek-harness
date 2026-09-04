@@ -30,6 +30,26 @@ const taskSchema = z.object({
 
 const debatePhaseSchema = z.enum(['positions', 'critique', 'rebuttal', 'verification', 'synthesis'])
 const debateStatusSchema = z.enum(['active', 'paused', 'completed'])
+const attachmentIdSchema = z.string().min(1)
+const contentBlockSchema = z.union([
+  z.object({ type: z.literal('text'), text: z.string() }).strict(),
+  z.object({
+    type: z.literal('image'),
+    attachment: z.object({
+      attachmentId: attachmentIdSchema,
+      mediaType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
+      bytes: z.number().int().nonnegative(), width: z.number().int().positive(), height: z.number().int().positive(),
+      name: z.string().optional(),
+      originalDimensions: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).strict().optional(),
+    }).strict(),
+  }).strict(),
+  z.object({
+    type: z.literal('file'),
+    attachment: z.object({
+      attachmentId: attachmentIdSchema, mediaType: z.string(), bytes: z.number().int().nonnegative(), name: z.string().optional(),
+    }).strict(),
+  }).strict(),
+])
 const debateTransitionSchema = z.object({
   revision: z.number().int().positive(),
   round: z.number().int().positive(),
@@ -38,15 +58,26 @@ const debateTransitionSchema = z.object({
   actor: z.string(),
   note: z.string().optional(),
 }).strict()
+const debateContributionSchema = z.object({
+  sequence: z.number().int().positive(),
+  revision: z.number().int().positive(),
+  round: z.number().int().positive(),
+  phase: debatePhaseSchema,
+  author: z.string(),
+  content: z.array(contentBlockSchema),
+  createdAt: z.number().int().nonnegative(),
+}).strict()
 const debateSchema = z.object({
   id: z.string(),
   revision: z.number().int().positive(),
   topic: z.string(),
+  evidence: z.array(contentBlockSchema),
   status: debateStatusSchema,
   phase: debatePhaseSchema,
   round: z.number().int().positive(),
   maxRounds: z.number().int().positive(),
   participants: z.array(z.string()),
+  contributions: z.array(debateContributionSchema),
   history: z.array(debateTransitionSchema),
 }).strict()
 
