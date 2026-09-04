@@ -25,6 +25,7 @@ import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
 import { en, zh, type ModelKey } from './locales.ts'
+import { getFrequentModels } from './usage.ts'
 
 export { ModelDirectory } from './directory.ts'
 export type { ModelDirectoryState } from './directory.ts'
@@ -47,8 +48,22 @@ function rowId(providerId: string, modelId: string): string {
 /** Flatten the directory into popup rows; failure rows are listed for visibility but never selectable. */
 function optionsOf(directory: SessionModels, t: TranslateNS<'model'>): SelectOption[] {
   const rows: SelectOption[] = []
+  const frequent = getFrequentModels(directory.groups, 5)
+  const frequentKeys = new Set(frequent.map(f => rowId(f.group.id, f.model.id)))
+
+  for (const { group, model } of frequent) {
+    rows.push({
+      id: rowId(group.id, model.id),
+      label: model.name,
+      detail: `${t('group.frequent')} · ${model.description !== undefined ? `${group.name} · ${model.description}` : group.name}`,
+      ...(directory.current.provider === group.id && directory.current.model === model.id
+        ? { active: true } : {}),
+    })
+  }
+
   for (const group of directory.groups) {
     for (const model of group.models) {
+      if (frequentKeys.has(rowId(group.id, model.id))) continue
       rows.push({
         id: rowId(group.id, model.id),
         label: model.name,

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * ui-model-selection browser half on a real cordis Context with fake command/slots/
  * connection faces and real session scopes: the plugin mounts ModelDirectoryResolver
@@ -9,7 +10,7 @@
  * Session or plugin disposal drops the directory and composer policy (HMR safety).
  */
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createScope, createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
@@ -217,6 +218,10 @@ async function bench() {
 const projection = (id: string) => ({ sessionId: sid(id) })
 
 describe('ui-model-selection dual entry', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
   it('registers the /model contribution and the composer model seat', async () => {
     const b = await bench()
     expect(b.contribution().name).toBe('model')
@@ -272,6 +277,20 @@ describe('ui-model-selection dual entry', () => {
       model: 'deepseek-v4-pro',
       reasoningEffort: 'high',
     })
+  })
+
+  it('popup options list frequent models at the top when usage history exists', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const seatFace = b.seat().inject!(sid('s1'))
+    await seatFace.select({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-pro',
+      reasoningEffort: 'max',
+    })
+    const options = await b.contribution().ui.options(projection('s1'), new AbortController().signal)
+    expect(options[0]?.label).toBe('DeepSeek-V4-Pro')
+    expect(options[0]?.detail).toContain('常用模型')
   })
 
   it('both entries share one directory instance per session, isolated across sessions', async () => {

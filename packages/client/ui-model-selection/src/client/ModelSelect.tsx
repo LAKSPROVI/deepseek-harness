@@ -19,10 +19,12 @@ import clsx from 'clsx'
 import type { ModelReasoningEffort, ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
+  IconCloseOutline16, IconSearchOutline16, IconSparkle16,
   IconWarningOutline16, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
+import { getFrequentModels, recordModelUsage } from './usage.ts'
 import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
@@ -52,6 +54,7 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
+  const [search, setSearch] = useState('')
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -61,6 +64,7 @@ export function ModelSelect(
   const toastSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
   const id = useId()
 
@@ -102,6 +106,38 @@ export function ModelSelect(
     ], [reasoning, t])
   const busy = state.status === 'selecting'
 
+  const frequentModels = useMemo(
+    () => getFrequentModels(state.groups, 5),
+    [state.groups, state.current],
+  )
+
+  const query = search.trim().toLowerCase()
+
+  const filteredFrequent = useMemo(() => {
+    if (frequentModels.length === 0) return []
+    if (query === '') return frequentModels
+    return frequentModels.filter(({ group, model }) =>
+      model.name.toLowerCase().includes(query)
+      || model.id.toLowerCase().includes(query)
+      || (model.description?.toLowerCase().includes(query) ?? false)
+      || group.name.toLowerCase().includes(query),
+    )
+  }, [frequentModels, query])
+
+  const filteredGroups = useMemo(() => {
+    if (query === '') return state.groups
+    return state.groups.flatMap((group) => {
+      const matchingModels = group.models.filter(model =>
+        model.name.toLowerCase().includes(query)
+        || model.id.toLowerCase().includes(query)
+        || (model.description?.toLowerCase().includes(query) ?? false)
+        || group.name.toLowerCase().includes(query),
+      )
+      if (matchingModels.length === 0) return []
+      return [{ ...group, models: matchingModels }]
+    })
+  }, [state.groups, query])
+
   const reload = (): void => {
     lastActionRef.current = 'load'
     load()
@@ -124,10 +160,17 @@ export function ModelSelect(
     return () => { document.removeEventListener('mousedown', closeOutside) }
   }, [open])
 
+  useEffect(() => {
+    if (open && pane === 'model') {
+      searchInputRef.current?.focus()
+    }
+  }, [open, pane])
+
   if (!available) return null
 
   const show = (): void => {
     setPane('root')
+    setSearch('')
     setOpen(true)
     reload()
   }
@@ -135,6 +178,7 @@ export function ModelSelect(
   const close = (restoreFocus = false): void => {
     setOpen(false)
     setPane('root')
+    setSearch('')
     if (restoreFocus) queueMicrotask(() => { triggerRef.current?.focus() })
   }
 
@@ -149,15 +193,38 @@ export function ModelSelect(
   const onRootKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Escape' && open) {
       event.preventDefault()
-      // Escape backs out of a drilled pane first, then closes.
-      if (pane !== 'root') setPane('root')
-      else close(true)
+      if (search.length > 0) {
+        setSearch('')
+      } else if (pane !== 'root') {
+        setPane('root')
+      } else {
+        close(true)
+      }
       return
     }
     if (!open) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       moveFocus(event.key === 'ArrowDown' ? 1 : -1)
+    }
+  }
+
+  const onSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      const firstFrequent = filteredFrequent[0]
+      if (firstFrequent !== undefined) {
+        choose({ provider: firstFrequent.group.id, model: firstFrequent.model.id })
+      } else {
+        const firstGroup = filteredGroups[0]
+        const firstModel = firstGroup?.models[0]
+        if (firstGroup !== undefined && firstModel !== undefined) {
+          choose({ provider: firstGroup.id, model: firstModel.id })
+        }
+      }
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      moveFocus(1)
     }
   }
 
@@ -180,11 +247,15 @@ export function ModelSelect(
 
   const choose = (selection: ModelSelection): void => {
     if (state.current?.provider === selection.provider && state.current.model === selection.model) {
+      recordModelUsage(selection.provider, selection.model)
       close(true)
       return
     }
     lastActionRef.current = 'select'
-    void select(selection).then(settleSelection)
+    void select(selection).then((accepted) => {
+      if (accepted) recordModelUsage(selection.provider, selection.model)
+      settleSelection(accepted)
+    })
   }
 
   const chooseEffort = (effort: string | undefined): void => {
@@ -268,6 +339,33 @@ export function ModelSelect(
 
           {pane === 'model' && (
             <>
+              <div className={css.searchBox}>
+                <IconSearchOutline16 className={css.searchIcon} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  className={css.searchInput}
+                  placeholder={t('search.placeholder')}
+                  value={search}
+                  onChange={(ev) => { setSearch(ev.target.value) }}
+                  onKeyDown={onSearchKeyDown}
+                  aria-label={t('search.placeholder')}
+                />
+                {search.length > 0 && (
+                  <button
+                    type="button"
+                    className={css.searchClear}
+                    aria-label={t('search.clear')}
+                    onClick={() => {
+                      setSearch('')
+                      searchInputRef.current?.focus()
+                    }}
+                  >
+                    <IconCloseOutline16 size={14} />
+                  </button>
+                )}
+              </div>
+
               {state.status === 'loading' && (
                 <div className={css.status}>{t('status.loading')}</div>
               )}
@@ -284,7 +382,41 @@ export function ModelSelect(
                 </div>
               ))}
               <div className={clsx(css.groups, 'scrollable')}>
-                {state.groups.map((group) => {
+                {filteredFrequent.length > 0 && (
+                  <section role="group" aria-labelledby={`${id}-frequent`} className={css.group} key="frequent-group">
+                    <div className={clsx(css.groupTitle, css.frequentTitle)} id={`${id}-frequent`}>
+                      <IconSparkle16 size={12} className={css.frequentIcon} />
+                      <span>{t('group.frequent')}</span>
+                    </div>
+                    {filteredFrequent.map(({ group, model }) => {
+                      const selected = state.current?.provider === group.id && state.current.model === model.id
+                      return (
+                        <button
+                          ref={itemRef()}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={selected}
+                          className={clsx(css.option, selected && css.selected)}
+                          key={`frequent-${group.id}-${model.id}`}
+                          title={`${model.name} (${group.name})`}
+                          disabled={busy}
+                          onClick={() => { choose({ provider: group.id, model: model.id }) }}
+                        >
+                          <span className={css.optionCopy}>
+                            <span className={css.modelName}>{model.name}</span>
+                            <span className={css.description}>
+                              {model.description !== undefined ? `${group.name} · ${model.description}` : group.name}
+                            </span>
+                          </span>
+                          <span className={css.check}>
+                            {selected ? <IconCheckOutline16 /> : null}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </section>
+                )}
+                {filteredGroups.map((group) => {
                   const headingId = `${id}-${group.id}`
                   return (
                     <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
@@ -319,7 +451,10 @@ export function ModelSelect(
                   )
                 })}
               </div>
-              {state.status === 'ready' && choices.length === 0 && (
+              {query !== '' && filteredFrequent.length === 0 && filteredGroups.length === 0 && (
+                <div className={css.empty}>{t('empty.search')}</div>
+              )}
+              {query === '' && state.status === 'ready' && choices.length === 0 && (
                 <div className={css.empty}>{t('empty.models')}</div>
               )}
             </>

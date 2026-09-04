@@ -10,6 +10,7 @@ import type {
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { recordModelUsage } from './usage.ts'
 
 /** Directory snapshot both entries render from. */
 export interface ModelDirectoryState {
@@ -123,6 +124,7 @@ export class ModelDirectory {
       s.status = 'ready'
       s.error = null
     })
+    recordModelUsage(result.value.selected.provider, result.value.selected.model)
   }
 
   /**
