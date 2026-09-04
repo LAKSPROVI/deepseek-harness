@@ -25,6 +25,10 @@ type WorkspaceViewState = {
   sessionOrderByAccount: Record<string, string[]>
   /** Last observed update timestamps per order account for one-time promotion events. */
   sessionUpdatedAtByAccount: Record<string, Record<string, number>>
+  /** User-marked completed sessions. */
+  completedSessions: Record<string, boolean>
+  /** User-marked unread sessions. */
+  unreadSessions: Record<string, boolean>
 }
 
 /**
@@ -43,6 +47,10 @@ type WorkspaceViewActions = {
     updatedAt: Record<string, number>,
   ) => void
   setSessionOrder: (draft: WorkspaceViewState, accountKey: string, order: string[]) => void
+  toggleCompletedSession: (draft: WorkspaceViewState, sessionId: string) => void
+  setSessionCompleted: (draft: WorkspaceViewState, sessionId: string, completed: boolean) => void
+  toggleUnreadSession: (draft: WorkspaceViewState, sessionId: string) => void
+  setSessionUnread: (draft: WorkspaceViewState, sessionId: string, unread: boolean) => void
 }
 
 /**
@@ -57,8 +65,10 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       groupExpansion: {},
       sessionOrderByAccount: {},
       sessionUpdatedAtByAccount: {},
+      completedSessions: {},
+      unreadSessions: {},
     }),
-    persist: 'dsh.workspace.view.v5',
+    persist: 'dsh.workspace.view.v6',
     actions: {
       setGroupBy: (d, mode: SessionGroupBy) => { d.groupBy = mode },
       setOrderBy: (d, mode: SessionOrderBy) => { d.orderBy = mode },
@@ -81,6 +91,38 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       },
       setSessionOrder: (d, accountKey: string, order: string[]) => {
         d.sessionOrderByAccount[accountKey] = order
+      },
+      toggleCompletedSession: (d, sessionId: string) => {
+        d.completedSessions = d.completedSessions ?? {}
+        if (d.completedSessions[sessionId]) {
+          d.completedSessions[sessionId] = false
+        } else {
+          d.completedSessions[sessionId] = true
+          if (d.unreadSessions) d.unreadSessions[sessionId] = false
+        }
+      },
+      setSessionCompleted: (d, sessionId: string, completed: boolean) => {
+        d.completedSessions = d.completedSessions ?? {}
+        d.completedSessions[sessionId] = completed
+        if (completed && d.unreadSessions) {
+          d.unreadSessions[sessionId] = false
+        }
+      },
+      toggleUnreadSession: (d, sessionId: string) => {
+        d.unreadSessions = d.unreadSessions ?? {}
+        if (d.unreadSessions[sessionId]) {
+          d.unreadSessions[sessionId] = false
+        } else {
+          d.unreadSessions[sessionId] = true
+          if (d.completedSessions) d.completedSessions[sessionId] = false
+        }
+      },
+      setSessionUnread: (d, sessionId: string, unread: boolean) => {
+        d.unreadSessions = d.unreadSessions ?? {}
+        d.unreadSessions[sessionId] = unread
+        if (unread && d.completedSessions) {
+          d.completedSessions[sessionId] = false
+        }
       },
     },
   })
