@@ -1,4 +1,4 @@
-﻿import { SimpleCron } from './cron'
+import { SimpleCron } from './cron'
 import { AutomationTask } from './types'
 
 /**
@@ -52,7 +52,7 @@ export function calculateNextRun(
     case 'CRON':
     case 'RRULE': {
       const cron = new SimpleCron(task.scheduleExpr)
-      nextTarget = cron.next(referenceDate)
+      nextTarget = cron.nextRun(referenceDate)
       break
     }
 
