@@ -20,8 +20,8 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from './contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from './tree.ts'
-import { deriveFlat, deriveGroups, deriveSearchResults, UNGROUPED_KEY } from './tree.ts'
-import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './rows/Rows.tsx'
+import { deriveFlat, deriveGroups, deriveRecentAndInProgress, deriveSearchResults, UNGROUPED_KEY } from './tree.ts'
+import { ProjectRowItem, RecentSessionNodeItem, SearchResultItem, SessionNodeItem } from './rows/Rows.tsx'
 import { FLAT_SESSION_ORDER_KEY } from './stores.ts'
 import { WorkspacePickFlow } from './WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
@@ -215,9 +215,10 @@ function workspaceGroupHalf(e: { clientY: number; currentTarget: HTMLElement }):
 
 type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
-  'useSessions' | 'startSession' | 'open' | 'forkSession'
+  'useSessions' | 'startSession' | 'forkSession' | 'markUnreadSession'
   | 'insertWorkspaceBefore' | 'insertSessionBefore' | 't'
 > & {
+  open: (id: SessionNode['id']) => void
   /** Host account home for POSIX hover-path abbreviation. */
   home?: string | undefined
   workspaces: readonly WorkspaceView[]
@@ -245,15 +246,20 @@ type SessionTreeProps = Pick<
   onSessionArchive: (sessionId: SessionNode['id']) => void
   /** Session order behavior: fixed after edits, or additionally promoted by user activity. */
   orderBy: SessionOrderBy
+  completedSessions: Readonly<Record<string, boolean>>
+  unreadSessions: Readonly<Record<string, boolean>>
+  onToggleUnread: (sessionId: SessionNode['id']) => void
+  onToggleCompleted: (sessionId: SessionNode['id']) => void
 }
 
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
-  useSessions, startSession, open, forkSession, workspaces, archivedSessionIds,
+  useSessions, startSession, open, forkSession, markUnreadSession, workspaces, archivedSessionIds,
   onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
+  completedSessions, unreadSessions, onToggleUnread, onToggleCompleted,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const current = list.current
@@ -326,9 +332,24 @@ function SessionTree({
       ...(sessionOrderByAccount[UNGROUPED_KEY] === undefined
         ? {}
         : { ungroupedOrder: sessionOrderByAccount[UNGROUPED_KEY] }),
+      completedSessions,
+      unreadSessions,
     }),
-    [list, orderedWorkspaces, archivedSessionIds, expandedGroups, sessionOrderByAccount],
+    [list, orderedWorkspaces, archivedSessionIds, expandedGroups, sessionOrderByAccount, completedSessions, unreadSessions],
   )
+  const recentNodes = useMemo(
+    () => deriveRecentAndInProgress(list, archivedSessionIds, completedSessions, unreadSessions, 6),
+    [list, archivedSessionIds, completedSessions, unreadSessions],
+  )
+  const workspaceNameBySessionId = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const ws of workspaces) {
+      for (const sId of ws.sessionIds) {
+        map.set(sId as string, ws.title)
+      }
+    }
+    return map
+  }, [workspaces])
   const now = Date.now()
   const commitSessionDrag = (activeDrag: DragState, over: NonNullable<DragState['over']>): void => {
     if (sessionDropCommitted.current) return
@@ -390,6 +411,35 @@ function SessionTree({
         role="tree"
         aria-label={t('section.sessions')}
       >
+        {recentNodes.length > 0 && (
+          <div className={css.recentSection}>
+            <div className={css.recentSectionHeader}>
+              <span className={css.recentSectionLabel}>{t('section.recentAndInProgress')}</span>
+              <span className={css.recentCount}>{recentNodes.length}</span>
+            </div>
+            <div className={css.recentList}>
+              {recentNodes.map((node) => {
+                const wsName = workspaceNameBySessionId.get(node.id) ?? t('group.ungrouped')
+                return (
+                  <RecentSessionNodeItem
+                    key={node.id}
+                    node={node}
+                    workspaceName={wsName}
+                    currentId={current}
+                    now={now}
+                    onOpen={open}
+                    onRename={onSessionRename}
+                    onFork={forkSession}
+                    onArchive={onSessionArchive}
+                    onToggleUnread={onToggleUnread}
+                    onToggleCompleted={onToggleCompleted}
+                    t={t}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        )}
         {groups.length === 0 && (
           <div className={css.empty}>{t('empty.none')}</div>
         )}
@@ -519,6 +569,9 @@ function SessionTree({
                     onRename={onSessionRename}
                     onFork={forkSession}
                     onArchive={onSessionArchive}
+                    onMarkUnread={markUnreadSession}
+                    onToggleUnread={onToggleUnread}
+                    onToggleCompleted={onToggleCompleted}
                     drag={dragProps}
                     t={t}
                   />
@@ -547,13 +600,15 @@ function SessionTree({
 
 /** The flat "In one list" body: every session is one draggable top-level row. */
 function FlatList({
-  useSessions, open, forkSession, onSessionRename, onSessionArchive, archivedSessionIds,
-  orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t,
+  useSessions, open, forkSession, markUnreadSession, onSessionRename, onSessionArchive, archivedSessionIds,
+  orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
+  completedSessions, unreadSessions, onToggleUnread, onToggleCompleted, t,
 }: Pick<
   SessionTreeProps,
   | 'useSessions'
   | 'open'
   | 'forkSession'
+  | 'markUnreadSession'
   | 'onSessionRename'
   | 'onSessionArchive'
   | 'archivedSessionIds'
@@ -562,12 +617,16 @@ function FlatList({
   | 'sessionUpdatedAtByAccount'
   | 'syncSessionOrderAccount'
   | 'setSessionOrder'
+  | 'completedSessions'
+  | 'unreadSessions'
+  | 'onToggleUnread'
+  | 'onToggleCompleted'
   | 't'
 >) {
   const list = useSessions(s => s)
   const baseRows = useMemo(
-    () => deriveFlat(list, archivedSessionIds),
-    [list, archivedSessionIds],
+    () => deriveFlat(list, archivedSessionIds, { completedSessions, unreadSessions }),
+    [list, archivedSessionIds, completedSessions, unreadSessions],
   )
   const sessionIds = useMemo(() => baseRows.map(row => row.id), [baseRows])
   const previousOrderBy = useRef(orderBy)
@@ -635,6 +694,9 @@ function FlatList({
               onRename={onSessionRename}
               onFork={forkSession}
               onArchive={onSessionArchive}
+              onMarkUnread={markUnreadSession}
+              onToggleUnread={onToggleUnread}
+              onToggleCompleted={onToggleCompleted}
               flat
               drag={{
                 start: () => {
@@ -752,6 +814,7 @@ export function WorkspaceBrowser({
   open,
   renameSession,
   forkSession,
+  markUnreadSession,
   renameWorkspace,
   deleteWorkspace,
   insertWorkspaceBefore,
@@ -777,6 +840,21 @@ export function WorkspaceBrowser({
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
   const sessionUpdatedAtByAccount = useStore(s => s.sessionUpdatedAtByAccount)
+  const completedSessions = useStore(s => s.completedSessions)
+  const unreadSessions = useStore(s => s.unreadSessions)
+
+  const handleOpenSession = (sessionId: SessionNode['id']) => {
+    actions.setSessionUnread(sessionId, false)
+    open(sessionId)
+  }
+
+  const handleToggleUnread = (sessionId: SessionNode['id']) => {
+    actions.toggleUnreadSession(sessionId)
+  }
+
+  const handleToggleCompleted = (sessionId: SessionNode['id']) => {
+    actions.toggleCompletedSession(sessionId)
+  }
   const currentBlankSessionId = useSessions((state) => {
     const current = state.current
     return current !== undefined && state.byId[current]?.blank === true ? current : undefined
@@ -1145,7 +1223,7 @@ export function WorkspaceBrowser({
           ? (
             <SearchResults
               useSessions={useSessions}
-              open={open}
+              open={handleOpenSession}
               workspaces={workspaces}
               archivedSessionIds={archivedSessionIds}
               query={normalizedQuery}
@@ -1157,7 +1235,8 @@ export function WorkspaceBrowser({
           : groupBy === 'flat'
             ? (
               <FlatList
-                useSessions={useSessions} open={open} forkSession={forkSession}
+                useSessions={useSessions} open={handleOpenSession} forkSession={forkSession}
+                markUnreadSession={markUnreadSession}
                 onSessionRename={onSessionRename} onSessionArchive={onSessionArchive}
                 archivedSessionIds={archivedSessionIds}
                 orderBy={orderBy}
@@ -1165,6 +1244,10 @@ export function WorkspaceBrowser({
                 sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
                 syncSessionOrderAccount={actions.syncSessionOrderAccount}
                 setSessionOrder={actions.setSessionOrder}
+                completedSessions={completedSessions}
+                unreadSessions={unreadSessions}
+                onToggleUnread={handleToggleUnread}
+                onToggleCompleted={handleToggleCompleted}
                 t={t}
               />
             )
@@ -1174,6 +1257,7 @@ export function WorkspaceBrowser({
                 onSessionRename={onSessionRename}
                 onSessionArchive={onSessionArchive}
                 forkSession={forkSession}
+                markUnreadSession={markUnreadSession}
                 workspaces={workspaces}
                 groupExpansion={groupExpansion}
                 setGroupExpanded={actions.setGroupExpanded}
@@ -1183,11 +1267,15 @@ export function WorkspaceBrowser({
                 setSessionOrder={actions.setSessionOrder}
                 archivedSessionIds={archivedSessionIds}
                 startSession={startSession}
-                open={open}
+                open={handleOpenSession}
                 insertWorkspaceBefore={insertWorkspaceBefore}
                 insertSessionBefore={insertSessionBefore}
                 orderBy={orderBy}
                 home={home}
+                completedSessions={completedSessions}
+                unreadSessions={unreadSessions}
+                onToggleUnread={handleToggleUnread}
+                onToggleCompleted={handleToggleCompleted}
                 t={t}
                 onRenameRequest={(workspaceId, currentTitle) => {
                   setRenameTarget({ workspaceId, currentTitle })

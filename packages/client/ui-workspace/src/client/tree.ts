@@ -27,8 +27,10 @@ export interface SessionNode {
   running: boolean
   /** Running descendants connected through uninterrupted subagent-origin lineage. */
   runningSubagentCount: number
-  /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
+  /** Finished running while not selected and not yet opened (the green "done" reminder dot), or user-marked completed. */
   completed: boolean
+  /** User-marked or notification unread status. */
+  unread?: boolean
   updatedAt: number
 }
 
@@ -66,6 +68,7 @@ export interface SearchResultNode {
   runningSubagentCount: number
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
+  unread?: boolean
   snippet?: string
 }
 
@@ -80,6 +83,8 @@ export interface TreeView {
   expandedGroups: readonly string[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
+  completedSessions?: Readonly<Record<string, boolean>>
+  unreadSessions?: Readonly<Record<string, boolean>>
 }
 
 interface Group {
@@ -214,14 +219,19 @@ function groupByWorkspace(
 function sessionNode(
   s: SessionSummary,
   descendants: ReadonlyMap<SessionId, SubagentDescendantSummary>,
+  completedMap?: Readonly<Record<string, boolean>>,
+  unreadMap?: Readonly<Record<string, boolean>>,
 ): SessionNode {
+  const isCompleted = completedMap?.[s.id] === true || (completedMap?.[s.id] === undefined && s.completed === true)
+  const isUnread = unreadMap?.[s.id] === true || (unreadMap?.[s.id] === undefined && s.completed === true && !isCompleted)
   return {
     id: s.id,
     title: sessionTitle(s),
     blank: s.blank,
     running: s.running,
     runningSubagentCount: descendants.get(s.id)?.runningCount ?? 0,
-    completed: s.completed === true,
+    completed: isCompleted,
+    unread: isUnread,
     updatedAt: s.updatedAt,
     ...(s.pendingInteraction === undefined ? {} : { pendingInteraction: s.pendingInteraction }),
   }
@@ -238,7 +248,7 @@ function sessionNode(
  * @param list - sessions list snapshot (`current` feeds containsCurrent).
  * @param workspaces - real workspaces in stable Host order.
  * @param archivedSessionIds - registry-global archive set.
- * @param view - local expansion arrays.
+ * @param view - local expansion arrays and status overrides.
  * @returns group sections in render order.
  */
 export function deriveGroups(
@@ -266,7 +276,9 @@ export function deriveGroups(
       sessionCount: g.sessions.length,
       expanded,
       containsCurrent: g.key === currentGroup,
-      sessions: expanded ? g.sessions.map(session => sessionNode(session, descendants)) : [],
+      sessions: expanded
+        ? g.sessions.map(session => sessionNode(session, descendants, view.completedSessions, view.unreadSessions))
+        : [],
     })
   }
   return groups
@@ -279,11 +291,16 @@ export function deriveGroups(
  * (see {@link deriveSearchResults}).
  * @param list - sessions list snapshot.
  * @param archivedSessionIds - registry-global archive set.
+ * @param view - optional status maps.
  * @returns flat rows in render order.
  */
 export function deriveFlat(
   list: SessionListState,
   archivedSessionIds: readonly SessionId[],
+  view?: {
+    completedSessions?: Readonly<Record<string, boolean>>
+    unreadSessions?: Readonly<Record<string, boolean>>
+  },
 ): SessionNode[] {
   const archived = new Set(archivedSessionIds)
   const descendants = indexSubagentDescendants(list.byId)
@@ -294,7 +311,56 @@ export function deriveFlat(
     rows.push(s)
   }
   rows.sort(byRecency)
-  return rows.map(session => sessionNode(session, descendants))
+  return rows.map(session => sessionNode(session, descendants, view?.completedSessions, view?.unreadSessions))
+}
+
+/**
+ * Derive recent and in-progress sessions for the top highlight section.
+ * Active sessions (running, pending interaction, unread) lead, followed by
+ * recently completed or updated sessions up to a limit.
+ */
+export function deriveRecentAndInProgress(
+  list: SessionListState,
+  archivedSessionIds: readonly SessionId[],
+  completedSessions?: Readonly<Record<string, boolean>>,
+  unreadSessions?: Readonly<Record<string, boolean>>,
+  limit = 5,
+): SessionNode[] {
+  const archived = new Set(archivedSessionIds)
+  const descendants = indexSubagentDescendants(list.byId)
+  const candidates: SessionSummary[] = []
+  for (const id of list.ids) {
+    const s = list.byId[id]
+    if (s === undefined || !sessionVisible(s, list.current, archived) || (s.blank && s.id !== list.current)) continue
+    candidates.push(s)
+  }
+
+  // Score candidate sessions:
+  // Active in-progress (running, subagents, pending interaction) -> 30
+  // Unread -> 20
+  // Completed -> 10
+  // Idle / Read -> 0
+  const scored = candidates.map((s) => {
+    const runningSubagents = (descendants.get(s.id)?.runningCount ?? 0) > 0
+    const isActive = s.running || runningSubagents || s.pendingInteraction !== undefined
+    const isCompleted = completedSessions?.[s.id] === true
+    const isUnread = unreadSessions?.[s.id] === true || (s.completed === true && unreadSessions?.[s.id] === undefined && !isCompleted)
+    let score = 0
+    if (isActive) score = 30
+    else if (isUnread) score = 20
+    else if (isCompleted) score = 10
+    return { summary: s, score, updatedAt: s.updatedAt }
+  })
+
+  const activeOrRecent = scored.filter(item => item.score > 0)
+  activeOrRecent.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return b.updatedAt - a.updatedAt
+  })
+
+  return activeOrRecent.slice(0, limit).map(({ summary: s }) =>
+    sessionNode(s, descendants, completedSessions, unreadSessions),
+  )
 }
 
 /** Relative-time bucket of a session row's trailing label. */

@@ -73,6 +73,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     searchResultLimit: 20,
     renameSession: vi.fn(async () => {}),
     forkSession: vi.fn(),
+    markUnreadSession: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
     archiveSession: vi.fn(async () => {}),
@@ -1240,5 +1241,33 @@ describe('WorkspaceBrowser', () => {
     fireEvent.change(screen.getByPlaceholderText('搜索会话…'), { target: { value: 'needle' } })
     const row = screen.getByText('Needle A').closest('[role="treeitem"]') as HTMLElement
     expect(row.hasAttribute('draggable')).toBe(false)
+  })
+
+  it('renders Recent / In Progress section above workspace tree with workspace badge and one-click open', () => {
+    const open = vi.fn()
+    const activeSession = summary('task-run', 20, { displayTitle: 'Running Task', running: true })
+    const idleSession = summary('task-idle', 10, { displayTitle: 'Idle Task' })
+    const sessions = sessionState([activeSession, idleSession])
+
+    mount({
+      useSessions: hook(sessions),
+      useWorkspaces: hook(workspaceState([
+        workspace('proj-alpha', ['task-run', 'task-idle'], 'Project Alpha'),
+      ])),
+      open,
+    })
+
+    // Recent section is rendered
+    expect(screen.getByText('进行中与近期会话')).toBeTruthy()
+    // Workspace badge is displayed in recent section as well as workspace header
+    expect(screen.getAllByText('Project Alpha')).toHaveLength(2)
+    // Active session item in recent section
+    const runningItem = screen.getByText('Running Task').closest('[role="treeitem"]') as HTMLElement
+    expect(runningItem).toBeTruthy()
+    expect(runningItem.querySelector('[data-state="ongoing"]')).toBeTruthy()
+
+    // 1-click navigation opens session
+    fireEvent.click(runningItem)
+    expect(open).toHaveBeenCalledWith(sid('task-run'))
   })
 })
