@@ -344,11 +344,17 @@ export function deriveRecentAndInProgress(
     const runningSubagents = (descendants.get(s.id)?.runningCount ?? 0) > 0
     const isActive = s.running || runningSubagents || s.pendingInteraction !== undefined
     const isCompleted = completedSessions?.[s.id] === true
-    const isUnread = unreadSessions?.[s.id] === true || (s.completed === true && unreadSessions?.[s.id] === undefined && !isCompleted)
+    const isUnread = unreadSessions?.[s.id] === true
+
+    // Completed sessions leave the Recent/In-Progress section once marked completed by the user
+    if (isCompleted) {
+      return { summary: s, score: -1, updatedAt: s.updatedAt }
+    }
+
     let score = 0
     if (isActive) score = 30
     else if (isUnread) score = 20
-    else if (isCompleted) score = 10
+
     return { summary: s, score, updatedAt: s.updatedAt }
   })
 

@@ -392,12 +392,11 @@ describe('deriveSearchResults', () => {
 })
 
 describe('deriveRecentAndInProgress', () => {
-  it('prioritizes active, unread, and completed sessions over idle sessions and respects limit', () => {
+  it('prioritizes active and unread sessions and excludes completed sessions', () => {
     const running = { ...summary('running', 10), running: true }
     const unread = summary('unread', 20)
     const completed = summary('completed', 30)
-    const idle = summary('idle', 40)
-    const sessions = list(running, unread, completed, idle)
+    const sessions = list(running, unread, completed)
 
     const result = deriveRecentAndInProgress(
       sessions,
@@ -407,11 +406,10 @@ describe('deriveRecentAndInProgress', () => {
       5,
     )
 
-    // Running has score 30, unread has score 20, completed has score 10
-    expect(result.map(s => s.id)).toEqual([sid('running'), sid('unread'), sid('completed')])
+    // Running has score 30, unread has score 20; completed is filtered out
+    expect(result.map(s => s.id)).toEqual([sid('running'), sid('unread')])
     expect(result[0]).toMatchObject({ id: sid('running'), running: true })
     expect(result[1]).toMatchObject({ id: sid('unread'), unread: true })
-    expect(result[2]).toMatchObject({ id: sid('completed'), completed: true })
   })
 
   it('excludes archived sessions and blank unselected sessions', () => {

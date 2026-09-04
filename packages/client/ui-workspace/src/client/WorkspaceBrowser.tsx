@@ -844,7 +844,6 @@ export function WorkspaceBrowser({
   const unreadSessions = useStore(s => s.unreadSessions)
 
   const handleOpenSession = (sessionId: SessionNode['id']) => {
-    actions.setSessionUnread(sessionId, false)
     open(sessionId)
   }
 
