@@ -1,4 +1,4 @@
-import { SimpleCron } from './cron'
+﻿import { SimpleCron } from './cron'
 import { AutomationTask } from './types'
 
 /**

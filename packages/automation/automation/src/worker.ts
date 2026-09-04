@@ -9,6 +9,9 @@ export interface EnqueuedJobData {
   title: string
   actionType: string
   actionPayload: Record<string, unknown>
+  model?: string
+  modelProvider?: string
+  promptTemplate?: string
   timeoutSeconds: number
   retryLimit: number
   attemptNumber: number
@@ -59,6 +62,9 @@ export class TaskWorker {
       runId: job.runId,
       taskId: job.taskId,
       attemptNumber: job.attemptNumber,
+      model: job.model,
+      modelProvider: job.modelProvider,
+      promptTemplate: job.promptTemplate,
       log: logger,
     }
 

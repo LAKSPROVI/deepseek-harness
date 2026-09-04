@@ -30,6 +30,9 @@ export interface AutomationTask {
 
   readonly actionType: string         // Unique handler action key
   readonly actionPayload: Record<string, unknown>
+  readonly model?: string             // Target LLM Model (e.g. "ag/gemini-3.7-flash-high", "deepseek-chat", "cc/claude-3-7-sonnet")
+  readonly modelProvider?: string     // Target LLM Provider route (optional)
+  readonly promptTemplate?: string    // Custom prompt / instruction for the LLM execution
   readonly timeoutSeconds: number
   readonly retryLimit: number
   readonly overlapPolicy: TaskOverlapPolicy
@@ -54,6 +57,9 @@ export interface CreateTaskDTO {
   readonly endAt?: Date | null
   readonly actionType: string
   readonly actionPayload?: Record<string, unknown>
+  readonly model?: string
+  readonly modelProvider?: string
+  readonly promptTemplate?: string
   readonly timeoutSeconds?: number
   readonly retryLimit?: number
   readonly overlapPolicy?: TaskOverlapPolicy
@@ -97,6 +103,9 @@ export interface TaskExecutionContext {
   readonly runId: string
   readonly taskId: string
   readonly attemptNumber: number
+  readonly model?: string
+  readonly modelProvider?: string
+  readonly promptTemplate?: string
   log(message: string, level?: 'info' | 'warn' | 'error'): void
 }
 
