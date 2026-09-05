@@ -10,13 +10,15 @@
  */
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+import { SessionNotesPopover } from './header/SessionNotesPopover.tsx'
+import { SessionContextActions, type SessionContextActionsInjected } from './header/SessionContextActions.tsx'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
@@ -24,6 +26,8 @@ export type {
   WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
+export type { SessionNotesPopoverProps, SessionReminder, SessionNotesData } from './header/SessionNotesPopover.tsx'
+export type { SessionContextActionsProps, SessionContextActionsInjected } from './header/SessionContextActions.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -131,5 +135,37 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
     },
     WorkspacePicker,
+  ))
+
+  const contextActionsInjected = (): SessionContextActionsInjected => ({
+    startSession: (workspaceId) => { ctx.workspaces.startSession(workspaceId) },
+    forkSession: (sessionId: SessionId) => {
+      ctx.sessions.fork({ sessionId, increaseTitle: true })
+        .then((childId) => { ctx.sessions.open(childId) })
+        .catch(() => {})
+    },
+  })
+
+  // Register session quick context actions into the header actions list
+  ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register(
+    {
+      name: 'conversation.session.header.actions',
+      id: 'workspace-session-context-actions',
+      order: 15,
+      inject: contextActionsInjected,
+      locale: NS,
+    },
+    SessionContextActions,
+  ))
+
+  // Register session notes & reminders into the right header utilities list
+  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register(
+    {
+      name: 'conversation.session.header.utilities',
+      id: 'workspace-session-notes',
+      order: 10,
+      locale: NS,
+    },
+    SessionNotesPopover,
   ))
 }
