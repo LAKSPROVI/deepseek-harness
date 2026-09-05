@@ -521,4 +521,22 @@ describe('AgentTeamView', () => {
       })
     })
   })
+
+  it('switches between Spawn and Guide sidebar tabs seamlessly', async () => {
+    render(<AgentTeamView {...viewProps(projection())} />)
+
+    const spawnTab = screen.getByRole('tab', { name: 'Novo integrante' })
+    const guideTab = screen.getByRole('tab', { name: /Orientar integrante/ })
+
+    expect(spawnTab.getAttribute('aria-selected')).toBe('true')
+    expect(guideTab.getAttribute('aria-selected')).toBe('false')
+
+    fireEvent.click(guideTab)
+    expect(guideTab.getAttribute('aria-selected')).toBe('true')
+    expect(spawnTab.getAttribute('aria-selected')).toBe('false')
+
+    fireEvent.click(spawnTab)
+    expect(spawnTab.getAttribute('aria-selected')).toBe('true')
+    expect(guideTab.getAttribute('aria-selected')).toBe('false')
+  })
 })

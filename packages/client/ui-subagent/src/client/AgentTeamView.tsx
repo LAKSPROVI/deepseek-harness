@@ -345,6 +345,7 @@ export function AgentTeamView({
   const [contributionAttachments, setContributionAttachments] = useState<TeamDraftAttachment[]>([])
   const [contributionText, setContributionText] = useState('')
   const [templateTitle, setTemplateTitle] = useState('')
+  const [sideTab, setSideTab] = useState<'spawn' | 'guide'>('spawn')
   const [modelDirectory, setModelDirectory] = useState<SessionModels | null>(null)
   const [modelDirectoryStatus, setModelDirectoryStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [modelDirectoryError, setModelDirectoryError] = useState<string | null>(null)
@@ -1024,7 +1025,32 @@ export function AgentTeamView({
         </main>
 
         <aside className={css.sideColumn} aria-label="Controles da equipe">
-          <section className={css.panel} aria-labelledby={fieldId(sessionId, 'spawn-title')}>
+          <div className={css.sideTabs} role="tablist" aria-label="Ações de integrantes">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sideTab === 'spawn'}
+              className={`${css.sideTab} ${sideTab === 'spawn' ? css.sideTabActive : ''}`}
+              onClick={() => { setSideTab('spawn') }}
+            >
+              <span>Novo integrante</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sideTab === 'guide'}
+              className={`${css.sideTab} ${sideTab === 'guide' ? css.sideTabActive : ''}`}
+              onClick={() => { setSideTab('guide') }}
+            >
+              <span>Orientar integrante</span>
+              {teammateNames.length > 0 && <span className={css.tabBadge}>{teammateNames.length}</span>}
+            </button>
+          </div>
+
+          <section
+            className={`${css.panel} ${sideTab !== 'spawn' ? css.sidePanelHidden : ''}`}
+            aria-labelledby={fieldId(sessionId, 'spawn-title')}
+          >
             <div className={css.sectionHeader}>
               <div>
                 <p className={css.sectionKicker}>Adicionar integrante</p>
@@ -1037,21 +1063,54 @@ export function AgentTeamView({
               <form className={css.form} onSubmit={(event) => { void handleSpawn(event) }}>
                 <div className={`${css.templateLibrary} ${css.fieldWide}`}>
                   <div className={css.templateHeader}>
-                    <span>Modelos de integrante</span>
-                    <small>{templateState.templates.length}/50 salvos</small>
+                    <div className={css.templateTitleRow}>
+                      <span className={css.templateTitle}>Modelos de integrante</span>
+                      <span className={css.templateBadge}>{templateState.templates.length}/50</span>
+                    </div>
+                    <small className={css.templateSub}>Clique para preencher o formulário</small>
                   </div>
                   {templateState.templates.length === 0 ? (
-                    <p className={css.emptyCopy}>Salve esta configuração para reutilizá-la em outras sessões.</p>
+                    <div className={css.templateEmpty}>
+                      <p className={css.emptyCopy}>
+                        Nenhum modelo salvo. Preencha o formulário e salve para reutilizar em qualquer sessão.
+                      </p>
+                    </div>
                   ) : (
                     <div className={css.templateList} role="list">
-                      {templateState.templates.map(template => (
-                        <div role="listitem" key={template.id}>
-                          <button type="button" className={css.templateButton} disabled={formsDisabled} onClick={() => { applyTemplate(template) }}>
-                            <strong>{template.title}</strong><span>{template.name}</span>
-                          </button>
-                          <button type="button" className={css.textButton} disabled={formsDisabled} aria-label={`Excluir modelo ${template.title}`} onClick={() => { void handleDeleteTemplate(template.id) }}>Excluir</button>
-                        </div>
-                      ))}
+                      {templateState.templates.map((template) => {
+                        const isSelected = template.name === spawnDraft.name && template.description === spawnDraft.description
+                        return (
+                          <div
+                            className={`${css.templateCard} ${isSelected ? css.templateCardActive : ''}`}
+                            role="listitem"
+                            key={template.id}
+                          >
+                            <button
+                              type="button"
+                              className={css.templateButton}
+                              disabled={formsDisabled}
+                              onClick={() => { applyTemplate(template) }}
+                              title={`${template.title} — ${template.description}`}
+                            >
+                              <strong className={css.templateButtonTitle}>{template.title}</strong>
+                              <span className={css.templateButtonMeta}>
+                                <code>{template.name}</code>
+                                {template.model !== undefined && <span className={css.templateModelBadge}>{template.model}</span>}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className={css.templateDeleteButton}
+                              disabled={formsDisabled}
+                              aria-label={`Excluir modelo ${template.title}`}
+                              onClick={() => { void handleDeleteTemplate(template.id) }}
+                              title="Excluir este modelo"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                   {templateState.error !== null && <p className={css.templateError}>{templateState.error}</p>}
@@ -1092,55 +1151,64 @@ export function AgentTeamView({
                   onFiles={(files) => { addAttachments(files, setSpawnAttachments) }}
                   onRemove={(id) => { removeAttachment(id, setSpawnAttachments) }}
                 />
-                <label>
-                  <span>Contexto</span>
-                  <select value={spawnDraft.context} onChange={(event) => { setSpawnDraft(current => ({ ...current, context: event.target.value as SpawnDraft['context'] })) }}>
-                    <option value="fresh">Começar sem histórico</option>
-                    <option value="fork">Copiar histórico concluído</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Provider de LLM <em>opcional</em></span>
-                  <select
-                    value={spawnDraft.llmProvider}
-                    disabled={modelDirectoryStatus === 'loading'}
-                    onChange={(event) => {
-                      setSpawnDraft(current => ({ ...current, llmProvider: event.target.value, model: '' }))
-                    }}
-                  >
-                    <option value="">Herdar provider e modelo da líder</option>
-                    {modelDirectory?.groups.map(group => (
-                      <option value={group.id} key={group.id}>{group.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Modelo <em>obrigatório com provider</em></span>
-                  <select
-                    value={spawnDraft.model}
-                    disabled={modelDirectoryStatus === 'loading' || spawnDraft.llmProvider === ''}
-                    onChange={(event) => { setSpawnDraft(current => ({ ...current, model: event.target.value })) }}
-                  >
-                    <option value="">{spawnDraft.llmProvider === '' ? 'Herdado com o provider' : 'Selecione um modelo'}</option>
-                    {selectedProvider?.models.map(model => (
-                      <option value={model.id} key={model.id}>{model.name}</option>
-                    ))}
-                  </select>
-                </label>
-                {(modelDirectoryError !== null || (modelDirectory?.failures.length ?? 0) > 0) && (
-                  <div className={`${css.routeNotice} ${css.fieldWide}`} role="status">
-                    <span>
-                      {modelDirectoryError === null
-                        ? `${String(modelDirectory?.failures.length ?? 0)} provider(s) não puderam carregar; os demais continuam disponíveis.`
-                        : `Catálogo indisponível: ${modelDirectoryError} A herança da rota da líder continua disponível.`}
-                    </span>
-                    <button type="button" className={css.textButton} onClick={() => { void refreshModelDirectory() }}>Tentar novamente</button>
+
+                <details className={`${css.advancedDetails} ${css.fieldWide}`} open>
+                  <summary className={css.advancedSummary}>
+                    <span>Opções avançadas (LLM, Persona, Contexto)</span>
+                  </summary>
+                  <div className={css.advancedGrid}>
+                    <label>
+                      <span>Contexto</span>
+                      <select value={spawnDraft.context} onChange={(event) => { setSpawnDraft(current => ({ ...current, context: event.target.value as SpawnDraft['context'] })) }}>
+                        <option value="fresh">Começar sem histórico</option>
+                        <option value="fork">Copiar histórico concluído</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Provider de LLM <em>opcional</em></span>
+                      <select
+                        value={spawnDraft.llmProvider}
+                        disabled={modelDirectoryStatus === 'loading'}
+                        onChange={(event) => {
+                          setSpawnDraft(current => ({ ...current, llmProvider: event.target.value, model: '' }))
+                        }}
+                      >
+                        <option value="">Herdar provider e modelo da líder</option>
+                        {modelDirectory?.groups.map(group => (
+                          <option value={group.id} key={group.id}>{group.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Modelo <em>obrigatório com provider</em></span>
+                      <select
+                        value={spawnDraft.model}
+                        disabled={modelDirectoryStatus === 'loading' || spawnDraft.llmProvider === ''}
+                        onChange={(event) => { setSpawnDraft(current => ({ ...current, model: event.target.value })) }}
+                      >
+                        <option value="">{spawnDraft.llmProvider === '' ? 'Herdado com o provider' : 'Selecione um modelo'}</option>
+                        {selectedProvider?.models.map(model => (
+                          <option value={model.id} key={model.id}>{model.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {(modelDirectoryError !== null || (modelDirectory?.failures.length ?? 0) > 0) && (
+                      <div className={`${css.routeNotice} ${css.fieldWide}`} role="status">
+                        <span>
+                          {modelDirectoryError === null
+                            ? `${String(modelDirectory?.failures.length ?? 0)} provider(s) não puderam carregar; os demais continuam disponíveis.`
+                            : `Catálogo indisponível: ${modelDirectoryError} A herança da rota da líder continua disponível.`}
+                        </span>
+                        <button type="button" className={css.textButton} onClick={() => { void refreshModelDirectory() }}>Tentar novamente</button>
+                      </div>
+                    )}
+                    <label className={css.fieldWide}>
+                      <span>Persona <em>opcional</em></span>
+                      <textarea value={spawnDraft.persona} onChange={(event) => { setSpawnDraft(current => ({ ...current, persona: event.target.value })) }} rows={3} placeholder="Instrução de sistema adicional para este integrante" />
+                    </label>
                   </div>
-                )}
-                <label className={css.fieldWide}>
-                  <span>Persona <em>opcional</em></span>
-                  <textarea value={spawnDraft.persona} onChange={(event) => { setSpawnDraft(current => ({ ...current, persona: event.target.value })) }} rows={3} placeholder="Instrução de sistema adicional para este integrante" />
-                </label>
+                </details>
+
                 <div className={`${css.templateSave} ${css.fieldWide}`}>
                   <label>
                     <span>Nome do modelo reutilizável</span>
@@ -1159,7 +1227,10 @@ export function AgentTeamView({
             )}
           </section>
 
-          <section className={css.panel} aria-labelledby={fieldId(sessionId, 'guide-title')}>
+          <section
+            className={`${css.panel} ${sideTab !== 'guide' ? css.sidePanelHidden : ''}`}
+            aria-labelledby={fieldId(sessionId, 'guide-title')}
+          >
             <div className={css.sectionHeader}>
               <div>
                 <p className={css.sectionKicker}>Caixa de mensagens persistente</p>
