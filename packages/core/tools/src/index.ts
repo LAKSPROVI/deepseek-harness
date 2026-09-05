@@ -57,6 +57,18 @@ const COLLAPSE_SECTION_ORDER = 99
  */
 const CODE_ONLY_INSTRUCTION = `\`${RUN_CODE_NAME}\` is the only tool you can call directly — a tool call naming any other tool fails. Reach every tool the SDK declares below from inside the program.`
 
+/**
+ * Model-facing route appended to an `UNKNOWN_TOOL` failure when a Code Mode
+ * agent names anything other than `run_code` in a direct call. Covers a real
+ * collapsed tool AND — the common case — a hallucinated transport name
+ * (`run_code_ide`, `runCode`, …): identical guidance either way, so the model
+ * switches to `run_code` on the first failure instead of retrying a dead name
+ * until the repeat guard trips. One home for the string so the collapsed-tool
+ * denial and the unknown-name denial can never drift apart.
+ */
+const codeModeDirectCallRoute = (name: string): string =>
+  `only \`${RUN_CODE_NAME}\` is callable directly — call \`${name}\` from inside a \`${RUN_CODE_NAME}\` program instead`
+
 const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
   typescript: renderToolsSdk,
   python: renderToolsSdkPy,
@@ -1326,6 +1338,20 @@ export class ToolRuntime extends Service {
   }
 
   /**
+   * Build the `UNKNOWN_TOOL` failure for a model-direct call that resolved to
+   * no tool. Under Code Mode any non-`run_code` name reaches here only when it
+   * is registered nowhere (a real collapsed tool is denied earlier, in
+   * {@link createExecution}) — the hallucinated-transport-name case — so it
+   * carries the same route to `run_code` the collapsed denial gives. Every
+   * other unknown name stays bare.
+   */
+  private unknownToolError(name: string, scope: ScopeKey | undefined, nested: boolean): ToolNotFoundError {
+    return this.collapses(name, scope, nested)
+      ? new ToolNotFoundError(name, codeModeDirectCallRoute(name))
+      : new ToolNotFoundError(name)
+  }
+
+  /**
    * Execute through pre-policy, guards, around-dispatch, post-policy,
    * definition-owned content finalization, and final notification. Tool and
    * listener failures resolve as materialized error results; an invisible tool
@@ -1436,10 +1462,7 @@ export class ToolRuntime extends Service {
         return {
           kind: 'final-result',
           exec: execution,
-          result: toolErrorResult(new ToolNotFoundError(
-            name,
-            `only \`${RUN_CODE_NAME}\` is callable directly — call \`${name}\` from inside a \`${RUN_CODE_NAME}\` program instead`,
-          )),
+          result: toolErrorResult(new ToolNotFoundError(name, codeModeDirectCallRoute(name))),
         }
       }
       return { kind: 'ready', exec: execution }
@@ -1544,7 +1567,7 @@ export class ToolRuntime extends Service {
     exec.signal = signal
     try {
       const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
-      if (!tool) throw new ToolNotFoundError(exec.name)
+      if (!tool) throw this.unknownToolError(exec.name, exec.agent, exec.parent !== undefined)
       state.bodyInvoked = true
       const returned = await tool.execute(exec.arguments, exec)
       const result = this.createSuccessResult(exec, tool, returned)
@@ -1766,7 +1789,7 @@ export class ToolRuntime extends Service {
         throw new TypeError('tools/post-execute cannot replace the value of a failed result')
       }
       const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
-      if (tool === undefined) throw new ToolNotFoundError(exec.name)
+      if (tool === undefined) throw this.unknownToolError(exec.name, exec.agent, exec.parent !== undefined)
       const replaced = this.createSuccessResult(exec, tool, decision.value)
       return this.markCanonical(exec, {
         ...replaced,
@@ -1835,7 +1858,7 @@ export class ToolRuntime extends Service {
       })
     }
     const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
-    if (tool === undefined) throw new ToolNotFoundError(exec.name)
+    if (tool === undefined) throw this.unknownToolError(exec.name, exec.agent, exec.parent !== undefined)
     const normalized = this.createSuccessResult(exec, tool, result.value)
     return this.markCanonical(exec, {
       ...normalized,
