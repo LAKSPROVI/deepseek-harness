@@ -1679,6 +1679,44 @@ describe('the run_code dispatch bridge', () => {
     )
   })
 
+  it('routes a hallucinated model-direct call under code mode to run_code', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, {})
+    const registry = new ToolRuntime(ctx, { mode: 'code' })
+    registerEcho(ctx, 'write')
+    // `run_code_ide` is registered nowhere — the shape a model hallucinates
+    // when it half-remembers the transport name. A collapsed VISIBLE tool
+    // already carries the route; an unknown name must too, or the model reads
+    // a bare `unknown tool` and retries the dead name until the repeat guard
+    // fires instead of switching to `run_code`.
+    const result = await registry.execute({
+      signal: testToolSignal,
+      callId: CallId('call-1'),
+      name: 'run_code_ide',
+      arguments: { code: 'noop' },
+    })
+    expect(result.isError).toBe(true)
+    expect(result.error?.info).toEqual({ name: 'ToolNotFoundError', code: 'UNKNOWN_TOOL' })
+    expect(result.error?.message).toBe(
+      `unknown tool "run_code_ide": only \`${RUN_CODE_NAME}\` is callable directly — call \`run_code_ide\` from inside a \`${RUN_CODE_NAME}\` program instead`,
+    )
+  })
+
+  it('leaves an unknown model-direct call bare under native mode', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, {})
+    const registry = new ToolRuntime(ctx, { mode: 'native' })
+    registerEcho(ctx, 'write')
+    const result = await registry.execute({
+      signal: testToolSignal,
+      callId: CallId('call-1'),
+      name: 'run_code_ide',
+      arguments: {},
+    })
+    expect(result.isError).toBe(true)
+    expect(result.error?.message).toBe('unknown tool "run_code_ide"')
+  })
+
   it('routes a pre-aborted collapsed call through ABORTED_BEFORE_DISPATCH', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, {})
