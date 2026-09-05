@@ -15,8 +15,11 @@ export type SessionGroupBy = 'workspace' | 'flat'
 /** Session order: user-arranged only, or user-arranged plus activity promotion. */
 export type SessionOrderBy = 'manual' | 'updated'
 
+/** Four selectable user status types. */
+export type CustomSessionStatus = 'ongoing' | 'warning' | 'unread' | 'completed'
+
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
-type WorkspaceViewState = {
+export interface WorkspaceViewState {
   groupBy: SessionGroupBy
   orderBy: SessionOrderBy
   /** Explicit zero-or-five-session state keyed by Workspace group identity. */
@@ -29,13 +32,15 @@ type WorkspaceViewState = {
   completedSessions: Record<string, boolean>
   /** User-marked unread sessions. */
   unreadSessions: Record<string, boolean>
+  /** User-assigned custom session statuses. */
+  customSessionStatuses?: Record<string, CustomSessionStatus | undefined>
 }
 
 /**
  * Annotation twin of the actions literal below (the export needs a declared
  * return type); drift fails assignability at the defineStore call.
  */
-type WorkspaceViewActions = {
+export interface WorkspaceViewActions {
   setGroupBy: (draft: WorkspaceViewState, mode: SessionGroupBy) => void
   setOrderBy: (draft: WorkspaceViewState, mode: SessionOrderBy) => void
   setGroupExpanded: (draft: WorkspaceViewState, key: string, expanded: boolean) => void
@@ -51,6 +56,11 @@ type WorkspaceViewActions = {
   setSessionCompleted: (draft: WorkspaceViewState, sessionId: string, completed: boolean) => void
   toggleUnreadSession: (draft: WorkspaceViewState, sessionId: string) => void
   setSessionUnread: (draft: WorkspaceViewState, sessionId: string, unread: boolean) => void
+  setSessionStatus: (
+    draft: WorkspaceViewState,
+    sessionId: string,
+    status: CustomSessionStatus | 'idle' | undefined,
+  ) => void
 }
 
 /**
@@ -67,6 +77,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       sessionUpdatedAtByAccount: {},
       completedSessions: {},
       unreadSessions: {},
+      customSessionStatuses: {},
     }),
     persist: 'dsh.workspace.view.v6',
     actions: {
@@ -92,36 +103,72 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       setSessionOrder: (d, accountKey: string, order: string[]) => {
         d.sessionOrderByAccount[accountKey] = order
       },
-      toggleCompletedSession: (d, sessionId: string) => {
+      setSessionStatus: (d, sessionId: string, status: CustomSessionStatus | 'idle' | undefined) => {
+        d.customSessionStatuses = d.customSessionStatuses ?? {}
         d.completedSessions = d.completedSessions ?? {}
-        if (d.completedSessions[sessionId]) {
+        d.unreadSessions = d.unreadSessions ?? {}
+        if (!status || status === 'idle') {
+          d.customSessionStatuses[sessionId] = undefined
+          d.completedSessions[sessionId] = false
+          d.unreadSessions[sessionId] = false
+        } else if (status === 'completed') {
+          d.customSessionStatuses[sessionId] = 'completed'
+          d.completedSessions[sessionId] = true
+          d.unreadSessions[sessionId] = false
+        } else if (status === 'unread') {
+          d.customSessionStatuses[sessionId] = 'unread'
+          d.unreadSessions[sessionId] = true
           d.completedSessions[sessionId] = false
         } else {
+          d.customSessionStatuses[sessionId] = status
+          d.completedSessions[sessionId] = false
+          d.unreadSessions[sessionId] = false
+        }
+      },
+      toggleCompletedSession: (d, sessionId: string) => {
+        d.completedSessions = d.completedSessions ?? {}
+        d.customSessionStatuses = d.customSessionStatuses ?? {}
+        if (d.completedSessions[sessionId]) {
+          d.completedSessions[sessionId] = false
+          d.customSessionStatuses[sessionId] = undefined
+        } else {
           d.completedSessions[sessionId] = true
+          d.customSessionStatuses[sessionId] = 'completed'
           if (d.unreadSessions) d.unreadSessions[sessionId] = false
         }
       },
       setSessionCompleted: (d, sessionId: string, completed: boolean) => {
         d.completedSessions = d.completedSessions ?? {}
+        d.customSessionStatuses = d.customSessionStatuses ?? {}
         d.completedSessions[sessionId] = completed
-        if (completed && d.unreadSessions) {
-          d.unreadSessions[sessionId] = false
+        if (completed) {
+          d.customSessionStatuses[sessionId] = 'completed'
+          if (d.unreadSessions) d.unreadSessions[sessionId] = false
+        } else if (d.customSessionStatuses[sessionId] === 'completed') {
+          d.customSessionStatuses[sessionId] = undefined
         }
       },
       toggleUnreadSession: (d, sessionId: string) => {
         d.unreadSessions = d.unreadSessions ?? {}
+        d.customSessionStatuses = d.customSessionStatuses ?? {}
         if (d.unreadSessions[sessionId]) {
           d.unreadSessions[sessionId] = false
+          d.customSessionStatuses[sessionId] = undefined
         } else {
           d.unreadSessions[sessionId] = true
+          d.customSessionStatuses[sessionId] = 'unread'
           if (d.completedSessions) d.completedSessions[sessionId] = false
         }
       },
       setSessionUnread: (d, sessionId: string, unread: boolean) => {
         d.unreadSessions = d.unreadSessions ?? {}
+        d.customSessionStatuses = d.customSessionStatuses ?? {}
         d.unreadSessions[sessionId] = unread
-        if (unread && d.completedSessions) {
-          d.completedSessions[sessionId] = false
+        if (unread) {
+          d.customSessionStatuses[sessionId] = 'unread'
+          if (d.completedSessions) d.completedSessions[sessionId] = false
+        } else if (d.customSessionStatuses[sessionId] === 'unread') {
+          d.customSessionStatuses[sessionId] = undefined
         }
       },
     },

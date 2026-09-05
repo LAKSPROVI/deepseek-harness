@@ -8,6 +8,7 @@ import {
   type SessionSearchResultItem, type SessionSummary, type SubagentDescendantSummary,
   type WorkspaceId, type WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
+import type { CustomSessionStatus } from './stores.ts'
 
 /** Group key for Sessions outside every Workspace. */
 export const UNGROUPED_KEY = ''
@@ -31,6 +32,8 @@ export interface SessionNode {
   completed: boolean
   /** User-marked or notification unread status. */
   unread?: boolean
+  /** User-assigned custom status. */
+  customStatus?: CustomSessionStatus
   updatedAt: number
 }
 
@@ -69,6 +72,7 @@ export interface SearchResultNode {
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
   unread?: boolean
+  customStatus?: CustomSessionStatus
   snippet?: string
 }
 
@@ -85,6 +89,7 @@ export interface TreeView {
   ungroupedOrder?: readonly string[]
   completedSessions?: Readonly<Record<string, boolean>>
   unreadSessions?: Readonly<Record<string, boolean>>
+  customSessionStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>
 }
 
 interface Group {
@@ -172,47 +177,68 @@ function orderedUngrouped(members: readonly SessionSummary[], stored: readonly s
 
 /**
  * Group Sessions by Host Workspace: one group per entity in stable Host
- * order, with members resolved from sessionIds in their stored order. Sessions
- * outside every Workspace trail in the browser-local Ungrouped order, which
- * falls back to recency before that order is initialized.
+ * order, followed by the Ungrouped bucket whenever any unassigned session
+ * exists. Blank New Sessions are excluded except for the selected one, so a
+ * draft row shows only in the group that owns the current selection.
  */
 function groupByWorkspace(
   list: SessionListState,
   workspaces: readonly WorkspaceView[],
   archived: ReadonlySet<SessionId>,
-  ungroupedOrder: readonly string[] | undefined,
+  ungroupedOrder?: readonly string[],
 ): Group[] {
-  const groups: Group[] = []
+  const byId = list.byId
+  const current = list.current
   const accounted = new Set<SessionId>()
+  const groups: Group[] = []
+
   for (const workspace of workspaces) {
     const members: SessionSummary[] = []
-    for (const id of workspace.sessionIds) {
-      const summary = list.byId[id]
-      if (summary === undefined) continue // account may lead the list pull; the row appears when the summary lands
-      accounted.add(id)
-      if (!sessionVisible(summary, list.current, archived)) continue
-      members.push(summary)
+    for (const sessionId of workspace.sessionIds) {
+      accounted.add(sessionId)
+      const session = byId[sessionId]
+      if (session === undefined || !sessionVisible(session, current, archived)) continue
+      members.push(session)
     }
+    // Creation time rides the RFC 3339 wire string; parse to epoch ms so the
+    // presentation layer works with numbers only.
+    const createdAt = workspace.createdAt === undefined ? undefined : Date.parse(workspace.createdAt)
     groups.push(buildGroup(
-      workspace.workspaceId, workspace.workspaceId, workspace.path,
-      Date.parse(workspace.createdAt), workspace.title, members, 'account',
+      workspace.workspaceId,
+      workspace.workspaceId,
+      workspace.path,
+      Number.isNaN(createdAt) ? undefined : createdAt,
+      workspace.title,
+      members,
+      'account',
     ))
   }
-  const stray = list.ids
-    .map(id => list.byId[id])
-    .filter((s): s is SessionSummary =>
-      s !== undefined && !accounted.has(s.id) && sessionVisible(s, list.current, archived))
+
+  // Trailing ungrouped bucket: any session whose id is not accounted for in
+  // any Host Workspace's sessionIds array. Blank rows follow the same rule:
+  // only the selected one shows.
+  const stray: SessionSummary[] = []
+  for (const sessionId of list.ids) {
+    if (accounted.has(sessionId)) continue
+    const session = byId[sessionId]
+    if (session === undefined || !sessionVisible(session, current, archived)) continue
+    stray.push(session)
+  }
+
   if (stray.length > 0) {
-    groups.push(buildGroup(
-      UNGROUPED_KEY,
-      undefined,
-      undefined,
-      undefined,
-      UNGROUPED_LABEL,
-      ungroupedOrder === undefined ? stray : orderedUngrouped(stray, ungroupedOrder),
-      ungroupedOrder === undefined ? 'recency' : 'account',
-    ))
+    const sessions = ungroupedOrder === undefined
+      ? (() => { const copy = [...stray]; copy.sort(byRecency); return copy })()
+      : orderedUngrouped(stray, ungroupedOrder)
+    groups.push({
+      key: UNGROUPED_KEY,
+      workspaceId: undefined,
+      cwd: undefined,
+      createdAt: undefined,
+      label: UNGROUPED_LABEL,
+      sessions,
+    })
   }
+
   return groups
 }
 
@@ -221,21 +247,27 @@ function sessionNode(
   descendants: ReadonlyMap<SessionId, SubagentDescendantSummary>,
   completedMap?: Readonly<Record<string, boolean>>,
   unreadMap?: Readonly<Record<string, boolean>>,
+  customStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>,
 ): SessionNode {
-  const isCompleted = completedMap?.[s.id] !== undefined
-    ? completedMap[s.id] === true
-    : s.completed === true
-  const isUnread = unreadMap?.[s.id] === true
+  const custom = customStatuses?.[s.id]
+  const isCompleted = custom === 'completed'
+    || (completedMap?.[s.id] !== undefined ? completedMap[s.id] === true : s.completed === true)
+  const isUnread = custom === 'unread' || unreadMap?.[s.id] === true
+  const isRunning = custom === 'ongoing' || s.running
+  const customWarning = custom === 'warning' ? ('question' as PendingInteractionStatus) : undefined
+  const effectivePending = s.pendingInteraction ?? customWarning
+
   return {
     id: s.id,
     title: sessionTitle(s),
     blank: s.blank,
-    running: s.running,
+    running: isRunning,
     runningSubagentCount: descendants.get(s.id)?.runningCount ?? 0,
     completed: isCompleted,
     unread: isUnread,
+    customStatus: custom,
     updatedAt: s.updatedAt,
-    ...(s.pendingInteraction === undefined ? {} : { pendingInteraction: s.pendingInteraction }),
+    ...(effectivePending === undefined ? {} : { pendingInteraction: effectivePending }),
   }
 }
 
@@ -279,7 +311,13 @@ export function deriveGroups(
       expanded,
       containsCurrent: g.key === currentGroup,
       sessions: expanded
-        ? g.sessions.map(session => sessionNode(session, descendants, view.completedSessions, view.unreadSessions))
+        ? g.sessions.map(session => sessionNode(
+          session,
+          descendants,
+          view.completedSessions,
+          view.unreadSessions,
+          view.customSessionStatuses,
+        ))
         : [],
     })
   }
@@ -302,6 +340,7 @@ export function deriveFlat(
   view?: {
     completedSessions?: Readonly<Record<string, boolean>>
     unreadSessions?: Readonly<Record<string, boolean>>
+    customSessionStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>
   },
 ): SessionNode[] {
   const archived = new Set(archivedSessionIds)
@@ -313,7 +352,7 @@ export function deriveFlat(
     rows.push(s)
   }
   rows.sort(byRecency)
-  return rows.map(session => sessionNode(session, descendants, view?.completedSessions, view?.unreadSessions))
+  return rows.map(session => sessionNode(session, descendants, view?.completedSessions, view?.unreadSessions, view?.customSessionStatuses))
 }
 
 /**
@@ -326,6 +365,7 @@ export function deriveRecentAndInProgress(
   archivedSessionIds: readonly SessionId[],
   completedSessions?: Readonly<Record<string, boolean>>,
   unreadSessions?: Readonly<Record<string, boolean>>,
+  customStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>,
   limit = 5,
 ): SessionNode[] {
   const archived = new Set(archivedSessionIds)
@@ -340,13 +380,14 @@ export function deriveRecentAndInProgress(
   // Score candidate sessions:
   // Active in-progress (running, subagents, pending interaction) -> 30
   // Unread -> 20
-  // Completed -> 10
-  // Idle / Read -> 0
+  // Completed -> -1 (leaves recent list once explicitly completed)
   const scored = candidates.map((s) => {
+    const custom = customStatuses?.[s.id]
     const runningSubagents = (descendants.get(s.id)?.runningCount ?? 0) > 0
-    const isActive = s.running || runningSubagents || s.pendingInteraction !== undefined
-    const isCompleted = completedSessions?.[s.id] === true
-    const isUnread = unreadSessions?.[s.id] === true || (s.completed === true && unreadSessions?.[s.id] === undefined && !isCompleted)
+    const isActive = custom === 'ongoing' || custom === 'warning' || s.running || runningSubagents || s.pendingInteraction !== undefined
+    const isCompleted = custom === 'completed'
+      || (completedSessions?.[s.id] !== undefined ? completedSessions[s.id] === true : false)
+    const isUnread = custom === 'unread' || unreadSessions?.[s.id] === true || (s.completed === true && unreadSessions?.[s.id] === undefined && !isCompleted)
 
     // Completed sessions leave the Recent/In-Progress section once marked completed by the user
     if (isCompleted) {
@@ -367,7 +408,7 @@ export function deriveRecentAndInProgress(
   })
 
   return activeOrRecent.slice(0, limit).map(({ summary: s }) =>
-    sessionNode(s, descendants, completedSessions, unreadSessions),
+    sessionNode(s, descendants, completedSessions, unreadSessions, customStatuses),
   )
 }
 
@@ -381,16 +422,16 @@ export interface RelativeTime {
 }
 
 /**
- * Merge immediate title/Workspace substring matches with ranked Host content
- * matches. Local rows lead newest-first, content-only rows retain backend
- * order, and duplicate sessions receive the backend snippet in place.
- * @param list - session metadata authority.
- * @param workspaces - Workspace membership and display labels.
- * @param query - caller text; surrounding whitespace is ignored.
- * @param archivedSessionIds - registry-global archive set (members never match).
- * @param content - ranked Host content-search page.
- * @param limit - protocol-owned maximum merged row count.
- * @returns bounded deduplicated flat rows and a refine-query hint bit.
+ * Filter the session list by query string across name and content hits.
+ * Local name matches lead in recency order, followed by content-search hits
+ * from the engine in rank order.
+ * @param list - session list snapshot.
+ * @param workspaces - workspace list for resolving folder labels.
+ * @param query - search query string.
+ * @param archivedSessionIds - registry-global archive set.
+ * @param content - content search results from the engine.
+ * @param limit - maximum results to return.
+ * @returns unified search result list.
  */
 export function deriveSearchResults(
   list: SessionListState,

@@ -12,11 +12,12 @@ import {
   IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconPlusOutline16,
   IconTrashOutline16, IconTriangleRightFill14, Menu, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { MenuEntry, MenuItem, StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import { relativeTime } from '../tree.ts'
+import type { CustomSessionStatus } from '../stores.ts'
 import css from './Rows.module.css'
 
 /** The standard locale seat, prop-passed from the browser root. */
@@ -229,7 +230,7 @@ interface SessionStatus {
  * outranks completion reminders.
  */
 function sessionStatuses(
-  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'runningSubagentCount' | 'completed' | 'unread'>,
+  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'runningSubagentCount' | 'completed' | 'unread' | 'customStatus'>,
   t: RowTranslate,
 ): readonly [SessionStatus, ...SessionStatus[]] {
   const subagents: SessionStatus | undefined = node.runningSubagentCount === 0
@@ -252,7 +253,7 @@ function sessionStatuses(
       pending = { state: 'warning', label: t('status.planReview') }
       break
     case 'question':
-      pending = { state: 'warning', label: t('status.waitingAnswer') }
+      pending = { state: 'warning', label: node.customStatus === 'warning' ? t('status.setWaitingDecision') : t('status.waitingAnswer') }
       break
     case undefined: break
     /* v8 ignore next -- closed PendingInteractionStatus union */
@@ -381,7 +382,7 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
  */
 export function SessionNodeItem({
   node, currentId, now, onOpen, onRename, onFork, onArchive, onMarkUnread, onToggleUnread, onToggleCompleted,
-  drag, flat = false, t,
+  onSetStatus, drag, flat = false, t,
 }: {
   node: SessionNode
   currentId: string | undefined
@@ -399,6 +400,8 @@ export function SessionNodeItem({
   onToggleUnread?: ((id: SessionNode['id']) => void) | undefined
   /** Toggle completed state for this session. */
   onToggleCompleted?: ((id: SessionNode['id']) => void) | undefined
+  /** Set explicit session status. */
+  onSetStatus?: ((id: SessionNode['id'], status: CustomSessionStatus | 'idle') => void) | undefined
   /** Present only on draggable rows (workspace-group sessions outside search). */
   drag?: RowDragProps | undefined
   /** The row is rendered without a parent Workspace header. */
@@ -415,7 +418,41 @@ export function SessionNodeItem({
   const isUnread = node.unread === true
   const isCompleted = node.completed === true
 
-  const sessionMenuItems = [
+  const statusSubmenu: MenuItem[] = [
+    {
+      id: 'set-ongoing',
+      label: t('status.setOngoing'),
+      icon: <StateDot state="ongoing" />,
+    },
+    {
+      id: 'set-warning',
+      label: t('status.setWaitingDecision'),
+      icon: <StateDot state="warning" />,
+    },
+    {
+      id: 'set-unread',
+      label: t('status.setUnread'),
+      icon: <span className={clsx(css.dot, css.dotUnread)} aria-hidden="true" />,
+    },
+    {
+      id: 'set-completed',
+      label: t('status.setCompleted'),
+      icon: <StateDot state="done" />,
+    },
+    {
+      id: 'set-idle',
+      label: t('status.clearStatus'),
+      icon: <IconChecklistOutline14 size={16} />,
+    },
+  ]
+
+  const sessionMenuItems: MenuEntry[] = [
+    {
+      id: 'status-submenu',
+      label: t('menu.setStatus'),
+      icon: <IconChecklistOutline14 size={16} />,
+      submenu: statusSubmenu,
+    },
     {
       id: isUnread ? 'read' : 'unread',
       label: isUnread ? t('menu.markRead') : t('menu.markUnread'),
@@ -489,11 +526,23 @@ export function SessionNodeItem({
             items={sessionMenuItems}
             onSelect={(id) => {
               setMenuOpen(false)
-              if (id === 'unread' || id === 'read') {
-                if (onToggleUnread !== undefined) onToggleUnread(node.id)
+              if (id === 'set-ongoing') {
+                onSetStatus?.(node.id, 'ongoing')
+              } else if (id === 'set-warning') {
+                onSetStatus?.(node.id, 'warning')
+              } else if (id === 'set-unread') {
+                onSetStatus?.(node.id, 'unread')
+              } else if (id === 'set-completed') {
+                onSetStatus?.(node.id, 'completed')
+              } else if (id === 'set-idle') {
+                onSetStatus?.(node.id, 'idle')
+              } else if (id === 'unread' || id === 'read') {
+                if (onSetStatus !== undefined) onSetStatus(node.id, id === 'unread' ? 'unread' : 'idle')
+                else if (onToggleUnread !== undefined) onToggleUnread(node.id)
                 else onMarkUnread?.(node.id)
               } else if (id === 'completed' || id === 'incomplete') {
-                onToggleCompleted?.(node.id)
+                if (onSetStatus !== undefined) onSetStatus(node.id, id === 'completed' ? 'completed' : 'idle')
+                else onToggleCompleted?.(node.id)
               } else if (id === 'rename') {
                 onRename(node.id, row.title)
               } else if (id === 'fork') {
@@ -536,7 +585,7 @@ export function SessionNodeItem({
  * Shows status dot, title, workspace badge, relative timestamp, and menu.
  */
 export function RecentSessionNodeItem({
-  node, workspaceName, currentId, now, onOpen, onRename, onFork, onArchive, onToggleUnread, onToggleCompleted, t,
+  node, workspaceName, currentId, now, onOpen, onRename, onFork, onArchive, onToggleUnread, onToggleCompleted, onSetStatus, t,
 }: {
   node: SessionNode
   workspaceName: string
@@ -548,6 +597,7 @@ export function RecentSessionNodeItem({
   onArchive: (id: SessionNode['id']) => void
   onToggleUnread?: ((id: SessionNode['id']) => void) | undefined
   onToggleCompleted?: ((id: SessionNode['id']) => void) | undefined
+  onSetStatus?: ((id: SessionNode['id'], status: CustomSessionStatus | 'idle') => void) | undefined
   t: RowTranslate
 }) {
   const row = node
@@ -560,7 +610,41 @@ export function RecentSessionNodeItem({
   const isUnread = node.unread === true
   const isCompleted = node.completed === true
 
-  const sessionMenuItems = [
+  const statusSubmenu: MenuItem[] = [
+    {
+      id: 'set-ongoing',
+      label: t('status.setOngoing'),
+      icon: <StateDot state="ongoing" />,
+    },
+    {
+      id: 'set-warning',
+      label: t('status.setWaitingDecision'),
+      icon: <StateDot state="warning" />,
+    },
+    {
+      id: 'set-unread',
+      label: t('status.setUnread'),
+      icon: <span className={clsx(css.dot, css.dotUnread)} aria-hidden="true" />,
+    },
+    {
+      id: 'set-completed',
+      label: t('status.setCompleted'),
+      icon: <StateDot state="done" />,
+    },
+    {
+      id: 'set-idle',
+      label: t('status.clearStatus'),
+      icon: <IconChecklistOutline14 size={16} />,
+    },
+  ]
+
+  const sessionMenuItems: MenuEntry[] = [
+    {
+      id: 'status-submenu',
+      label: t('menu.setStatus'),
+      icon: <IconChecklistOutline14 size={16} />,
+      submenu: statusSubmenu,
+    },
     {
       id: isUnread ? 'read' : 'unread',
       label: isUnread ? t('menu.markRead') : t('menu.markUnread'),
@@ -602,10 +686,22 @@ export function RecentSessionNodeItem({
             items={sessionMenuItems}
             onSelect={(id) => {
               setMenuOpen(false)
-              if (id === 'unread' || id === 'read') {
-                onToggleUnread?.(node.id)
+              if (id === 'set-ongoing') {
+                onSetStatus?.(node.id, 'ongoing')
+              } else if (id === 'set-warning') {
+                onSetStatus?.(node.id, 'warning')
+              } else if (id === 'set-unread') {
+                onSetStatus?.(node.id, 'unread')
+              } else if (id === 'set-completed') {
+                onSetStatus?.(node.id, 'completed')
+              } else if (id === 'set-idle') {
+                onSetStatus?.(node.id, 'idle')
+              } else if (id === 'unread' || id === 'read') {
+                if (onSetStatus !== undefined) onSetStatus(node.id, id === 'unread' ? 'unread' : 'idle')
+                else onToggleUnread?.(node.id)
               } else if (id === 'completed' || id === 'incomplete') {
-                onToggleCompleted?.(node.id)
+                if (onSetStatus !== undefined) onSetStatus(node.id, id === 'completed' ? 'completed' : 'idle')
+                else onToggleCompleted?.(node.id)
               } else if (id === 'rename') {
                 onRename(node.id, row.title)
               } else if (id === 'fork') {

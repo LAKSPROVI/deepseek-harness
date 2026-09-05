@@ -396,20 +396,23 @@ describe('deriveRecentAndInProgress', () => {
     const running = { ...summary('running', 10), running: true }
     const unread = summary('unread', 20)
     const completed = summary('completed', 30)
-    const sessions = list(running, unread, completed)
+    const customWarn = summary('custom-warn', 15)
+    const sessions = list(running, unread, completed, customWarn)
 
     const result = deriveRecentAndInProgress(
       sessions,
       noArchive,
-      { completed: true },
-      { unread: true },
+      { [sid('completed')]: true },
+      { [sid('unread')]: true },
+      { [sid('custom-warn')]: 'warning' },
       5,
     )
 
-    // Running has score 30, unread has score 20; completed is filtered out
-    expect(result.map(s => s.id)).toEqual([sid('running'), sid('unread')])
-    expect(result[0]).toMatchObject({ id: sid('running'), running: true })
-    expect(result[1]).toMatchObject({ id: sid('unread'), unread: true })
+    // Running & warning have score 30, unread has score 20; completed is filtered out
+    expect(result.map(s => s.id)).toEqual([sid('custom-warn'), sid('running'), sid('unread')])
+    expect(result.find(s => s.id === sid('running'))).toMatchObject({ id: sid('running'), running: true })
+    expect(result.find(s => s.id === sid('unread'))).toMatchObject({ id: sid('unread'), unread: true })
+    expect(result.find(s => s.id === sid('custom-warn'))).toMatchObject({ id: sid('custom-warn'), pendingInteraction: 'question' })
   })
 
   it('excludes archived sessions and blank unselected sessions', () => {
@@ -456,6 +459,16 @@ describe('createWorkspaceViewStore', () => {
     expect(store.getSnapshot().unreadSessions).toEqual({ s1: false, s2: false, s3: true })
     store.actions.setSessionUnread('s3', false)
     expect(store.getSnapshot().unreadSessions).toEqual({ s1: false, s2: false, s3: false })
+
+    store.actions.setSessionStatus('s4', 'ongoing')
+    expect(store.getSnapshot().customSessionStatuses?.s4).toBe('ongoing')
+    store.actions.setSessionStatus('s4', 'warning')
+    expect(store.getSnapshot().customSessionStatuses?.s4).toBe('warning')
+    store.actions.setSessionStatus('s4', 'completed')
+    expect(store.getSnapshot().completedSessions.s4).toBe(true)
+    store.actions.setSessionStatus('s4', 'idle')
+    expect(store.getSnapshot().customSessionStatuses?.s4).toBeUndefined()
+    expect(store.getSnapshot().completedSessions.s4).toBe(false)
   })
   it('stores grouping, ordering, Workspace expansion, and recent-session view order', () => {
     const store = createWorkspaceViewStore().create()
