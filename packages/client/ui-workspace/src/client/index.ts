@@ -27,6 +27,8 @@ import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './rows/WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+import { SessionContextActions, type SessionContextActionsInjected } from './header/SessionContextActions.tsx'
+import { SessionNotesPopover } from './header/SessionNotesPopover.tsx'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type { UiWorkspace } from './navigation.ts'
@@ -35,6 +37,8 @@ export type {
   WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
+export type { SessionContextActionsProps, SessionContextActionsInjected } from './header/SessionContextActions.tsx'
+export type { SessionNotesPopoverProps, SessionReminder, SessionNotesData } from './header/SessionNotesPopover.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface GlobalStandardProps {
@@ -153,5 +157,32 @@ export function apply(ctx: Context): void {
       locale: NS,
     },
     WorkspacePicker,
+  ))
+  const contextActionsInjected = (): SessionContextActionsInjected => ({
+    startSession: (workspaceId) => { uiWorkspace.startSession(workspaceId) },
+    forkSession: (sessionId) => {
+      sessions.fork({ sessionId, increaseTitle: true })
+        .then((childId) => { sessions.open(childId) })
+        .catch(() => {})
+    },
+  })
+  ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register(
+    {
+      name: 'conversation.session.header.actions',
+      id: 'workspace-session-context-actions',
+      order: 15,
+      inject: contextActionsInjected,
+      locale: NS,
+    },
+    SessionContextActions,
+  ))
+  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register(
+    {
+      name: 'conversation.session.header.utilities',
+      id: 'workspace-session-notes',
+      order: 10,
+      locale: NS,
+    },
+    SessionNotesPopover,
   ))
 }
