@@ -5,8 +5,9 @@
     "outDir": "lib/types",
     "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
   },
-  "files": ["src/client.ts", "src/types.ts"],
+  "files": ["src/client.ts", "src/types.ts", "src/templates.ts"],
   "references": [
+    { "path": "../../../vendor/schemastery" },
     { "path": "../../attachment/attachment" },
     { "path": "../../util/brand" },
     { "path": "../../llm/llm" },

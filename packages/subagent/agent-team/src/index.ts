@@ -42,10 +42,18 @@ import type {
 
 export type * from './types.ts'
 export type { TeamMembership } from './roster.ts'
+export type { SavedTeamTemplate, TeamTemplateSettings } from './templates.ts'
 export { TeamDebateId, TeamId, TeamMessageId, TeamTaskId } from './types.ts'
 export { TeamError } from './error.ts'
 export { foldTeam } from './fold.ts'
 export { applyTeamProjection, teamProjectionSchema } from './projection.ts'
+export {
+  MAX_TEAM_TEMPLATE_COUNT,
+  normalizeTeamMemberName,
+  TEAM_TEMPLATE_SETTINGS_NAMESPACE,
+  TeamTemplateSettingsSchema,
+  validateTeamTemplateSettings,
+} from './templates.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

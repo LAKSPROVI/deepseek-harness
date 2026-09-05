@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -19,6 +20,13 @@ import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import TeamService from '../../agent-team/src/index.ts'
 import * as toolTeam from '../src/index.ts'
+import FileSettingsProvider from '@deepseek-ai/dsh-settings-file'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import {
+  TEAM_TEMPLATE_SETTINGS_NAMESPACE,
+  TeamTemplateSettingsSchema,
+  validateTeamTemplateSettings,
+} from '@deepseek-ai/dsh-agent-team'
 
 const SIGNAL = new AbortController().signal
 const TOOL_NAMES = [
@@ -36,6 +44,9 @@ const TOOL_NAMES = [
   'team_task_list',
   'team_task_get',
   'team_task_update',
+  'team_template_list',
+  'team_template_save',
+  'team_template_delete',
 ].sort()
 
 const roots: string[] = []
@@ -50,6 +61,10 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legac
   await mountAgentLoopTestDependencies(ctx)
   const storageRoot = mkdtempSync(join(tmpdir(), 'dsh-tool-team-'))
   roots.push(storageRoot)
+  const settingsRoot = mkdtempSync(join(tmpdir(), 'dsh-tool-team-settings-'))
+  roots.push(settingsRoot)
+  const settingsFile = join(settingsRoot, 'settings.yaml')
+  await writeFile(settingsFile, '{}\n')
   await ctx.plugin(JsonlSessionPersistence, { root: storageRoot })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentService)
@@ -57,6 +72,15 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legac
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
   await ctx.plugin(TeamService)
+  await ctx.plugin(FileSettingsProvider, { path: settingsFile })
+  // Register the agent-team-templates namespace with its schema
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.register(
+      settingsNamespace(TEAM_TEMPLATE_SETTINGS_NAMESPACE),
+      TeamTemplateSettingsSchema,
+      { validate: validateTeamTemplateSettings },
+    )
+  })
   const fiber = await ctx.plugin(toolTeam)
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -121,7 +145,7 @@ describe('dsh-tool-team', () => {
     expect(leadAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
-    expect(leadPrompt).toContain('create teammates only when the user explicitly asks')
+    expect(leadPrompt).toContain('You can configure and coordinate the entire team directly from chat instructions')
     expect(leadPrompt).toContain('FS_STALE_VERSION')
     expect(leadPrompt).toContain('Bash, formatters, code generators, and scripts are not fully protected')
     expect(leadPrompt).toContain('Task readiness never starts an owner')
@@ -503,6 +527,137 @@ describe('dsh-tool-team', () => {
     await execute(ctx, lead, 'interrupt_agent', { target: 'cold-worker' })
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
   })
+
+  it('manages reusable teammate templates via team_template_save, list, delete', async () => {
+    const { ctx, lead } = await setup([])
+
+    // Initially no templates
+    const emptyList = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    expect(emptyList).toEqual({ templates: [] })
+
+    // Save a template
+    const saved = JSON.parse(text(await execute(ctx, lead, 'team_template_save', {
+      title: 'Pesquisador Jurídico Sênior',
+      name: 'pesquisador-juridico-senior',
+      description: 'Pesquisa doutrina e jurisprudência',
+      prompt: 'Pesquise o tema e retorne citações',
+      context: 'fresh',
+      llm_provider: 'deepseek',
+      model: 'deepseek-chat',
+      persona: 'Especialista em pesquisa jurídica',
+    })))
+    expect(saved.template).toMatchObject({
+      title: 'Pesquisador Jurídico Sênior',
+      name: 'pesquisador-juridico-senior',
+      description: 'Pesquisa doutrina e jurisprudência',
+      prompt: 'Pesquise o tema e retorne citações',
+      context: 'fresh',
+      llmProvider: 'deepseek',
+      model: 'deepseek-chat',
+      persona: 'Especialista em pesquisa jurídica',
+    })
+    expect(saved.template.id).toBeTruthy()
+
+    // List templates
+    const list = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    expect(list.templates).toHaveLength(1)
+    expect(list.templates[0].title).toBe('Pesquisador Jurídico Sênior')
+
+    // Save another template with same title (should update)
+    const saved2 = JSON.parse(text(await execute(ctx, lead, 'team_template_save', {
+      title: 'Pesquisador Jurídico Sênior',
+      name: 'pesquisador-juridico-senior',
+      description: 'Atualizado: pesquisa doutrina, jurisprudência e legislação',
+      prompt: 'Pesquise completamente',
+      context: 'fork',
+    })))
+    expect(saved2.template.description).toContain('Atualizado')
+    expect(saved2.template.context).toBe('fork')
+
+    // List should still have 1
+    const list2 = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    expect(list2.templates).toHaveLength(1)
+    expect(list2.templates[0].description).toContain('Atualizado')
+
+    // Delete template
+    const deleted = JSON.parse(text(await execute(ctx, lead, 'team_template_delete', {
+      id: saved2.template.id,
+    })))
+    expect(deleted.deletedId).toBe(saved2.template.id)
+
+    // List should be empty again
+    const emptyAgain = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    expect(emptyAgain.templates).toHaveLength(0)
+  })
+
+  it('spawns teammate from saved template via template_id', async () => {
+    const { ctx, lead } = await setup(['hang'])
+
+    // Save a template
+    const saved = JSON.parse(text(await execute(ctx, lead, 'team_template_save', {
+      title: 'Revisor de Contratos',
+      description: 'Revisa cláusulas contratuais',
+      prompt: 'Revise o contrato enviado',
+      context: 'fresh',
+      llm_provider: 'deepseek',
+      model: 'deepseek-chat',
+    })))
+    const templateId = saved.template.id
+
+    // Spawn teammate using template_id (omit name, description, prompt)
+    const spawned = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+      template_id: templateId,
+    })))
+    expect(spawned.member).toMatchObject({
+      name: 'revisor-de-contratos',
+      description: 'Revisa cláusulas contratuais',
+      llmProvider: 'deepseek',
+      model: 'deepseek-chat',
+    })
+
+    // Spawn with override
+    const spawned2 = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+      template_id: templateId,
+      name: 'revisor-especial',
+      description: 'Revisão especial',
+      prompt: 'Prompt customizado',
+      context: 'fork',
+      model: 'gpt-5',
+    })))
+    expect(spawned2.member).toMatchObject({
+      name: 'revisor-especial',
+      description: 'Revisão especial',
+      model: 'gpt-5',
+    })
+  }, 15000)
+
+  it('normalizes natural names in spawn_teammate to lower-kebab-case', async () => {
+    const { ctx, lead } = await setup(['hang'])
+
+    // Natural name with spaces, accents, uppercase
+    const spawned = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+      name: 'Revisor de Contratos - Sênior',
+      description: 'Test normalization',
+      prompt: 'Test prompt',
+    })))
+    expect(spawned.member.name).toBe('revisor-de-contratos-senior')
+
+    // Name with underscores and special chars
+    const spawned2 = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+      name: 'pesquisador_juridico (tributário)',
+      description: 'Test normalization 2',
+      prompt: 'Test prompt 2',
+    })))
+    expect(spawned2.member.name).toBe('pesquisador-juridico-tributario')
+
+    // Name already in kebab-case should stay the same
+    const spawned3 = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+      name: 'valid-name-123',
+      description: 'Test normalization 3',
+      prompt: 'Test prompt 3',
+    })))
+    expect(spawned3.member.name).toBe('valid-name-123')
+  }, 15000)
 
   it('fails safely without a calling Agent and has the function-plugin export shape', async () => {
     const { ctx } = await setup([])
