@@ -589,11 +589,7 @@ export function RecentSessionNodeItem({
       onClick={() => { onOpen(node.id) }}
     >
       <span className={css.slot}>
-        {showStatus ? (
-          <SessionStatusDots statuses={statuses} />
-        ) : (
-          <StateDot state="done" />
-        )}
+        {showStatus && <SessionStatusDots statuses={statuses} />}
       </span>
       <span className={css.title}>{title}</span>
       <span className={css.workspaceBadge} title={workspaceName}>{workspaceName}</span>

@@ -222,8 +222,10 @@ function sessionNode(
   completedMap?: Readonly<Record<string, boolean>>,
   unreadMap?: Readonly<Record<string, boolean>>,
 ): SessionNode {
-  const isCompleted = completedMap?.[s.id] === true || (completedMap?.[s.id] === undefined && s.completed === true)
-  const isUnread = unreadMap?.[s.id] === true || (unreadMap?.[s.id] === undefined && s.completed === true && !isCompleted)
+  const isCompleted = completedMap?.[s.id] !== undefined
+    ? completedMap[s.id] === true
+    : s.completed === true
+  const isUnread = unreadMap?.[s.id] === true
   return {
     id: s.id,
     title: sessionTitle(s),
@@ -344,7 +346,7 @@ export function deriveRecentAndInProgress(
     const runningSubagents = (descendants.get(s.id)?.runningCount ?? 0) > 0
     const isActive = s.running || runningSubagents || s.pendingInteraction !== undefined
     const isCompleted = completedSessions?.[s.id] === true
-    const isUnread = unreadSessions?.[s.id] === true
+    const isUnread = unreadSessions?.[s.id] === true || (s.completed === true && unreadSessions?.[s.id] === undefined && !isCompleted)
 
     // Completed sessions leave the Recent/In-Progress section once marked completed by the user
     if (isCompleted) {
