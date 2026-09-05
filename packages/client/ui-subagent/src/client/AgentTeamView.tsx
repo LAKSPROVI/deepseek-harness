@@ -346,6 +346,9 @@ export function AgentTeamView({
   const [contributionText, setContributionText] = useState('')
   const [templateTitle, setTemplateTitle] = useState('')
   const [sideTab, setSideTab] = useState<'spawn' | 'guide'>('spawn')
+  const [sideOpen, setSideOpen] = useState(true)
+  const [viewFilter, setViewFilter] = useState<'all' | 'roster' | 'tasks' | 'debate'>('all')
+  const [openPanels, setOpenPanels] = useState({ roster: true, tasks: true, debate: true })
   const [modelDirectory, setModelDirectory] = useState<SessionModels | null>(null)
   const [modelDirectoryStatus, setModelDirectoryStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [modelDirectoryError, setModelDirectoryError] = useState<string | null>(null)
@@ -733,551 +736,675 @@ export function AgentTeamView({
         </div>
       )}
 
-      <div className={css.layout}>
+      <div className={css.viewBar}>
+        <div className={css.viewTabs} role="tablist" aria-label="Filtro de visualização da equipe">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewFilter === 'all'}
+            className={`${css.viewTab} ${viewFilter === 'all' ? css.viewTabActive : ''}`}
+            onClick={() => { setViewFilter('all') }}
+          >
+            <span>Visão geral</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewFilter === 'roster'}
+            className={`${css.viewTab} ${viewFilter === 'roster' ? css.viewTabActive : ''}`}
+            onClick={() => { setViewFilter('roster') }}
+          >
+            <span>Integrantes</span>
+            <span className={css.tabBadge}>{roster.length}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewFilter === 'tasks'}
+            className={`${css.viewTab} ${viewFilter === 'tasks' ? css.viewTabActive : ''}`}
+            onClick={() => { setViewFilter('tasks') }}
+          >
+            <span>Tarefas</span>
+            <span className={css.tabBadge}>{tasks.length}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewFilter === 'debate'}
+            className={`${css.viewTab} ${viewFilter === 'debate' ? css.viewTabActive : ''}`}
+            onClick={() => { setViewFilter('debate') }}
+          >
+            <span>Debate</span>
+            {debate !== null && <span className={css.tabBadge}>{debate.status}</span>}
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className={css.toggleSidebarButton}
+          onClick={() => { setSideOpen(current => !current) }}
+          aria-expanded={sideOpen}
+        >
+          {sideOpen ? '✕ Ocultar lateral' : '➕ Abrir ações / Integrantes'}
+        </button>
+      </div>
+
+      <div className={`${css.layout} ${!sideOpen ? css.layoutFull : ''}`}>
         <main className={css.mainColumn}>
-          <section className={css.panel} aria-labelledby={fieldId(sessionId, 'roster-title')}>
-            <div className={css.sectionHeader}>
-              <div>
-                <p className={css.sectionKicker}>Equipe em tempo real</p>
-                <h3 id={fieldId(sessionId, 'roster-title')}>Integrantes</h3>
-              </div>
-              <button
-                type="button"
-                className={css.secondaryButton}
-                disabled={formsDisabled}
-                onClick={() => { void refreshMembers(true) }}
+          {(viewFilter === 'all' || viewFilter === 'roster') && (
+            <section className={css.panel} aria-labelledby={fieldId(sessionId, 'roster-title')}>
+              <div
+                className={css.sectionHeaderClickable}
+                onClick={() => { setOpenPanels(current => ({ ...current, roster: !current.roster })) }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    setOpenPanels(current => ({ ...current, roster: !current.roster }))
+                  }
+                }}
+                aria-expanded={openPanels.roster}
               >
-                {pending === 'members' ? 'Atualizando…' : 'Atualizar status'}
-              </button>
-            </div>
-            <div className={css.roster} role="list" aria-label="Integrantes da equipe de agentes">
-              {roster.map(member => (
-                <article className={css.memberCard} role="listitem" key={member.id}>
-                  <div className={css.memberIdentity}>
-                    <span className={`${css.statusDot} ${statusClass(member.status)}`} aria-hidden="true" />
-                    <div className={css.memberCopy}>
-                      <div className={css.memberTitleRow}>
-                        <strong>{member.name}</strong>
-                        <span className={css.roleBadge}>{MEMBER_ROLE_LABELS[member.role]}</span>
-                        {member.persona !== undefined && (
-                          <span className={css.personaBadge} title={member.persona}>Persona</span>
-                        )}
-                      </div>
-                      <p>{member.description ?? (member.role === 'lead' ? 'Coordena a equipe' : 'Sem descrição')}</p>
-                    </div>
+                <div className={css.sectionHeaderTitleGroup}>
+                  <span className={css.accordionChevron}>{openPanels.roster ? '▾' : '▸'}</span>
+                  <div>
+                    <p className={css.sectionKicker}>Equipe em tempo real</p>
+                    <h3 id={fieldId(sessionId, 'roster-title')}>Integrantes</h3>
                   </div>
-                  <div className={css.memberFacts}>
-                    <span className={css.statusLabel}>{MEMBER_STATUS_LABELS[member.status]}</span>
-                    <span title="Transporte do subagente">{member.provider ?? 'host'}</span>
-                    <span title="Provider e modelo de LLM">
-                      {[member.llmProvider, member.model].filter(Boolean).join(' / ') || 'Modelo herdado'}
-                    </span>
-                    {member.context !== undefined && <span>{MEMBER_CONTEXT_LABELS[member.context]}</span>}
-                  </div>
-                  {member.diagnostics.length > 0 && (
-                    <p className={css.diagnostic}>{member.diagnostics.join(' · ')}</p>
-                  )}
-                  {member.role === 'teammate' && (
-                    <div className={css.memberActions}>
-                      <button
-                        type="button"
-                        className={css.dangerButton}
-                        disabled={formsDisabled || member.status !== 'running'}
-                        onClick={() => { void handleInterrupt(member.name) }}
-                        aria-label={`Interromper a tarefa atual de ${member.name}`}
-                      >
-                        {pending === `interrupt:${member.name}` ? 'Interrompendo…' : 'Interromper tarefa'}
-                      </button>
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className={css.panel} aria-labelledby={fieldId(sessionId, 'tasks-title')}>
-            <div className={css.sectionHeader}>
-              <div>
-                <p className={css.sectionKicker}>Fluxo persistente de tarefas</p>
-                <h3 id={fieldId(sessionId, 'tasks-title')}>Tarefas</h3>
-              </div>
-              <span className={css.countBadge}>{tasks.length}</span>
-            </div>
-            {tasks.length === 0 ? (
-              <p className={css.emptyCopy}>Nenhuma tarefa da equipe foi registrada.</p>
-            ) : (
-              <div className={css.taskList}>
-                {tasks.map(task => (
-                  <article className={css.taskCard} key={task.id}>
-                    <div className={css.taskHeader}>
-                      <strong>{task.subject}</strong>
-                      <span className={`${css.taskStatus} ${css[`task_${task.status}`]}`}>{TASK_STATUS_LABELS[task.status]}</span>
-                    </div>
-                    {task.description !== '' && <p>{task.description}</p>}
-                    <dl className={css.taskFacts}>
-                      <div><dt>Responsável</dt><dd>{task.ownerId === undefined ? 'Não atribuída' : memberNameById.get(task.ownerId) ?? task.ownerId}</dd></div>
-                      <div><dt>Revisão</dt><dd>{task.revision}</dd></div>
-                      <div><dt>Bloqueada por</dt><dd>{task.blockedBy.length === 0 ? 'Nenhuma' : task.blockedBy.join(', ')}</dd></div>
-                    </dl>
-                    {task.writeScopes.length > 0 && (
-                      <div className={css.scopeList} aria-label="Escopos de escrita recomendados">
-                        {task.writeScopes.map(scope => <code key={scope}>{scope}</code>)}
-                      </div>
-                    )}
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className={css.panel} aria-labelledby={fieldId(sessionId, 'debate-title')}>
-            <div className={css.sectionHeader}>
-              <div>
-                <p className={css.sectionKicker}>Deliberação estruturada</p>
-                <h3 id={fieldId(sessionId, 'debate-title')}>Debate</h3>
-              </div>
-              {debate !== null && <span className={css.countBadge}>Rodada {debate.round}/{debate.maxRounds}</span>}
-            </div>
-
-            {debate === null ? (
-              <form className={css.form} onSubmit={(event) => { void handleDebateStart(event) }}>
-                <label className={css.fieldWide}>
-                  <span>Tema</span>
-                  <textarea
-                    value={debateDraft.topic}
-                    onChange={(event) => { setDebateDraft(current => ({ ...current, topic: event.target.value })) }}
-                    rows={3}
-                    required
-                    placeholder="Descreva a decisão ou pergunta que a equipe deve debater."
-                  />
-                </label>
-                <fieldset className={css.participants}>
-                  <legend>Participantes</legend>
-                  <label>
-                    <input type="checkbox" checked disabled />
-                    <span>líder</span>
-                  </label>
-                  {teammateNames.length === 0 ? (
-                    <p>Crie ao menos um integrante antes de iniciar o debate.</p>
-                  ) : teammateNames.map(name => (
-                    <label key={name}>
-                      <input
-                        type="checkbox"
-                        checked={debateDraft.participants.includes(name)}
-                        onChange={(event) => {
-                          setDebateDraft(current => ({
-                            ...current,
-                            participants: event.target.checked
-                              ? [...current.participants, name]
-                              : current.participants.filter(candidate => candidate !== name),
-                          }))
-                        }}
-                      />
-                      <span>{name}</span>
-                    </label>
-                  ))}
-                </fieldset>
-                <label className={css.compactField}>
-                  <span>Máximo de rodadas</span>
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={debateDraft.maxRounds}
-                    onChange={(event) => { setDebateDraft(current => ({ ...current, maxRounds: event.target.value })) }}
-                    required
-                  />
-                </label>
-                <AttachmentInput
-                  label="Evidências iniciais"
-                  attachments={debateAttachments}
-                  disabled={formsDisabled}
-                  onFiles={(files) => { addAttachments(files, setDebateAttachments) }}
-                  onRemove={(id) => { removeAttachment(id, setDebateAttachments) }}
-                />
-                <div className={css.formActions}>
+                </div>
+                <div
+                  className={css.sectionHeaderActions}
+                  onClick={(e) => { e.stopPropagation() }}
+                  onKeyDown={(e) => { e.stopPropagation() }}
+                >
                   <button
-                    type="submit"
-                    className={css.primaryButton}
-                    disabled={formsDisabled || debateDraft.topic.trim() === '' || debateDraft.participants.length === 0}
+                    type="button"
+                    className={css.secondaryButton}
+                    disabled={formsDisabled}
+                    onClick={() => { void refreshMembers(true) }}
                   >
-                    {pending === 'debate-start' ? 'Iniciando…' : 'Iniciar debate'}
+                    {pending === 'members' ? 'Atualizando…' : 'Atualizar status'}
                   </button>
                 </div>
-              </form>
-            ) : (
-              <div className={css.debate}>
-                <div className={css.debateSummary}>
-                  <div>
-                    <span className={`${css.debateStatus} ${css[`debate_${debate.status}`]}`}>{DEBATE_STATUS_LABELS[debate.status]}</span>
-                    <strong>{debate.topic}</strong>
-                  </div>
-                  <p>{debate.participants.join(', ')}</p>
-                </div>
-                <ol className={css.phaseTimeline} aria-label="Fases do debate">
-                  {DEBATE_PHASES.map((phase, index) => {
-                    const currentIndex = DEBATE_PHASES.indexOf(debate.phase)
-                    const state = index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming'
-                    return (
-                      <li className={css[`phase_${state}`]} key={phase} aria-current={state === 'current' ? 'step' : undefined}>
-                        <span>{index + 1}</span>
-                        <strong>{DEBATE_PHASE_LABELS[phase]}</strong>
-                      </li>
-                    )
-                  })}
-                </ol>
-                <div className={`${css.readiness} ${phaseComplete ? css.readinessComplete : ''}`} role="status">
-                  <strong>{phaseComplete ? 'Pronto para avançar' : 'Aguardando contribuições'}</strong>
-                  <span>{phaseComplete ? 'Todos os participantes registraram sua fala nesta etapa.' : `Faltam: ${missingParticipants.join(', ')}`}</span>
-                </div>
-                {debate.evidence.length > 0 && (
-                  <section className={css.evidence} aria-label="Evidências iniciais do debate">
-                    <h4>Evidências iniciais</h4>
-                    <div className={css.contentBlocks}>
-                      {debate.evidence.map((block, index) => <DurableBlock block={block} resolveAttachment={resolveAttachment} key={`evidence-${String(index)}`} />)}
-                    </div>
-                  </section>
-                )}
-                <section className={css.transcript} aria-labelledby={fieldId(sessionId, 'transcript-title')}>
-                  <div className={css.transcriptHeader}>
-                    <h4 id={fieldId(sessionId, 'transcript-title')}>Transcrição do debate</h4>
-                    <span>{debate.contributions.length} contribuições</span>
-                  </div>
-                  {debate.contributions.length === 0 ? (
-                    <p className={css.emptyCopy}>Nenhuma contribuição registrada ainda.</p>
-                  ) : (
-                    <ol className={css.contributionList}>
-                      {debate.contributions.map(contribution => (
-                        <li key={contribution.sequence}>
-                          <header>
-                            <strong>{contribution.author}</strong>
-                            <span>Rodada {contribution.round} · {DEBATE_PHASE_LABELS[contribution.phase]}</span>
-                            <time dateTime={new Date(contribution.createdAt).toISOString()}>{new Date(contribution.createdAt).toLocaleString('pt-BR')}</time>
-                          </header>
-                          <div className={css.contentBlocks}>
-                            {contribution.content.map((block, index) => <DurableBlock block={block} resolveAttachment={resolveAttachment} key={`${String(contribution.sequence)}-${String(index)}`} />)}
+              </div>
+              {openPanels.roster && (
+                <div className={css.roster} role="list" aria-label="Integrantes da equipe de agentes">
+                  {roster.map(member => (
+                    <article className={css.memberCard} role="listitem" key={member.id}>
+                      <div className={css.memberIdentity}>
+                        <span className={`${css.statusDot} ${statusClass(member.status)}`} aria-hidden="true" />
+                        <div className={css.memberCopy}>
+                          <div className={css.memberTitleRow}>
+                            <strong>{member.name}</strong>
+                            <span className={css.roleBadge}>{MEMBER_ROLE_LABELS[member.role]}</span>
+                            {member.persona !== undefined && (
+                              <span className={css.personaBadge} title={member.persona}>Persona</span>
+                            )}
                           </div>
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </section>
-                {leadCanContribute && (
-                  <form className={css.contributionForm} onSubmit={(event) => { void handleDebateContribute(event) }}>
+                          <p>{member.description ?? (member.role === 'lead' ? 'Coordena a equipe' : 'Sem descrição')}</p>
+                        </div>
+                      </div>
+                      <div className={css.memberFacts}>
+                        <span className={css.statusLabel}>{MEMBER_STATUS_LABELS[member.status]}</span>
+                        <span title="Transporte do subagente">{member.provider ?? 'host'}</span>
+                        <span title="Provider e modelo de LLM">
+                          {[member.llmProvider, member.model].filter(Boolean).join(' / ') || 'Modelo herdado'}
+                        </span>
+                        {member.context !== undefined && <span>{MEMBER_CONTEXT_LABELS[member.context]}</span>}
+                      </div>
+                      {member.diagnostics.length > 0 && (
+                        <p className={css.diagnostic}>{member.diagnostics.join(' · ')}</p>
+                      )}
+                      {member.role === 'teammate' && (
+                        <div className={css.memberActions}>
+                          <button
+                            type="button"
+                            className={css.dangerButton}
+                            disabled={formsDisabled || member.status !== 'running'}
+                            onClick={() => { void handleInterrupt(member.name) }}
+                            aria-label={`Interromper a tarefa atual de ${member.name}`}
+                          >
+                            {pending === `interrupt:${member.name}` ? 'Interrompendo…' : 'Interromper tarefa'}
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {(viewFilter === 'all' || viewFilter === 'tasks') && (
+            <section className={css.panel} aria-labelledby={fieldId(sessionId, 'tasks-title')}>
+              <div
+                className={css.sectionHeaderClickable}
+                onClick={() => { setOpenPanels(current => ({ ...current, tasks: !current.tasks })) }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    setOpenPanels(current => ({ ...current, tasks: !current.tasks }))
+                  }
+                }}
+                aria-expanded={openPanels.tasks}
+              >
+                <div className={css.sectionHeaderTitleGroup}>
+                  <span className={css.accordionChevron}>{openPanels.tasks ? '▾' : '▸'}</span>
+                  <div>
+                    <p className={css.sectionKicker}>Fluxo persistente de tarefas</p>
+                    <h3 id={fieldId(sessionId, 'tasks-title')}>Tarefas</h3>
+                  </div>
+                </div>
+                <span className={css.countBadge}>{tasks.length}</span>
+              </div>
+              {openPanels.tasks && (
+                tasks.length === 0 ? (
+                  <p className={css.emptyCopy}>Nenhuma tarefa da equipe foi registrada.</p>
+                ) : (
+                  <div className={css.taskList}>
+                    {tasks.map(task => (
+                      <article className={css.taskCard} key={task.id}>
+                        <div className={css.taskHeader}>
+                          <strong>{task.subject}</strong>
+                          <span className={`${css.taskStatus} ${css[`task_${task.status}`]}`}>{TASK_STATUS_LABELS[task.status]}</span>
+                        </div>
+                        {task.description !== '' && <p>{task.description}</p>}
+                        <dl className={css.taskFacts}>
+                          <div><dt>Responsável</dt><dd>{task.ownerId === undefined ? 'Não atribuída' : memberNameById.get(task.ownerId) ?? task.ownerId}</dd></div>
+                          <div><dt>Revisão</dt><dd>{task.revision}</dd></div>
+                          <div><dt>Bloqueada por</dt><dd>{task.blockedBy.length === 0 ? 'Nenhuma' : task.blockedBy.join(', ')}</dd></div>
+                        </dl>
+                        {task.writeScopes.length > 0 && (
+                          <div className={css.scopeList} aria-label="Escopos de escrita recomendados">
+                            {task.writeScopes.map(scope => <code key={scope}>{scope}</code>)}
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                )
+              )}
+            </section>
+          )}
+
+          {(viewFilter === 'all' || viewFilter === 'debate') && (
+            <section className={css.panel} aria-labelledby={fieldId(sessionId, 'debate-title')}>
+              <div
+                className={css.sectionHeaderClickable}
+                onClick={() => { setOpenPanels(current => ({ ...current, debate: !current.debate })) }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    setOpenPanels(current => ({ ...current, debate: !current.debate }))
+                  }
+                }}
+                aria-expanded={openPanels.debate}
+              >
+                <div className={css.sectionHeaderTitleGroup}>
+                  <span className={css.accordionChevron}>{openPanels.debate ? '▾' : '▸'}</span>
+                  <div>
+                    <p className={css.sectionKicker}>Deliberação estruturada</p>
+                    <h3 id={fieldId(sessionId, 'debate-title')}>Debate</h3>
+                  </div>
+                </div>
+                {debate !== null && <span className={css.countBadge}>Rodada {debate.round}/{debate.maxRounds}</span>}
+              </div>
+
+              {openPanels.debate && (
+                debate === null ? (
+                  <form className={css.form} onSubmit={(event) => { void handleDebateStart(event) }}>
                     <label className={css.fieldWide}>
-                      <span>Contribuição da líder</span>
-                      <textarea value={contributionText} onChange={(event) => { setContributionText(event.target.value) }} rows={4} placeholder={`Registre uma contribuição consolidada para ${DEBATE_PHASE_LABELS[debate.phase]}.`} />
+                      <span>Tema</span>
+                      <textarea
+                        value={debateDraft.topic}
+                        onChange={(event) => { setDebateDraft(current => ({ ...current, topic: event.target.value })) }}
+                        rows={3}
+                        required
+                        placeholder="Descreva a decisão ou pergunta que a equipe deve debater."
+                      />
+                    </label>
+                    <fieldset className={css.participants}>
+                      <legend>Participantes</legend>
+                      <label>
+                        <input type="checkbox" checked disabled />
+                        <span>líder</span>
+                      </label>
+                      {teammateNames.length === 0 ? (
+                        <p>Crie ao menos um integrante antes de iniciar o debate.</p>
+                      ) : teammateNames.map(name => (
+                        <label key={name}>
+                          <input
+                            type="checkbox"
+                            checked={debateDraft.participants.includes(name)}
+                            onChange={(event) => {
+                              setDebateDraft(current => ({
+                                ...current,
+                                participants: event.target.checked
+                                  ? [...current.participants, name]
+                                  : current.participants.filter(candidate => candidate !== name),
+                              }))
+                            }}
+                          />
+                          <span>{name}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    <label className={css.compactField}>
+                      <span>Máximo de rodadas</span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={debateDraft.maxRounds}
+                        onChange={(event) => { setDebateDraft(current => ({ ...current, maxRounds: event.target.value })) }}
+                        required
+                      />
                     </label>
                     <AttachmentInput
-                      label="Anexos da contribuição"
-                      attachments={contributionAttachments}
+                      label="Evidências iniciais"
+                      attachments={debateAttachments}
                       disabled={formsDisabled}
-                      onFiles={(files) => { addAttachments(files, setContributionAttachments) }}
-                      onRemove={(id) => { removeAttachment(id, setContributionAttachments) }}
+                      onFiles={(files) => { addAttachments(files, setDebateAttachments) }}
+                      onRemove={(id) => { removeAttachment(id, setDebateAttachments) }}
                     />
                     <div className={css.formActions}>
-                      <button type="submit" className={css.primaryButton} disabled={formsDisabled || (contributionText.trim() === '' && contributionAttachments.length === 0)}>
-                        {pending === 'debate-contribute' ? 'Registrando…' : 'Registrar contribuição'}
+                      <button
+                        type="submit"
+                        className={css.primaryButton}
+                        disabled={formsDisabled || debateDraft.topic.trim() === '' || debateDraft.participants.length === 0}
+                      >
+                        {pending === 'debate-start' ? 'Iniciando…' : 'Iniciar debate'}
                       </button>
                     </div>
                   </form>
-                )}
-                {debate.history.length > 0 && (
-                  <ol className={css.transitionList} aria-label="Histórico de transições do debate">
-                    {debate.history.map(transition => (
-                      <li key={transition.revision}>
-                        <span>R{transition.round} · {DEBATE_PHASE_LABELS[transition.phase]}</span>
-                        <strong>{transition.actor}</strong>
-                        <span>{DEBATE_STATUS_LABELS[transition.status]}</span>
-                        {transition.note !== undefined && <p>{transition.note}</p>}
-                      </li>
-                    ))}
-                  </ol>
-                )}
-                {debate.status !== 'completed' && (
-                  <div className={css.debateControls}>
-                    <label className={css.fieldWide}>
-                      <span>Nota da transição <em>opcional</em></span>
-                      <input
-                        type="text"
-                        value={debateNote}
-                        onChange={(event) => { setDebateNote(event.target.value) }}
-                        placeholder="Registre por que o protocolo está mudando."
-                      />
-                    </label>
-                    <div className={css.buttonRow}>
-                      {debate.status === 'active' ? (
-                        <button type="button" className={css.secondaryButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('pause') }}>Pausar protocolo</button>
-                      ) : (
-                        <button type="button" className={css.secondaryButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('resume') }}>Retomar protocolo</button>
-                      )}
-                      <button type="button" className={css.primaryButton} disabled={formsDisabled || debate.status !== 'active' || !phaseComplete} onClick={() => { void handleDebateUpdate('advance') }}>Avançar fase</button>
-                      <button type="button" className={css.dangerButton} disabled={formsDisabled || debate.status !== 'active' || debate.phase !== 'synthesis' || !phaseComplete} onClick={() => { void handleDebateUpdate('complete') }}>Concluir debate</button>
+                ) : (
+                  <div className={css.debate}>
+                    <div className={css.debateSummary}>
+                      <div>
+                        <span className={`${css.debateStatus} ${css[`debate_${debate.status}`]}`}>{DEBATE_STATUS_LABELS[debate.status]}</span>
+                        <strong>{debate.topic}</strong>
+                      </div>
+                      <p>{debate.participants.join(', ')}</p>
                     </div>
-                    <p className={css.protocolNote}>
-                      Pausar impede o avanço do protocolo, mas não cancela tarefas que já estão em execução.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-        </main>
-
-        <aside className={css.sideColumn} aria-label="Controles da equipe">
-          <div className={css.sideTabs} role="tablist" aria-label="Ações de integrantes">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={sideTab === 'spawn'}
-              className={`${css.sideTab} ${sideTab === 'spawn' ? css.sideTabActive : ''}`}
-              onClick={() => { setSideTab('spawn') }}
-            >
-              <span>Novo integrante</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={sideTab === 'guide'}
-              className={`${css.sideTab} ${sideTab === 'guide' ? css.sideTabActive : ''}`}
-              onClick={() => { setSideTab('guide') }}
-            >
-              <span>Orientar integrante</span>
-              {teammateNames.length > 0 && <span className={css.tabBadge}>{teammateNames.length}</span>}
-            </button>
-          </div>
-
-          <section
-            className={`${css.panel} ${sideTab !== 'spawn' ? css.sidePanelHidden : ''}`}
-            aria-labelledby={fieldId(sessionId, 'spawn-title')}
-          >
-            <div className={css.sectionHeader}>
-              <div>
-                <p className={css.sectionKicker}>Adicionar integrante</p>
-                <h3 id={fieldId(sessionId, 'spawn-title')}>Criar integrante</h3>
-              </div>
-            </div>
-            {!canSpawn ? (
-              <p className={css.emptyCopy}>O limite de dez agentes foi atingido.</p>
-            ) : (
-              <form className={css.form} onSubmit={(event) => { void handleSpawn(event) }}>
-                <div className={`${css.templateLibrary} ${css.fieldWide}`}>
-                  <div className={css.templateHeader}>
-                    <div className={css.templateTitleRow}>
-                      <span className={css.templateTitle}>Modelos de integrante</span>
-                      <span className={css.templateBadge}>{templateState.templates.length}/50</span>
-                    </div>
-                    <small className={css.templateSub}>Clique para preencher o formulário</small>
-                  </div>
-                  {templateState.templates.length === 0 ? (
-                    <div className={css.templateEmpty}>
-                      <p className={css.emptyCopy}>
-                        Nenhum modelo salvo. Preencha o formulário e salve para reutilizar em qualquer sessão.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className={css.templateList} role="list">
-                      {templateState.templates.map((template) => {
-                        const isSelected = template.name === spawnDraft.name && template.description === spawnDraft.description
+                    <ol className={css.phaseTimeline} aria-label="Fases do debate">
+                      {DEBATE_PHASES.map((phase, index) => {
+                        const currentIndex = DEBATE_PHASES.indexOf(debate.phase)
+                        const state = index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming'
                         return (
-                          <div
-                            className={`${css.templateCard} ${isSelected ? css.templateCardActive : ''}`}
-                            role="listitem"
-                            key={template.id}
-                          >
-                            <button
-                              type="button"
-                              className={css.templateButton}
-                              disabled={formsDisabled}
-                              onClick={() => { applyTemplate(template) }}
-                              title={`${template.title} — ${template.description}`}
-                            >
-                              <strong className={css.templateButtonTitle}>{template.title}</strong>
-                              <span className={css.templateButtonMeta}>
-                                <code>{template.name}</code>
-                                {template.model !== undefined && <span className={css.templateModelBadge}>{template.model}</span>}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              className={css.templateDeleteButton}
-                              disabled={formsDisabled}
-                              aria-label={`Excluir modelo ${template.title}`}
-                              onClick={() => { void handleDeleteTemplate(template.id) }}
-                              title="Excluir este modelo"
-                            >
-                              ✕
-                            </button>
-                          </div>
+                          <li className={css[`phase_${state}`]} key={phase} aria-current={state === 'current' ? 'step' : undefined}>
+                            <span>{index + 1}</span>
+                            <strong>{DEBATE_PHASE_LABELS[phase]}</strong>
+                          </li>
                         )
                       })}
+                    </ol>
+                    <div className={`${css.readiness} ${phaseComplete ? css.readinessComplete : ''}`} role="status">
+                      <strong>{phaseComplete ? 'Pronto para avançar' : 'Aguardando contribuições'}</strong>
+                      <span>{phaseComplete ? 'Todos os participantes registraram sua fala nesta etapa.' : `Faltam: ${missingParticipants.join(', ')}`}</span>
                     </div>
-                  )}
-                  {templateState.error !== null && <p className={css.templateError}>{templateState.error}</p>}
-                </div>
-                <div className={css.formGroup}>
-                  <label htmlFor={fieldId(sessionId, 'spawn-name')}>
-                    <span>Nome</span>
-                  </label>
-                  <input
-                    id={fieldId(sessionId, 'spawn-name')}
-                    value={spawnDraft.name}
-                    onChange={(event) => { setSpawnDraft(current => ({ ...current, name: event.target.value })) }}
-                    required
-                    placeholder="Pesquisador jurídico"
-                  />
-                  <small className={css.fieldHint}>ID técnico: <code>{normalizedSpawnName || '—'}</code></small>
-                </div>
-                <label>
-                  <span>Descrição</span>
-                  <input value={spawnDraft.description} onChange={(event) => { setSpawnDraft(current => ({ ...current, description: event.target.value })) }} required placeholder="Investiga restrições e riscos" />
-                </label>
-                <label className={css.fieldWide}>
-                  <span>Instrução inicial</span>
-                  <textarea
-                    value={spawnDraft.prompt}
-                    onChange={(event) => {
-                      setSpawnDraft(current => ({ ...current, prompt: event.target.value }))
-                    }}
-                    required
-                    rows={4}
-                    placeholder="Defina o objetivo, a entrega esperada e as evidências necessárias."
-                  />
-                </label>
-                <AttachmentInput
-                  label="Imagens e arquivos da instrução"
-                  attachments={spawnAttachments}
-                  disabled={formsDisabled}
-                  onFiles={(files) => { addAttachments(files, setSpawnAttachments) }}
-                  onRemove={(id) => { removeAttachment(id, setSpawnAttachments) }}
-                />
-
-                <details className={`${css.advancedDetails} ${css.fieldWide}`} open>
-                  <summary className={css.advancedSummary}>
-                    <span>Opções avançadas (LLM, Persona, Contexto)</span>
-                  </summary>
-                  <div className={css.advancedGrid}>
-                    <label>
-                      <span>Contexto</span>
-                      <select value={spawnDraft.context} onChange={(event) => { setSpawnDraft(current => ({ ...current, context: event.target.value as SpawnDraft['context'] })) }}>
-                        <option value="fresh">Começar sem histórico</option>
-                        <option value="fork">Copiar histórico concluído</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>Provider de LLM <em>opcional</em></span>
-                      <select
-                        value={spawnDraft.llmProvider}
-                        disabled={modelDirectoryStatus === 'loading'}
-                        onChange={(event) => {
-                          setSpawnDraft(current => ({ ...current, llmProvider: event.target.value, model: '' }))
-                        }}
-                      >
-                        <option value="">Herdar provider e modelo da líder</option>
-                        {modelDirectory?.groups.map(group => (
-                          <option value={group.id} key={group.id}>{group.name}</option>
+                    {debate.evidence.length > 0 && (
+                      <section className={css.evidence} aria-label="Evidências iniciais do debate">
+                        <h4>Evidências iniciais</h4>
+                        <div className={css.contentBlocks}>
+                          {debate.evidence.map((block, index) => <DurableBlock block={block} resolveAttachment={resolveAttachment} key={`evidence-${String(index)}`} />)}
+                        </div>
+                      </section>
+                    )}
+                    <section className={css.transcript} aria-labelledby={fieldId(sessionId, 'transcript-title')}>
+                      <div className={css.transcriptHeader}>
+                        <h4 id={fieldId(sessionId, 'transcript-title')}>Transcrição do debate</h4>
+                        <span>{debate.contributions.length} contribuições</span>
+                      </div>
+                      {debate.contributions.length === 0 ? (
+                        <p className={css.emptyCopy}>Nenhuma contribuição registrada ainda.</p>
+                      ) : (
+                        <ol className={css.contributionList}>
+                          {debate.contributions.map(contribution => (
+                            <li key={contribution.sequence}>
+                              <header>
+                                <strong>{contribution.author}</strong>
+                                <span>Rodada {contribution.round} · {DEBATE_PHASE_LABELS[contribution.phase]}</span>
+                                <time dateTime={new Date(contribution.createdAt).toISOString()}>{new Date(contribution.createdAt).toLocaleString('pt-BR')}</time>
+                              </header>
+                              <div className={css.contentBlocks}>
+                                {contribution.content.map((block, index) => <DurableBlock block={block} resolveAttachment={resolveAttachment} key={`${String(contribution.sequence)}-${String(index)}`} />)}
+                              </div>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </section>
+                    {leadCanContribute && (
+                      <form className={css.contributionForm} onSubmit={(event) => { void handleDebateContribute(event) }}>
+                        <label className={css.fieldWide}>
+                          <span>Contribuição da líder</span>
+                          <textarea value={contributionText} onChange={(event) => { setContributionText(event.target.value) }} rows={4} placeholder={`Registre uma contribuição consolidada para ${DEBATE_PHASE_LABELS[debate.phase]}.`} />
+                        </label>
+                        <AttachmentInput
+                          label="Anexos da contribuição"
+                          attachments={contributionAttachments}
+                          disabled={formsDisabled}
+                          onFiles={(files) => { addAttachments(files, setContributionAttachments) }}
+                          onRemove={(id) => { removeAttachment(id, setContributionAttachments) }}
+                        />
+                        <div className={css.formActions}>
+                          <button type="submit" className={css.primaryButton} disabled={formsDisabled || (contributionText.trim() === '' && contributionAttachments.length === 0)}>
+                            {pending === 'debate-contribute' ? 'Registrando…' : 'Registrar contribuição'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                    {debate.history.length > 0 && (
+                      <ol className={css.transitionList} aria-label="Histórico de transições do debate">
+                        {debate.history.map(transition => (
+                          <li key={transition.revision}>
+                            <span>R{transition.round} · {DEBATE_PHASE_LABELS[transition.phase]}</span>
+                            <strong>{transition.actor}</strong>
+                            <span>{DEBATE_STATUS_LABELS[transition.status]}</span>
+                            {transition.note !== undefined && <p>{transition.note}</p>}
+                          </li>
                         ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Modelo <em>obrigatório com provider</em></span>
-                      <select
-                        value={spawnDraft.model}
-                        disabled={modelDirectoryStatus === 'loading' || spawnDraft.llmProvider === ''}
-                        onChange={(event) => { setSpawnDraft(current => ({ ...current, model: event.target.value })) }}
-                      >
-                        <option value="">{spawnDraft.llmProvider === '' ? 'Herdado com o provider' : 'Selecione um modelo'}</option>
-                        {selectedProvider?.models.map(model => (
-                          <option value={model.id} key={model.id}>{model.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    {(modelDirectoryError !== null || (modelDirectory?.failures.length ?? 0) > 0) && (
-                      <div className={`${css.routeNotice} ${css.fieldWide}`} role="status">
-                        <span>
-                          {modelDirectoryError === null
-                            ? `${String(modelDirectory?.failures.length ?? 0)} provider(s) não puderam carregar; os demais continuam disponíveis.`
-                            : `Catálogo indisponível: ${modelDirectoryError} A herança da rota da líder continua disponível.`}
-                        </span>
-                        <button type="button" className={css.textButton} onClick={() => { void refreshModelDirectory() }}>Tentar novamente</button>
+                      </ol>
+                    )}
+                    {debate.status !== 'completed' && (
+                      <div className={css.debateControls}>
+                        <label className={css.fieldWide}>
+                          <span>Nota da transição <em>opcional</em></span>
+                          <input
+                            type="text"
+                            value={debateNote}
+                            onChange={(event) => { setDebateNote(event.target.value) }}
+                            placeholder="Registre por que o protocolo está mudando."
+                          />
+                        </label>
+                        <div className={css.buttonRow}>
+                          {debate.status === 'active' ? (
+                            <button type="button" className={css.secondaryButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('pause') }}>Pausar protocolo</button>
+                          ) : (
+                            <button type="button" className={css.secondaryButton} disabled={formsDisabled} onClick={() => { void handleDebateUpdate('resume') }}>Retomar protocolo</button>
+                          )}
+                          <button type="button" className={css.primaryButton} disabled={formsDisabled || debate.status !== 'active' || !phaseComplete} onClick={() => { void handleDebateUpdate('advance') }}>Avançar fase</button>
+                          <button type="button" className={css.dangerButton} disabled={formsDisabled || debate.status !== 'active' || debate.phase !== 'synthesis' || !phaseComplete} onClick={() => { void handleDebateUpdate('complete') }}>Concluir debate</button>
+                        </div>
+                        <p className={css.protocolNote}>
+                          Pausar impede o avanço do protocolo, mas não cancela tarefas que já estão em execução.
+                        </p>
                       </div>
                     )}
-                    <label className={css.fieldWide}>
-                      <span>Persona <em>opcional</em></span>
-                      <textarea value={spawnDraft.persona} onChange={(event) => { setSpawnDraft(current => ({ ...current, persona: event.target.value })) }} rows={3} placeholder="Instrução de sistema adicional para este integrante" />
-                    </label>
                   </div>
-                </details>
+                )
+              )}
+            </section>
+          )}
+        </main>
 
-                <div className={`${css.templateSave} ${css.fieldWide}`}>
-                  <label>
-                    <span>Nome do modelo reutilizável</span>
-                    <input value={templateTitle} onChange={(event) => { setTemplateTitle(event.target.value) }} placeholder="Ex.: Pesquisador jurídico completo" />
-                  </label>
-                  <button type="button" className={css.secondaryButton} disabled={formsDisabled || !templateState.writable || templateTitle.trim() === '' || spawnDraft.name.trim() === '' || spawnDraft.description.trim() === '' || spawnDraft.prompt.trim() === '' || !explicitRouteComplete} onClick={() => { void handleSaveTemplate() }}>
-                    {pending === 'template-save' ? 'Salvando…' : 'Salvar modelo'}
-                  </button>
+        {sideOpen && (
+          <aside className={css.sideColumn} aria-label="Controles da equipe">
+            <div className={css.sideTabs} role="tablist" aria-label="Ações de integrantes">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sideTab === 'spawn'}
+                className={`${css.sideTab} ${sideTab === 'spawn' ? css.sideTabActive : ''}`}
+                onClick={() => { setSideTab('spawn') }}
+              >
+                <span>Novo integrante</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sideTab === 'guide'}
+                className={`${css.sideTab} ${sideTab === 'guide' ? css.sideTabActive : ''}`}
+                onClick={() => { setSideTab('guide') }}
+              >
+                <span>Orientar integrante</span>
+                {teammateNames.length > 0 && <span className={css.tabBadge}>{teammateNames.length}</span>}
+              </button>
+            </div>
+
+            <section
+              className={`${css.panel} ${sideTab !== 'spawn' ? css.sidePanelHidden : ''}`}
+              aria-labelledby={fieldId(sessionId, 'spawn-title')}
+            >
+              <div className={css.sectionHeader}>
+                <div>
+                  <p className={css.sectionKicker}>Adicionar integrante</p>
+                  <h3 id={fieldId(sessionId, 'spawn-title')}>Criar integrante</h3>
                 </div>
+              </div>
+              {!canSpawn ? (
+                <p className={css.emptyCopy}>O limite de dez agentes foi atingido.</p>
+              ) : (
+                <form className={css.form} onSubmit={(event) => { void handleSpawn(event) }}>
+                  <details className={`${css.templateLibrary} ${css.fieldWide}`} open={templateState.templates.length > 0 && templateState.templates.length <= 4}>
+                    <summary className={css.templateSummary}>
+                      <div className={css.templateTitleRow}>
+                        <span className={css.templateTitle}>🏷️ Modelos de integrante</span>
+                        <span className={css.templateBadge}>{templateState.templates.length}/50</span>
+                      </div>
+                      <small className={css.templateSub}>Clique para alternar modelos</small>
+                    </summary>
+                    {templateState.templates.length === 0 ? (
+                      <div className={css.templateEmpty}>
+                        <p className={css.emptyCopy}>
+                          Nenhum modelo salvo. Preencha o formulário e salve para reutilizar em qualquer sessão.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className={css.templateList} role="list">
+                        {templateState.templates.map((template) => {
+                          const isSelected = template.name === spawnDraft.name && template.description === spawnDraft.description
+                          return (
+                            <div
+                              className={`${css.templateCard} ${isSelected ? css.templateCardActive : ''}`}
+                              role="listitem"
+                              key={template.id}
+                            >
+                              <button
+                                type="button"
+                                className={css.templateButton}
+                                disabled={formsDisabled}
+                                onClick={() => { applyTemplate(template) }}
+                                title={`${template.title} — ${template.description}`}
+                              >
+                                <strong className={css.templateButtonTitle}>{template.title}</strong>
+                                <span className={css.templateButtonMeta}>
+                                  <code>{template.name}</code>
+                                  {template.model !== undefined && <span className={css.templateModelBadge}>{template.model}</span>}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                className={css.templateDeleteButton}
+                                disabled={formsDisabled}
+                                aria-label={`Excluir modelo ${template.title}`}
+                                onClick={() => { void handleDeleteTemplate(template.id) }}
+                                title="Excluir este modelo"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {templateState.error !== null && <p className={css.templateError}>{templateState.error}</p>}
+                  </details>
+                  <div className={css.formGroup}>
+                    <label htmlFor={fieldId(sessionId, 'spawn-name')}>
+                      <span>Nome</span>
+                    </label>
+                    <input
+                      id={fieldId(sessionId, 'spawn-name')}
+                      value={spawnDraft.name}
+                      onChange={(event) => { setSpawnDraft(current => ({ ...current, name: event.target.value })) }}
+                      required
+                      placeholder="Pesquisador jurídico"
+                    />
+                    <small className={css.fieldHint}>ID técnico: <code>{normalizedSpawnName || '—'}</code></small>
+                  </div>
+                  <label>
+                    <span>Descrição</span>
+                    <input value={spawnDraft.description} onChange={(event) => { setSpawnDraft(current => ({ ...current, description: event.target.value })) }} required placeholder="Investiga restrições e riscos" />
+                  </label>
+                  <label className={css.fieldWide}>
+                    <span>Instrução inicial</span>
+                    <textarea
+                      value={spawnDraft.prompt}
+                      onChange={(event) => {
+                        setSpawnDraft(current => ({ ...current, prompt: event.target.value }))
+                      }}
+                      required
+                      rows={4}
+                      placeholder="Defina o objetivo, a entrega esperada e as evidências necessárias."
+                    />
+                  </label>
+                  <AttachmentInput
+                    label="Imagens e arquivos da instrução"
+                    attachments={spawnAttachments}
+                    disabled={formsDisabled}
+                    onFiles={(files) => { addAttachments(files, setSpawnAttachments) }}
+                    onRemove={(id) => { removeAttachment(id, setSpawnAttachments) }}
+                  />
+
+                  <details className={`${css.advancedDetails} ${css.fieldWide}`}>
+                    <summary className={css.advancedSummary}>
+                      <span>Opções avançadas (LLM, Persona, Contexto)</span>
+                    </summary>
+                    <div className={css.advancedGrid}>
+                      <label>
+                        <span>Contexto</span>
+                        <select value={spawnDraft.context} onChange={(event) => { setSpawnDraft(current => ({ ...current, context: event.target.value as SpawnDraft['context'] })) }}>
+                          <option value="fresh">Começar sem histórico</option>
+                          <option value="fork">Copiar histórico concluído</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Provider de LLM <em>opcional</em></span>
+                        <select
+                          value={spawnDraft.llmProvider}
+                          disabled={modelDirectoryStatus === 'loading'}
+                          onChange={(event) => {
+                            setSpawnDraft(current => ({ ...current, llmProvider: event.target.value, model: '' }))
+                          }}
+                        >
+                          <option value="">Herdar provider e modelo da líder</option>
+                          {modelDirectory?.groups.map(group => (
+                            <option value={group.id} key={group.id}>{group.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Modelo <em>obrigatório com provider</em></span>
+                        <select
+                          value={spawnDraft.model}
+                          disabled={modelDirectoryStatus === 'loading' || spawnDraft.llmProvider === ''}
+                          onChange={(event) => { setSpawnDraft(current => ({ ...current, model: event.target.value })) }}
+                        >
+                          <option value="">{spawnDraft.llmProvider === '' ? 'Herdado com o provider' : 'Selecione um modelo'}</option>
+                          {selectedProvider?.models.map(model => (
+                            <option value={model.id} key={model.id}>{model.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {(modelDirectoryError !== null || (modelDirectory?.failures.length ?? 0) > 0) && (
+                        <div className={`${css.routeNotice} ${css.fieldWide}`} role="status">
+                          <span>
+                            {modelDirectoryError === null
+                              ? `${String(modelDirectory?.failures.length ?? 0)} provider(s) não puderam carregar; os demais continuam disponíveis.`
+                              : `Catálogo indisponível: ${modelDirectoryError} A herança da rota da líder continua disponível.`}
+                          </span>
+                          <button type="button" className={css.textButton} onClick={() => { void refreshModelDirectory() }}>Tentar novamente</button>
+                        </div>
+                      )}
+                      <label className={css.fieldWide}>
+                        <span>Persona <em>opcional</em></span>
+                        <textarea value={spawnDraft.persona} onChange={(event) => { setSpawnDraft(current => ({ ...current, persona: event.target.value })) }} rows={3} placeholder="Instrução de sistema adicional para este integrante" />
+                      </label>
+                    </div>
+                  </details>
+
+                  <div className={`${css.templateSave} ${css.fieldWide}`}>
+                    <label>
+                      <span>Nome do modelo reutilizável</span>
+                      <input value={templateTitle} onChange={(event) => { setTemplateTitle(event.target.value) }} placeholder="Ex.: Pesquisador jurídico completo" />
+                    </label>
+                    <button type="button" className={css.secondaryButton} disabled={formsDisabled || !templateState.writable || templateTitle.trim() === '' || spawnDraft.name.trim() === '' || spawnDraft.description.trim() === '' || spawnDraft.prompt.trim() === '' || !explicitRouteComplete} onClick={() => { void handleSaveTemplate() }}>
+                      {pending === 'template-save' ? 'Salvando…' : 'Salvar modelo'}
+                    </button>
+                  </div>
+                  <div className={css.formActions}>
+                    <button
+                      type="submit"
+                      className={css.primaryButton}
+                      disabled={
+                        formsDisabled
+                        || !explicitRouteComplete
+                        || normalizedSpawnName === ''
+                        || normalizedSpawnName === 'lead'
+                      }
+                    >
+                      {pending === 'spawn' ? 'Criando…' : 'Criar integrante'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </section>
+
+            <section
+              className={`${css.panel} ${sideTab !== 'guide' ? css.sidePanelHidden : ''}`}
+              aria-labelledby={fieldId(sessionId, 'guide-title')}
+            >
+              <div className={css.sectionHeader}>
+                <div>
+                  <p className={css.sectionKicker}>Caixa de mensagens persistente</p>
+                  <h3 id={fieldId(sessionId, 'guide-title')}>Orientar integrante</h3>
+                </div>
+              </div>
+              <form className={css.form} onSubmit={(event) => { void handleGuide(event) }}>
+                <label>
+                  <span>Destinatário</span>
+                  <select
+                    value={guideDraft.target}
+                    onChange={(event) => {
+                      setGuideDraft(current => ({ ...current, target: event.target.value }))
+                    }}
+                    required
+                    disabled={teammateNames.length === 0}
+                  >
+                    {teammateNames.length === 0 && <option value="">Nenhum integrante</option>}
+                    {teammateNames.map(name => <option value={name} key={name}>{name}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Entrega</span>
+                  <select value={guideDraft.delivery} onChange={(event) => { setGuideDraft(current => ({ ...current, delivery: event.target.value as GuideDraft['delivery'] })) }}>
+                    <option value="wakeup">Acordar e orientar</option>
+                    <option value="quiet">Apenas deixar na fila</option>
+                  </select>
+                </label>
+                <label className={css.fieldWide}>
+                  <span>Orientação</span>
+                  <textarea value={guideDraft.content} onChange={(event) => { setGuideDraft(current => ({ ...current, content: event.target.value })) }} rows={4} placeholder="Adicione restrições, correções ou o próximo objetivo." />
+                </label>
+                <AttachmentInput
+                  label="Imagens e arquivos da orientação"
+                  attachments={guideAttachments}
+                  disabled={formsDisabled}
+                  onFiles={(files) => { addAttachments(files, setGuideAttachments) }}
+                  onRemove={(id) => { removeAttachment(id, setGuideAttachments) }}
+                />
                 <div className={css.formActions}>
-                  <button type="submit" className={css.primaryButton} disabled={formsDisabled || !canSpawn || !explicitRouteComplete || normalizedSpawnName === '' || normalizedSpawnName === 'lead'}>
-                    {pending === 'spawn' ? 'Criando…' : 'Criar integrante'}
+                  <button type="submit" className={css.primaryButton} disabled={formsDisabled || guideDraft.target === '' || (guideDraft.content.trim() === '' && guideAttachments.length === 0)}>
+                    {pending === 'guide' ? 'Enviando…' : 'Enviar orientação'}
                   </button>
                 </div>
               </form>
-            )}
-          </section>
-
-          <section
-            className={`${css.panel} ${sideTab !== 'guide' ? css.sidePanelHidden : ''}`}
-            aria-labelledby={fieldId(sessionId, 'guide-title')}
-          >
-            <div className={css.sectionHeader}>
-              <div>
-                <p className={css.sectionKicker}>Caixa de mensagens persistente</p>
-                <h3 id={fieldId(sessionId, 'guide-title')}>Orientar integrante</h3>
-              </div>
-            </div>
-            <form className={css.form} onSubmit={(event) => { void handleGuide(event) }}>
-              <label>
-                <span>Destinatário</span>
-                <select
-                  value={guideDraft.target}
-                  onChange={(event) => {
-                    setGuideDraft(current => ({ ...current, target: event.target.value }))
-                  }}
-                  required
-                  disabled={teammateNames.length === 0}
-                >
-                  {teammateNames.length === 0 && <option value="">Nenhum integrante</option>}
-                  {teammateNames.map(name => <option value={name} key={name}>{name}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>Entrega</span>
-                <select value={guideDraft.delivery} onChange={(event) => { setGuideDraft(current => ({ ...current, delivery: event.target.value as GuideDraft['delivery'] })) }}>
-                  <option value="wakeup">Acordar e orientar</option>
-                  <option value="quiet">Apenas deixar na fila</option>
-                </select>
-              </label>
-              <label className={css.fieldWide}>
-                <span>Orientação</span>
-                <textarea value={guideDraft.content} onChange={(event) => { setGuideDraft(current => ({ ...current, content: event.target.value })) }} rows={4} placeholder="Adicione restrições, correções ou o próximo objetivo." />
-              </label>
-              <AttachmentInput
-                label="Imagens e arquivos da orientação"
-                attachments={guideAttachments}
-                disabled={formsDisabled}
-                onFiles={(files) => { addAttachments(files, setGuideAttachments) }}
-                onRemove={(id) => { removeAttachment(id, setGuideAttachments) }}
-              />
-              <div className={css.formActions}>
-                <button type="submit" className={css.primaryButton} disabled={formsDisabled || guideDraft.target === '' || (guideDraft.content.trim() === '' && guideAttachments.length === 0)}>
-                  {pending === 'guide' ? 'Enviando…' : 'Enviar orientação'}
-                </button>
-              </div>
-            </form>
-          </section>
-        </aside>
+            </section>
+          </aside>
+        )}
       </div>
     </div>
   )
