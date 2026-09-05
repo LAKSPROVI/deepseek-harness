@@ -40,7 +40,7 @@ export interface WorkspaceViewState {
  * Annotation twin of the actions literal below (the export needs a declared
  * return type); drift fails assignability at the defineStore call.
  */
-export interface WorkspaceViewActions {
+type WorkspaceViewActions = {
   setGroupBy: (draft: WorkspaceViewState, mode: SessionGroupBy) => void
   setOrderBy: (draft: WorkspaceViewState, mode: SessionOrderBy) => void
   setGroupExpanded: (draft: WorkspaceViewState, key: string, expanded: boolean) => void
@@ -105,8 +105,6 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       },
       setSessionStatus: (d, sessionId: string, status: CustomSessionStatus | 'idle' | undefined) => {
         d.customSessionStatuses = d.customSessionStatuses ?? {}
-        d.completedSessions = d.completedSessions ?? {}
-        d.unreadSessions = d.unreadSessions ?? {}
         if (!status || status === 'idle') {
           d.customSessionStatuses[sessionId] = undefined
           d.completedSessions[sessionId] = false
@@ -126,7 +124,6 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         }
       },
       toggleCompletedSession: (d, sessionId: string) => {
-        d.completedSessions = d.completedSessions ?? {}
         d.customSessionStatuses = d.customSessionStatuses ?? {}
         if (d.completedSessions[sessionId]) {
           d.completedSessions[sessionId] = false
@@ -134,22 +131,20 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         } else {
           d.completedSessions[sessionId] = true
           d.customSessionStatuses[sessionId] = 'completed'
-          if (d.unreadSessions) d.unreadSessions[sessionId] = false
+          d.unreadSessions[sessionId] = false
         }
       },
       setSessionCompleted: (d, sessionId: string, completed: boolean) => {
-        d.completedSessions = d.completedSessions ?? {}
         d.customSessionStatuses = d.customSessionStatuses ?? {}
         d.completedSessions[sessionId] = completed
         if (completed) {
           d.customSessionStatuses[sessionId] = 'completed'
-          if (d.unreadSessions) d.unreadSessions[sessionId] = false
+          d.unreadSessions[sessionId] = false
         } else if (d.customSessionStatuses[sessionId] === 'completed') {
           d.customSessionStatuses[sessionId] = undefined
         }
       },
       toggleUnreadSession: (d, sessionId: string) => {
-        d.unreadSessions = d.unreadSessions ?? {}
         d.customSessionStatuses = d.customSessionStatuses ?? {}
         if (d.unreadSessions[sessionId]) {
           d.unreadSessions[sessionId] = false
@@ -157,16 +152,15 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         } else {
           d.unreadSessions[sessionId] = true
           d.customSessionStatuses[sessionId] = 'unread'
-          if (d.completedSessions) d.completedSessions[sessionId] = false
+          d.completedSessions[sessionId] = false
         }
       },
       setSessionUnread: (d, sessionId: string, unread: boolean) => {
-        d.unreadSessions = d.unreadSessions ?? {}
         d.customSessionStatuses = d.customSessionStatuses ?? {}
         d.unreadSessions[sessionId] = unread
         if (unread) {
           d.customSessionStatuses[sessionId] = 'unread'
-          if (d.completedSessions) d.completedSessions[sessionId] = false
+          d.completedSessions[sessionId] = false
         } else if (d.customSessionStatuses[sessionId] === 'unread') {
           d.customSessionStatuses[sessionId] = undefined
         }

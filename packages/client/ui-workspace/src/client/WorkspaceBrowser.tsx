@@ -248,7 +248,7 @@ type SessionTreeProps = Pick<
   orderBy: SessionOrderBy
   completedSessions: Readonly<Record<string, boolean>>
   unreadSessions: Readonly<Record<string, boolean>>
-  customSessionStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>
+  customSessionStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>> | undefined
   onToggleUnread: (sessionId: SessionNode['id']) => void
   onToggleCompleted: (sessionId: SessionNode['id']) => void
   onSetStatus?: ((sessionId: SessionNode['id'], status: CustomSessionStatus | 'idle') => void) | undefined
@@ -336,7 +336,7 @@ function SessionTree({
         : { ungroupedOrder: sessionOrderByAccount[UNGROUPED_KEY] }),
       completedSessions,
       unreadSessions,
-      customSessionStatuses,
+      ...(customSessionStatuses === undefined ? {} : { customSessionStatuses }),
     }),
     [
       list, orderedWorkspaces, archivedSessionIds, expandedGroups,
@@ -353,7 +353,7 @@ function SessionTree({
     const map = new Map<string, string>()
     for (const ws of workspaces) {
       for (const sId of ws.sessionIds) {
-        map.set(sId as string, ws.title)
+        map.set(sId, ws.title)
       }
     }
     return map
@@ -636,7 +636,11 @@ function FlatList({
 >) {
   const list = useSessions(s => s)
   const baseRows = useMemo(
-    () => deriveFlat(list, archivedSessionIds, { completedSessions, unreadSessions, customSessionStatuses }),
+    () => deriveFlat(list, archivedSessionIds, {
+      completedSessions,
+      unreadSessions,
+      ...(customSessionStatuses === undefined ? {} : { customSessionStatuses }),
+    }),
     [list, archivedSessionIds, completedSessions, unreadSessions, customSessionStatuses],
   )
   const sessionIds = useMemo(() => baseRows.map(row => row.id), [baseRows])

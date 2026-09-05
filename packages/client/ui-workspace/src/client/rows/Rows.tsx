@@ -416,7 +416,7 @@ export function SessionNodeItem({
   const showStatus = primaryStatus.state !== 'done' || row.completed || row.unread
   const [menuOpen, setMenuOpen] = useState(false)
   const isUnread = node.unread === true
-  const isCompleted = node.completed === true
+  const isCompleted = node.completed
 
   const statusSubmenu: MenuItem[] = [
     {
@@ -608,7 +608,7 @@ export function RecentSessionNodeItem({
   const showStatus = primaryStatus.state !== 'done' || row.completed || row.unread
   const [menuOpen, setMenuOpen] = useState(false)
   const isUnread = node.unread === true
-  const isCompleted = node.completed === true
+  const isCompleted = node.completed
 
   const statusSubmenu: MenuItem[] = [
     {

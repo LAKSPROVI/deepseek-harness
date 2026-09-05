@@ -202,7 +202,7 @@ function groupByWorkspace(
     }
     // Creation time rides the RFC 3339 wire string; parse to epoch ms so the
     // presentation layer works with numbers only.
-    const createdAt = workspace.createdAt === undefined ? undefined : Date.parse(workspace.createdAt)
+    const createdAt = Date.parse(workspace.createdAt)
     groups.push(buildGroup(
       workspace.workspaceId,
       workspace.workspaceId,
@@ -265,8 +265,8 @@ function sessionNode(
     runningSubagentCount: descendants.get(s.id)?.runningCount ?? 0,
     completed: isCompleted,
     unread: isUnread,
-    customStatus: custom,
     updatedAt: s.updatedAt,
+    ...(custom === undefined ? {} : { customStatus: custom }),
     ...(effectivePending === undefined ? {} : { pendingInteraction: effectivePending }),
   }
 }
