@@ -25,6 +25,7 @@ import {
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
 import { getFrequentModels, recordModelUsage } from './usage.ts'
+import { AutorouterBadge, isAutoRouterModel } from './AutorouterBadge.tsx'
 import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
@@ -287,30 +288,37 @@ export function ModelSelect(
     return (node: HTMLButtonElement | null) => { itemRefs.current[at] = node }
   }
 
+  const autoModelActive = isAutoRouterModel(state.current?.model)
+
   return (
     <div ref={rootRef} className={css.root} onKeyDown={onRootKeyDown} onBlur={onBlur}>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={css.trigger}
-        aria-label={triggerAria}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? `${id}-menu` : undefined}
-        title={triggerLabel}
-        disabled={locked}
-        onClick={() => {
-          if (open) {
-            close()
-          } else {
-            show()
-          }
-        }}
-      >
-        <span className={css.triggerLabel}>{modelLabel}</span>
-        {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
-        <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
-      </button>
+      <div className={css.triggerContainer}>
+        <button
+          ref={triggerRef}
+          type="button"
+          className={css.trigger}
+          aria-label={triggerAria}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? `${id}-menu` : undefined}
+          title={triggerLabel}
+          disabled={locked}
+          onClick={() => {
+            if (open) {
+              close()
+            } else {
+              show()
+            }
+          }}
+        >
+          <span className={css.triggerLabel}>{modelLabel}</span>
+          {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
+          <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
+        </button>
+        {autoModelActive && (
+          <AutorouterBadge currentModel={state.current?.model} />
+        )}
+      </div>
 
       {open && (
         <div

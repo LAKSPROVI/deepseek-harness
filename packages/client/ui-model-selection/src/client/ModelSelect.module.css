@@ -3,6 +3,13 @@
   min-width: 0;
 }
 
+.triggerContainer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 /* Figma 313:14108 ToggleButton: 13/20 medium secondary label, 4px gap,
    12px caption chevron; 28px chip height matches the sibling Plan /
    Read-only selects in the same tool row. */
