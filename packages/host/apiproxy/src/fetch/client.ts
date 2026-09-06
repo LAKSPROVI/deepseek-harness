@@ -227,8 +227,18 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
 /** Default timeout for bounded unary calls (rpc-compare 2026-07-19: a hung host must not leave callers pending forever). */
 const DEFAULT_TIMEOUT_MS = 30_000
 
-/** Whether a unary call uses the transport health deadline or only caller/connection cancellation. */
-type UnaryTimeoutPolicy = 'default' | 'caller-signal-only'
+/**
+ * Deadline for `'extended'` reads. `session.history` on a very large session
+ * (measured: ~76s for a 31 MB compressed log, because the host computes a
+ * render view for every tool event on the page) blows the 30s default and
+ * surfaces as "Failed to load history: signal timed out". These are
+ * user-initiated reads with connection-level cancellation, so a generous
+ * ceiling is safe; it still bounds a genuinely hung host.
+ */
+const EXTENDED_TIMEOUT_MS = 180_000
+
+/** Whether a unary call uses the transport health deadline, a longer read deadline, or only caller/connection cancellation. */
+type UnaryTimeoutPolicy = 'default' | 'extended' | 'caller-signal-only'
 
 /** URL base for in-process handler injection (fake authority, opencode precedent). */
 const INTERNAL_BASE = 'http://dsh.internal'
@@ -310,11 +320,16 @@ export abstract class AbstractApiClient implements IApiClient {
     signal: AbortSignal | undefined,
     timeoutPolicy: UnaryTimeoutPolicy = 'default',
   ): Promise<Response> {
-    const requestSignal = timeoutPolicy === 'default'
-      ? signal === undefined
-        ? AbortSignal.timeout(this.timeoutMs)
-        : AbortSignal.any([AbortSignal.timeout(this.timeoutMs), signal])
-      : signal
+    const deadlineMs = timeoutPolicy === 'default'
+      ? this.timeoutMs
+      : timeoutPolicy === 'extended'
+        ? EXTENDED_TIMEOUT_MS
+        : undefined
+    const requestSignal = deadlineMs === undefined
+      ? signal
+      : signal === undefined
+        ? AbortSignal.timeout(deadlineMs)
+        : AbortSignal.any([AbortSignal.timeout(deadlineMs), signal])
     const response = await this.doFetch(new URL(path, this.resolveBase()), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -413,7 +428,7 @@ export abstract class AbstractApiClient implements IApiClient {
     list: (payload, signal) => this.callUnary('session.list', payload, signal),
     search: (payload, signal) => this.callUnary('session.search', payload, signal),
     create: (payload, signal) => this.callUnary('session.create', payload, signal),
-    history: (payload, signal) => this.callUnary('session.history', payload, signal),
+    history: (payload, signal) => this.callUnary('session.history', payload, signal, 'extended'),
     models: (payload, signal) => this.callUnary('session.models', payload, signal),
     selectModel: (payload, signal) => this.callUnary('session.selectModel', payload, signal),
     rename: (payload, signal) => this.callUnary('session.rename', payload, signal),
@@ -426,7 +441,7 @@ export abstract class AbstractApiClient implements IApiClient {
 
   readonly subagents: IApiClient['subagents'] = {
     list: (payload, signal) => this.callUnary('subagent.list', payload, signal),
-    history: (payload, signal) => this.callUnary('subagent.history', payload, signal),
+    history: (payload, signal) => this.callUnary('subagent.history', payload, signal, 'extended'),
     prompt: (payload, signal) => this.callUnary('subagent.prompt', payload, signal),
     interrupt: (payload, signal) => this.callUnary('subagent.interrupt', payload, signal),
   }
