@@ -50,7 +50,7 @@ describe('Advanced Concurrency, Overlap Policy and Notifications', () => {
     expect(await store.hasActiveRun(task.id)).toBe(false)
     const runs = await store.listRunsByTask(task.id)
     expect(runs).toHaveLength(1)
-    expect(runs[0].status).toBe('SUCCESS')
+    expect(runs[0]!.status).toBe('SUCCESS')
   })
 
   it('correctly lists and marks notifications as read', async () => {
@@ -68,7 +68,7 @@ describe('Advanced Concurrency, Overlap Policy and Notifications', () => {
 
     const unread = await store.listNotifications('user-notifications', true)
     expect(unread).toHaveLength(1)
-    expect(unread[0].isRead).toBe(false)
+    expect(unread[0]!.isRead).toBe(false)
 
     const marked = await store.markNotificationRead(notif.id)
     expect(marked).toBe(true)
@@ -78,6 +78,6 @@ describe('Advanced Concurrency, Overlap Policy and Notifications', () => {
 
     const all = await store.listNotifications('user-notifications')
     expect(all).toHaveLength(1)
-    expect(all[0].isRead).toBe(true)
+    expect(all[0]!.isRead).toBe(true)
   })
 })

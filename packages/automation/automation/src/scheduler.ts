@@ -73,9 +73,11 @@ export class AutomationScheduler {
           title: task.title,
           actionType: task.actionType,
           actionPayload: task.actionPayload,
-          model: task.model,
-          modelProvider: task.modelProvider,
-          promptTemplate: task.promptTemplate,
+          // Optional under `exactOptionalPropertyTypes`: omit rather than pass
+          // an explicit `undefined`, which is a different type from absent.
+          ...task.model !== undefined ? { model: task.model } : {},
+          ...task.modelProvider !== undefined ? { modelProvider: task.modelProvider } : {},
+          ...task.promptTemplate !== undefined ? { promptTemplate: task.promptTemplate } : {},
           timeoutSeconds: task.timeoutSeconds,
           retryLimit: task.retryLimit,
           attemptNumber: 1,

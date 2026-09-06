@@ -62,9 +62,11 @@ export class TaskWorker {
       runId: job.runId,
       taskId: job.taskId,
       attemptNumber: job.attemptNumber,
-      model: job.model,
-      modelProvider: job.modelProvider,
-      promptTemplate: job.promptTemplate,
+      // Optional under `exactOptionalPropertyTypes`: omit rather than pass an
+      // explicit `undefined`, which is a different type from an absent field.
+      ...job.model !== undefined ? { model: job.model } : {},
+      ...job.modelProvider !== undefined ? { modelProvider: job.modelProvider } : {},
+      ...job.promptTemplate !== undefined ? { promptTemplate: job.promptTemplate } : {},
       log: logger,
     }
 
@@ -120,9 +122,12 @@ export class TaskWorker {
       status,
       finishedAt,
       durationMs,
-      outputData,
-      errorMessage,
-      errorStack,
+      // Optional under `exactOptionalPropertyTypes`: a run that produced no
+      // output or failed without a stack must leave the field unset, not set
+      // to `undefined`.
+      ...outputData !== undefined ? { outputData } : {},
+      ...errorMessage !== undefined ? { errorMessage } : {},
+      ...errorStack !== undefined ? { errorStack } : {},
       logs,
     })
 

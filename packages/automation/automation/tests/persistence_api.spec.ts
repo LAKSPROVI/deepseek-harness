@@ -48,11 +48,11 @@ describe('Production Persistence, Stale Reaper & REST API / SSE', () => {
 
     const loadedRuns = await store2.listRunsByTask(task.id)
     expect(loadedRuns).toHaveLength(1)
-    expect(loadedRuns[0].status).toBe('SUCCESS')
+    expect(loadedRuns[0]!.status).toBe('SUCCESS')
 
     const notifs = await store2.listNotifications('user-persist')
     expect(notifs).toHaveLength(1)
-    expect(notifs[0].title).toBe('Persistência OK')
+    expect(notifs[0]!.title).toBe('Persistência OK')
 
     // Clean up
     try {
@@ -168,7 +168,7 @@ describe('Production Persistence, Stale Reaper & REST API / SSE', () => {
     // 3. POST /api/tasks/:id/trigger (Manual run)
     const triggerRes = await mockRequest('POST', `/api/tasks/${taskId}/trigger`)
     expect(triggerRes.status).toBe(202)
-    expect(triggerRes.body.success).toBe(true)
+    expect(triggerRes.body?.success).toBe(true)
 
     // Give worker time
     await new Promise(r => setTimeout(r, 100))
@@ -176,8 +176,9 @@ describe('Production Persistence, Stale Reaper & REST API / SSE', () => {
     // 4. GET /api/tasks/:id/runs
     const runsRes = await mockRequest('GET', `/api/tasks/${taskId}/runs`)
     expect(runsRes.status).toBe(200)
-    expect(runsRes.body.data).toHaveLength(1)
-    expect(runsRes.body.data[0].status).toBe('SUCCESS')
+    const runsData = runsRes.body?.data as { status: string }[]
+    expect(runsData).toHaveLength(1)
+    expect(runsData[0]!.status).toBe('SUCCESS')
 
     // Clean up
     try {

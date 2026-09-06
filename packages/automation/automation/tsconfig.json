@@ -2,8 +2,7 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "lib/types",
-    "composite": false
+    "outDir": "lib/types"
   },
-  "include": ["src/**/*", "ui/**/*", "tests/**/*"]
+  "include": ["src"]
 }

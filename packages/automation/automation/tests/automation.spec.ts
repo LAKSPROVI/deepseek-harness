@@ -50,7 +50,7 @@ describe('Automation Engine Full Lifecycle & Notifications', () => {
     // 3. Verify task runs
     const runs = await store.listRunsByTask(task.id)
     expect(runs).toHaveLength(1)
-    const run = runs[0]
+    const run = runs[0]!
     expect(run.status).toBe('SUCCESS')
     expect(run.outputData).toEqual({ syncedCount: 42, status: 'OK' })
     expect(run.executionLogs.length).toBeGreaterThanOrEqual(3)
@@ -63,7 +63,7 @@ describe('Automation Engine Full Lifecycle & Notifications', () => {
 
     // 5. Verify Notification was created and dispatched
     expect(receivedNotifications).toHaveLength(1)
-    const notif = receivedNotifications[0]
+    const notif = receivedNotifications[0]!
     expect(notif.taskId).toBe(task.id)
     expect(notif.runId).toBe(run.id)
     expect(notif.level).toBe('SUCCESS')
@@ -111,12 +111,12 @@ describe('Automation Engine Full Lifecycle & Notifications', () => {
 
     const runs = await store.listRunsByTask(task.id)
     expect(runs).toHaveLength(1)
-    expect(runs[0].status).toBe('FAILED')
-    expect(runs[0].errorMessage).toContain('Falha de conexão')
+    expect(runs[0]!.status).toBe('FAILED')
+    expect(runs[0]!.errorMessage).toContain('Falha de conexão')
 
     expect(receivedNotifications).toHaveLength(1)
-    expect(receivedNotifications[0].level).toBe('ERROR')
-    expect(receivedNotifications[0].title).toContain('Falha na Atividade')
+    expect(receivedNotifications[0]!.level).toBe('ERROR')
+    expect(receivedNotifications[0]!.title).toContain('Falha na Atividade')
   })
 
   it('handles timeout correctly when execution exceeds timeoutSeconds', async () => {
@@ -145,7 +145,7 @@ describe('Automation Engine Full Lifecycle & Notifications', () => {
 
     const runs = await store.listRunsByTask(task.id)
     expect(runs).toHaveLength(1)
-    expect(runs[0].status).toBe('TIMED_OUT')
-    expect(runs[0].errorMessage).toContain('excedeu o tempo limite')
+    expect(runs[0]!.status).toBe('TIMED_OUT')
+    expect(runs[0]!.errorMessage).toContain('excedeu o tempo limite')
   })
 })

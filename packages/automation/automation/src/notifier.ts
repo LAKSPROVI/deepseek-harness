@@ -34,7 +34,9 @@ export class NotificationService {
       level: params.level,
       title: params.title,
       message: params.message,
-      summaryData: params.summaryData,
+      // Optional under `exactOptionalPropertyTypes`: omit rather than pass an
+      // explicit `undefined`, which is a different type from an absent field.
+      ...params.summaryData !== undefined ? { summaryData: params.summaryData } : {},
     })
 
     // Notify all active listeners/subscribers (e.g. WebSockets, UI channels)

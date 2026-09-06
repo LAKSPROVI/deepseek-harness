@@ -63,7 +63,10 @@ export class InMemoryAutomationStore implements IAutomationStore {
       id,
       userId: dto.userId,
       title: dto.title,
-      description: dto.description,
+      // Optional fields under `exactOptionalPropertyTypes`: an absent field and
+      // one explicitly set to `undefined` are different types, so spread them in
+      // only when the DTO carried a value.
+      ...dto.description !== undefined ? { description: dto.description } : {},
       scheduleType: dto.scheduleType,
       scheduleExpr: dto.scheduleExpr,
       timezone: dto.timezone || 'America/Sao_Paulo',
@@ -72,9 +75,9 @@ export class InMemoryAutomationStore implements IAutomationStore {
       endAt: dto.endAt ?? null,
       actionType: dto.actionType,
       actionPayload: dto.actionPayload ?? {},
-      model: dto.model,
-      modelProvider: dto.modelProvider,
-      promptTemplate: dto.promptTemplate,
+      ...dto.model !== undefined ? { model: dto.model } : {},
+      ...dto.modelProvider !== undefined ? { modelProvider: dto.modelProvider } : {},
+      ...dto.promptTemplate !== undefined ? { promptTemplate: dto.promptTemplate } : {},
       timeoutSeconds: dto.timeoutSeconds ?? 300,
       retryLimit: dto.retryLimit ?? 3,
       overlapPolicy: dto.overlapPolicy ?? 'SKIP',
@@ -190,15 +193,19 @@ export class InMemoryAutomationStore implements IAutomationStore {
     const current = this.runs.get(id)
     if (!current) throw new Error(`TaskRun with ID ${id} not found`)
 
+    // `...current` already supplies every prior value, so each update only needs
+    // to override the fields it actually carries — spreading rather than
+    // assigning keeps an absent optional absent under
+    // `exactOptionalPropertyTypes`, where `undefined` is not the same as unset.
     const updated: TaskRun = {
       ...current,
-      status: updates.status ?? current.status,
-      startedAt: updates.startedAt ?? current.startedAt,
-      finishedAt: updates.finishedAt ?? current.finishedAt,
-      durationMs: updates.durationMs ?? current.durationMs,
-      outputData: updates.outputData ?? current.outputData,
-      errorMessage: updates.errorMessage ?? current.errorMessage,
-      errorStack: updates.errorStack ?? current.errorStack,
+      ...updates.status !== undefined ? { status: updates.status } : {},
+      ...updates.startedAt !== undefined ? { startedAt: updates.startedAt } : {},
+      ...updates.finishedAt !== undefined ? { finishedAt: updates.finishedAt } : {},
+      ...updates.durationMs !== undefined ? { durationMs: updates.durationMs } : {},
+      ...updates.outputData !== undefined ? { outputData: updates.outputData } : {},
+      ...updates.errorMessage !== undefined ? { errorMessage: updates.errorMessage } : {},
+      ...updates.errorStack !== undefined ? { errorStack: updates.errorStack } : {},
       executionLogs: updates.logs ? [...updates.logs] : current.executionLogs,
     }
 

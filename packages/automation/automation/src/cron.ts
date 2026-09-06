@@ -16,11 +16,15 @@ export class SimpleCron {
       throw new Error(`Cron expression must have exactly 5 parts: "${expression}"`)
     }
 
-    this.minutes = this.parseField(parts[0], 0, 59)
-    this.hours = this.parseField(parts[1], 0, 23)
-    this.daysOfMonth = this.parseField(parts[2], 1, 31)
-    this.months = this.parseField(parts[3], 1, 12)
-    this.daysOfWeek = this.parseField(parts[4], 0, 7) // 0 and 7 are Sunday
+    // The length check above is the invariant an indexed read cannot express,
+    // so name the five fields once through it instead of guarding each index.
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts as [string, string, string, string, string]
+
+    this.minutes = this.parseField(minute, 0, 59)
+    this.hours = this.parseField(hour, 0, 23)
+    this.daysOfMonth = this.parseField(dayOfMonth, 1, 31)
+    this.months = this.parseField(month, 1, 12)
+    this.daysOfWeek = this.parseField(dayOfWeek, 0, 7) // 0 and 7 are Sunday
     if (this.daysOfWeek.has(7)) {
       this.daysOfWeek.add(0)
       this.daysOfWeek.delete(7)
@@ -39,16 +43,21 @@ export class SimpleCron {
 
       if (item.includes('/')) {
         const [rangePart, stepStr] = item.split('/')
-        const step = parseInt(stepStr, 10)
+        // A missing half parses as NaN, which the checks below already reject —
+        // the coalesce only makes that path expressible to the type checker.
+        const step = parseInt(stepStr ?? '', 10)
         if (isNaN(step) || step <= 0) {
           throw new Error(`Invalid step in cron field: ${item}`)
         }
 
         let start = min
         let end = max
-        if (rangePart !== '*' && rangePart !== '') {
+        if (rangePart !== undefined && rangePart !== '*' && rangePart !== '') {
           if (rangePart.includes('-')) {
             const [s, e] = rangePart.split('-').map(v => parseInt(v, 10))
+            if (s === undefined || e === undefined) {
+              throw new Error(`Invalid range in cron field: ${item}`)
+            }
             start = s
             end = e
           } else {
@@ -64,7 +73,7 @@ export class SimpleCron {
 
       if (item.includes('-')) {
         const [s, e] = item.split('-').map(v => parseInt(v, 10))
-        if (isNaN(s) || isNaN(e) || s > e || s < min || e > max) {
+        if (s === undefined || e === undefined || isNaN(s) || isNaN(e) || s > e || s < min || e > max) {
           throw new Error(`Invalid range in cron field: ${item}`)
         }
         for (let i = s; i <= e; i++) result.add(i)

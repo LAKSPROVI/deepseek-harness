@@ -365,7 +365,13 @@ describe('generic file attachment authorization', () => {
     const api = createApiProxy(ctx, {
       defaultModelSelection: () => ({ provider: 'files-native', model: 'route' }), cwd: '/tmp',
     })
-    agent.session.append('team/debate' as never, {
+    // `team/debate` and `team/task` payloads are declared by the agent-team
+    // package's SessionEventMap augmentation, which this program does not load.
+    // The proxy reads them as opaque envelopes, so append them through an untyped
+    // alias: `as never` on the event NAME collapses the whole signature, including
+    // its rest parameter, and then no argument list is assignable at all.
+    const appendUntyped = agent.session.append.bind(agent.session) as (type: string, data: unknown) => void
+    appendUntyped('team/debate', {
       version: 1,
       teamId: sessionId,
       debate: {
@@ -373,10 +379,10 @@ describe('generic file attachment authorization', () => {
         round: 1, maxRounds: 1, participants: ['lead', 'worker'], contributions: [], history: [],
         evidence: [{ type: 'file', attachment: debateRef }],
       },
-    } as never)
-    agent.session.append('team/task' as never, {
+    })
+    appendUntyped('team/task', {
       version: 1, teamId: sessionId, task: { id: '1', attachment: hiddenRef },
-    } as never)
+    })
 
     const admitted = await api.sessions.attachment(request({
       sessionId, attachmentId: 'debate-file' as never,
