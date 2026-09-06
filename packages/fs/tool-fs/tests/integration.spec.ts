@@ -40,6 +40,10 @@ function text(result: { content: { type: string; text?: string }[] }): string {
   return result.content.filter(b => b.type === 'text').map(b => b.text).join('')
 }
 
+function notObservedDiagnostic(path: string): string {
+  return `Error: cannot modify "${path}": file has not been read — read the file, then retry`
+}
+
 afterEach(async () => {
   await fiber.dispose()
   await rm(dir, { recursive: true, force: true })
@@ -71,9 +75,7 @@ describe('default deployment (with dsh-fs-observation-policy)', () => {
       const result = await call('write', { file_path: 'a.txt', content: 'clobber' })
       expect(result.isError).toBe(true)
       expect(result.error).toMatchObject({ info: { code: 'FS_NOT_OBSERVED' } })
-      // The model-facing text names the remedy, not just the condition.
-      expect(text(result)).toContain('without reading it first')
-      expect(text(result)).toContain('read the file, then retry')
+      expect(text(result)).toBe(notObservedDiagnostic(join(dir, 'a.txt')))
       expect(await readFile(join(dir, 'a.txt'), 'utf8')).toBe('original')
     })
 
@@ -109,6 +111,23 @@ describe('default deployment (with dsh-fs-observation-policy)', () => {
       const retried = await call('write', { file_path: 'a.txt', content: 'replaced' })
       expect(retried.isError).toBe(false)
       expect(await readFile(join(dir, 'a.txt'), 'utf8')).toBe('replaced')
+    })
+
+    it('a write onto a file deleted after the read recovers by recreation', async () => {
+      await writeFile(join(dir, 'a.txt'), 'original')
+      await call('read', { file_path: 'a.txt' })
+      await rm(join(dir, 'a.txt')) // out-of-band deletion
+      const stale = await call('write', { file_path: 'a.txt', content: 'recreated' })
+      expect(stale.isError).toBe(true)
+      expect(stale.error).toMatchObject({ info: { code: 'FS_STALE_VERSION' } })
+      // The deletion case names recreation, not just a re-read.
+      expect(text(stale)).toContain('the file was deleted after it was read')
+      expect(text(stale)).toContain('retry to recreate it')
+      // Follow the remedy: re-read (records the absence), then retry.
+      expect((await call('read', { file_path: 'a.txt' })).isError).toBe(true)
+      const retried = await call('write', { file_path: 'a.txt', content: 'recreated' })
+      expect(retried.isError).toBe(false)
+      expect(await readFile(join(dir, 'a.txt'), 'utf8')).toBe('recreated')
     })
   })
 
@@ -151,9 +170,7 @@ describe('default deployment (with dsh-fs-observation-policy)', () => {
       const result = await call('edit', { file_path: 'a.txt', old_string: 'world', new_string: 'there' })
       expect(result.isError).toBe(true)
       expect(result.error).toMatchObject({ info: { code: 'FS_NOT_OBSERVED' } })
-      // The policy's refusal reaches the model with the read remedy appended.
-      expect(text(result)).toContain('edit requires reading')
-      expect(text(result)).toContain('read the file, then retry')
+      expect(text(result)).toBe(notObservedDiagnostic(join(dir, 'a.txt')))
       expect(await readFile(join(dir, 'a.txt'), 'utf8')).toBe('hello world')
     })
 
