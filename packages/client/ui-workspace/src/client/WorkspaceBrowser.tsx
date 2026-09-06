@@ -16,7 +16,7 @@ import {
   IconProjectAddOutline16, IconSearchOutline16, Menu, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  SessionId, SessionListState, SessionSearchResultItem, WorkspaceId, WorkspaceView,
+  SessionId, SessionListState, SessionSearchResultItem, SessionSummary, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from './contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from './tree.ts'
@@ -249,6 +249,7 @@ type SessionTreeProps = Pick<
   completedSessions: Readonly<Record<string, boolean>>
   unreadSessions: Readonly<Record<string, boolean>>
   customSessionStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>> | undefined
+  triagedSessions?: Readonly<Record<string, boolean>> | undefined
   onToggleUnread: (sessionId: SessionNode['id']) => void
   onToggleCompleted: (sessionId: SessionNode['id']) => void
   onSetStatus?: ((sessionId: SessionNode['id'], status: CustomSessionStatus | 'idle') => void) | undefined
@@ -261,7 +262,7 @@ function SessionTree({
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
-  completedSessions, unreadSessions, customSessionStatuses, onToggleUnread, onToggleCompleted, onSetStatus,
+  completedSessions, unreadSessions, customSessionStatuses, triagedSessions, onToggleUnread, onToggleCompleted, onSetStatus,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const current = list.current
@@ -345,9 +346,9 @@ function SessionTree({
   )
   const recentNodes = useMemo(
     () => deriveRecentAndInProgress(
-      list, archivedSessionIds, completedSessions, unreadSessions, customSessionStatuses, 6,
+      list, archivedSessionIds, completedSessions, unreadSessions, customSessionStatuses, triagedSessions, 6,
     ),
-    [list, archivedSessionIds, completedSessions, unreadSessions, customSessionStatuses],
+    [list, archivedSessionIds, completedSessions, unreadSessions, customSessionStatuses, triagedSessions],
   )
   const workspaceNameBySessionId = useMemo(() => {
     const map = new Map<string, string>()
@@ -859,6 +860,29 @@ export function WorkspaceBrowser({
   const completedSessions = useStore(s => s.completedSessions)
   const unreadSessions = useStore(s => s.unreadSessions)
   const customSessionStatuses = useStore(s => s.customSessionStatuses)
+  const triagedSessions = useStore(s => s.triagedSessions)
+
+  // Auto-complete finished tasks while keeping them visible at the top until explicit user triage
+  const sessionSummaries = useSessions((state) => {
+    const list: SessionSummary[] = []
+    for (const id of state.ids) {
+      const item = state.byId[id]
+      if (item !== undefined) list.push(item)
+    }
+    return list
+  })
+  const prevRunningRef = useRef<Map<string, boolean>>(new Map())
+  useEffect(() => {
+    const prev = prevRunningRef.current
+    for (const session of sessionSummaries) {
+      const wasRunning = prev.get(session.id) ?? false
+      const isNowRunning = session.running
+      if (wasRunning && !isNowRunning && !session.blank) {
+        actions.autoCompleteSession(session.id)
+      }
+      prev.set(session.id, isNowRunning)
+    }
+  }, [sessionSummaries, actions])
 
   const handleOpenSession = (sessionId: SessionNode['id']) => {
     open(sessionId)
@@ -1297,6 +1321,7 @@ export function WorkspaceBrowser({
                 completedSessions={completedSessions}
                 unreadSessions={unreadSessions}
                 customSessionStatuses={customSessionStatuses}
+                triagedSessions={triagedSessions}
                 onToggleUnread={handleToggleUnread}
                 onToggleCompleted={handleToggleCompleted}
                 onSetStatus={handleSetSessionStatus}

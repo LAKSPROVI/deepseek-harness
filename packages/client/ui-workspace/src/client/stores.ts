@@ -34,6 +34,8 @@ export interface WorkspaceViewState {
   unreadSessions: Record<string, boolean>
   /** User-assigned custom session statuses. */
   customSessionStatuses?: Record<string, CustomSessionStatus | undefined>
+  /** User-triaged sessions: true once the user manually changes or confirms the status, allowing it to leave the recent section. */
+  triagedSessions?: Record<string, boolean>
 }
 
 /**
@@ -61,6 +63,7 @@ type WorkspaceViewActions = {
     sessionId: string,
     status: CustomSessionStatus | 'idle' | undefined,
   ) => void
+  autoCompleteSession: (draft: WorkspaceViewState, sessionId: string) => void
 }
 
 /**
@@ -78,6 +81,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       completedSessions: {},
       unreadSessions: {},
       customSessionStatuses: {},
+      triagedSessions: {},
     }),
     persist: 'dsh.workspace.view.v6',
     actions: {
@@ -103,8 +107,19 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       setSessionOrder: (d, accountKey: string, order: string[]) => {
         d.sessionOrderByAccount[accountKey] = order
       },
+      autoCompleteSession: (d, sessionId: string) => {
+        d.customSessionStatuses = d.customSessionStatuses ?? {}
+        d.completedSessions = d.completedSessions ?? {}
+        d.triagedSessions = d.triagedSessions ?? {}
+        d.completedSessions[sessionId] = true
+        d.customSessionStatuses[sessionId] = 'completed'
+        // Remains in recent section until user explicitly triages it
+        d.triagedSessions[sessionId] = false
+      },
       setSessionStatus: (d, sessionId: string, status: CustomSessionStatus | undefined) => {
         d.customSessionStatuses = d.customSessionStatuses ?? {}
+        d.triagedSessions = d.triagedSessions ?? {}
+        d.triagedSessions[sessionId] = true
         if (status === 'idle') {
           d.customSessionStatuses[sessionId] = 'idle'
           d.completedSessions[sessionId] = false
@@ -129,6 +144,8 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       },
       toggleCompletedSession: (d, sessionId: string) => {
         d.customSessionStatuses = d.customSessionStatuses ?? {}
+        d.triagedSessions = d.triagedSessions ?? {}
+        d.triagedSessions[sessionId] = true
         if (d.completedSessions[sessionId]) {
           d.completedSessions[sessionId] = false
           d.customSessionStatuses[sessionId] = 'idle'
@@ -140,6 +157,8 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       },
       setSessionCompleted: (d, sessionId: string, completed: boolean) => {
         d.customSessionStatuses = d.customSessionStatuses ?? {}
+        d.triagedSessions = d.triagedSessions ?? {}
+        d.triagedSessions[sessionId] = true
         d.completedSessions[sessionId] = completed
         if (completed) {
           d.customSessionStatuses[sessionId] = 'completed'
@@ -150,6 +169,8 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       },
       toggleUnreadSession: (d, sessionId: string) => {
         d.customSessionStatuses = d.customSessionStatuses ?? {}
+        d.triagedSessions = d.triagedSessions ?? {}
+        d.triagedSessions[sessionId] = true
         if (d.unreadSessions[sessionId]) {
           d.unreadSessions[sessionId] = false
           d.customSessionStatuses[sessionId] = 'idle'
@@ -161,6 +182,8 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       },
       setSessionUnread: (d, sessionId: string, unread: boolean) => {
         d.customSessionStatuses = d.customSessionStatuses ?? {}
+        d.triagedSessions = d.triagedSessions ?? {}
+        d.triagedSessions[sessionId] = true
         d.unreadSessions[sessionId] = unread
         if (unread) {
           d.customSessionStatuses[sessionId] = 'unread'

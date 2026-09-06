@@ -366,7 +366,8 @@ export function deriveRecentAndInProgress(
   completedSessions?: Readonly<Record<string, boolean>>,
   unreadSessions?: Readonly<Record<string, boolean>>,
   customStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>,
-  limit = 5,
+  triagedSessions?: Readonly<Record<string, boolean>>,
+  limit = 6,
 ): SessionNode[] {
   const archived = new Set(archivedSessionIds)
   const descendants = indexSubagentDescendants(list.byId)
@@ -379,32 +380,45 @@ export function deriveRecentAndInProgress(
 
   // Score candidate sessions:
   // Active in-progress (running, subagents, pending interaction) -> 50
+  // Auto-completed / newly completed (not yet triaged by user) -> 45 (stays at top until user changes status)
   // User custom ongoing -> 40
   // User custom warning -> 35
   // User custom unread or unread state -> 30
   // Recent un-triaged conversation -> 10 (stays at top until user selects a status option)
-  // Completed or explicitly dismissed/idle -> -1 (leaves recent list)
+  // User-triaged completed or idle -> -1 (leaves recent section after user action)
   const scored = candidates.map((s) => {
     const custom = customStatuses?.[s.id]
     const runningSubagents = (descendants.get(s.id)?.runningCount ?? 0) > 0
     const isActive = s.running || runningSubagents || s.pendingInteraction !== undefined
     const isCompleted = custom === 'completed' || completedSessions?.[s.id] === true
     const isDismissed = custom === 'idle'
+    const isUserTriaged = triagedSessions?.[s.id] === true
 
     // Actively running or waiting interaction always leads
     if (isActive) {
       return { summary: s, score: 50, updatedAt: s.updatedAt }
     }
 
-    // Explicitly completed or marked as read/idle leaves the top section
-    if (isCompleted || isDismissed) {
+    // When the user explicitly triaged/altered it to completed or idle, it DESCE!
+    if (isUserTriaged && (isCompleted || isDismissed)) {
       return { summary: s, score: -1, updatedAt: s.updatedAt }
+    }
+
+    // Auto-completed (or completed) but user has NOT yet altered/triaged it:
+    // It stays visible at the top with its green completed dot!
+    if (isCompleted && !isUserTriaged) {
+      return { summary: s, score: 45, updatedAt: s.updatedAt }
     }
 
     // Explicit user active statuses
     if (custom === 'ongoing') return { summary: s, score: 40, updatedAt: s.updatedAt }
     if (custom === 'warning') return { summary: s, score: 35, updatedAt: s.updatedAt }
     if (custom === 'unread' || unreadSessions?.[s.id] === true) return { summary: s, score: 30, updatedAt: s.updatedAt }
+
+    // If dismissed/idle
+    if (isDismissed) {
+      return { summary: s, score: -1, updatedAt: s.updatedAt }
+    }
 
     // Otherwise: recent conversation that has NOT been triaged yet.
     // It remains in "Recentes e Em Andamento" until the user explicitly selects a status option!
