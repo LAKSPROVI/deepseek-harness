@@ -1723,30 +1723,80 @@ describe('the run_code dispatch bridge', () => {
     )
   })
 
-  it('routes a hallucinated model-direct call under code mode to run_code without echoing the bad name', async () => {
+  it('recovers a hallucinated near-miss of the transport name as a run_code call', async () => {
+    const { ctx, runtime } = await setup()
+    registerEcho(ctx)
+    // `run_code_ide` is registered nowhere — the shape a model hallucinates
+    // when it half-remembers the transport name. Denying it was tried twice
+    // (first adding the route, then dropping the echoed bad name the model was
+    // mutating) and a weak model kept repeating the name anyway, so the call is
+    // recovered onto the transport it plainly meant instead of failing again.
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('call-1'),
+      name: 'run_code_ide',
+      arguments: { code: 'noop', description: 'Run the test program' },
+    })
+    expect(result.isError).toBe(false)
+    expect(runtime.lastRequest?.program).toBe('noop')
+  })
+
+  it.each(['run_code_ide_ide', 'runCode', 'run-code', 'run_code_v2'])('recovers the transport name written as %s', async (name) => {
+    // `run_code_ide_ide` is what a model produced from a denial that echoed
+    // `run_code_ide` back at it; the rest are plain restylings of the name.
+    const { ctx, runtime } = await setup()
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('call-1'),
+      name,
+      arguments: { code: `program for ${name}`, description: 'Run the test program' },
+    })
+    expect(result.isError).toBe(false)
+    expect(runtime.lastRequest?.program).toBe(`program for ${name}`)
+  })
+
+  it('routes an unrelated hallucinated model-direct call under code mode to run_code without echoing the bad name', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, {})
     const registry = new ToolRuntime(ctx, { mode: 'code' })
     registerEcho(ctx, 'write')
-    // `run_code_ide` is registered nowhere — the shape a model hallucinates
-    // when it half-remembers the transport name. The route must NOT tell it to
-    // "call `run_code_ide` from inside a program": a model that read that
-    // mutated the name to `run_code_ide_ide` and looped until the repeat guard
-    // fired. The bad name appears only in the `unknown tool "…"` prefix; the
-    // actionable half names `run_code` alone.
+    // `execute_code` is registered nowhere and is no near-miss of the transport
+    // name, so there is nothing to recover onto — it stays a denial. The route
+    // must NOT tell the model to "call `execute_code` from inside a program":
+    // a model that read that form of the guidance mutated the name and looped.
+    // The bad name appears only in the `unknown tool "…"` prefix.
     const result = await registry.execute({
       signal: testToolSignal,
       callId: CallId('call-1'),
-      name: 'run_code_ide',
+      name: 'execute_code',
       arguments: { code: 'noop' },
     })
     expect(result.isError).toBe(true)
     expect(result.error?.info).toEqual({ name: 'ToolNotFoundError', code: 'UNKNOWN_TOOL' })
     expect(result.error?.message).toBe(
-      `unknown tool "run_code_ide": in code mode the only tool you can call directly is \`${RUN_CODE_NAME}\` — reissue this as a \`${RUN_CODE_NAME}\` call with your program in its \`code\` argument, and call the tools you need from inside that program`,
+      `unknown tool "execute_code": in code mode the only tool you can call directly is \`${RUN_CODE_NAME}\` — reissue this as a \`${RUN_CODE_NAME}\` call with your program in its \`code\` argument, and call the tools you need from inside that program`,
     )
     // The bad name never appears as a call target in the guidance.
-    expect(result.error?.message).not.toContain('call `run_code_ide`')
+    expect(result.error?.message).not.toContain('call `execute_code`')
+  })
+
+  it('never recovers a near-miss name that is registered but restricted away', async () => {
+    // Recovery keys off `knownNames`, not visibility, precisely so a real tool
+    // masked from this agent stays UNKNOWN_TOOL instead of silently executing
+    // as the transport — a restriction must never become a redirect.
+    const { ctx } = await setup()
+    registerEcho(ctx, 'run_code_review')
+    const { scope, agent } = await mintAgentScope(ctx)
+    scope.ctx.tools.restrict({ deny: ['run_code_review'] })
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('call-1'),
+      name: 'run_code_review',
+      agent,
+      arguments: { code: 'noop', description: 'Run the test program' },
+    })
+    expect(result.isError).toBe(true)
+    expect(result.error?.info).toEqual({ name: 'ToolNotFoundError', code: 'UNKNOWN_TOOL' })
   })
 
   it('leaves an unknown model-direct call bare under native mode', async () => {

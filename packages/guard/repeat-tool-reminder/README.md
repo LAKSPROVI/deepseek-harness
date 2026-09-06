@@ -22,7 +22,7 @@ An advisory loop-breaker, not a model-facing tool: it never appears in the tool 
 
 ## Chain semantics
 
-The chain key is `(tool name, canonical arguments)` — canonicalization is a deep key-sort plus `JSON.stringify`, so argument objects differing only in property order count as identical. A call identical to the previous tracked call increments the agent's consecutive counter; a different tracked call resets it to 1.
+The chain key is `(normalized tool name, canonical arguments)`. The name is reduced to lowercase alphanumeric segments with consecutive repeats collapsed, so `run_code_ide`, `run_code_ide_ide` and `runCodeIde` key alike — a model that keeps getting a name wrong decorates it rather than repeating it verbatim, and a raw-name key would read each mutation as a fresh call and reset the very counter meant to catch the loop. Argument canonicalization is a deep key-sort plus `JSON.stringify`, so argument objects differing only in property order count as identical. Only the key normalizes: `include`/`exclude` still match the registered name, and the detailed reminder still quotes the name the model wrote. A call identical to the previous tracked call increments the agent's consecutive counter; a different tracked call resets it to 1.
 
 - **Untracked calls are transparent to the chain.** A call excluded by `include`/`exclude` neither increments nor resets the counter, so `grep X → todo_write → grep X` still counts as two consecutive `grep X` when `todo_write` is excluded. This is what makes exclusion useful: bookkeeping tools interleaved into a loop must not launder it.
 - **Denied calls count.** Detection sits on `tools/post-execute`, which also runs for calls a `tools/pre-execute` listener denied — a model hammering a denied call is exactly the loop worth breaking.
@@ -82,7 +82,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 ## Known Limitations and Deferred Work
 
-- **Exact-match detection only** — canonicalization is a deep key-sort, so near-identical variants (a tweaked path, extra whitespace inside a value) evade the chain; fuzzy matching is rejected pending evidence of need.
+- **Exact-match detection on arguments** — the tool name is normalized (case, separators, repeated segments), but argument canonicalization is only a deep key-sort, so near-identical variants (a tweaked path, extra whitespace inside a value) evade the chain; fuzzy argument matching is rejected pending evidence of need.
 - **Compaction does not reset chains** — a chain spanning a compaction checkpoint keeps counting.
 - **Advisory only** — escalating to `block` at a high threshold is not implemented, though `PostToolDecision` already supports blocking.
 - **No subagent chain-sharing** — chains stay isolated per agent; a parent and its subagent repeating the same call never combine.

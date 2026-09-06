@@ -76,6 +76,21 @@ const codeModeCollapsedToolRoute = (name: string): string =>
 const codeModeUnknownToolRoute = (): string =>
   `in code mode the only tool you can call directly is \`${RUN_CODE_NAME}\` — reissue this as a \`${RUN_CODE_NAME}\` call with your program in its \`code\` argument, and call the tools you need from inside that program`
 
+/**
+ * Compare tool names on alphanumerics alone, so separator style and casing
+ * never decide identity: `runCode`, `run-code` and `run_code` flatten alike.
+ */
+const flattenToolName = (name: string): string => name.toLowerCase().replaceAll(/[^a-z0-9]+/gu, '')
+
+/**
+ * Whether a name is a decorated near-miss of the reserved Code Mode transport
+ * — the shape a hallucinated transport name takes (`run_code_ide`, `runCode`,
+ * and the `run_code_ide_ide` mutation a denial that echoed the bad name
+ * produced). Exact `run_code` is not a near-miss: it needs no recovery.
+ */
+const isRunCodeNearMiss = (name: string): boolean =>
+  name !== RUN_CODE_NAME && flattenToolName(name).startsWith(flattenToolName(RUN_CODE_NAME))
+
 const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
   typescript: renderToolsSdk,
   python: renderToolsSdkPy,
@@ -1355,6 +1370,34 @@ export class ToolRuntime extends Service {
    * carries the route to `run_code` instead of a bare `unknown tool`. Every
    * other unknown name stays bare.
    */
+  /**
+   * Rewrite a model-direct Code Mode call that named a near-miss of the
+   * reserved transport onto `run_code` itself, so the program the call already
+   * carries runs instead of failing.
+   *
+   * A denial only ever ADVISES. Two rounds of sharpening the `UNKNOWN_TOOL`
+   * message — first adding the route, then removing the echoed bad name the
+   * model was mutating — still left a weak model repeating the same wrong
+   * transport name, because a model that ignores the first denial ignores the
+   * second. Recovering the call ends a loop no wording can.
+   *
+   * Deliberately narrow, in three ways that each close a path to shadowing a
+   * real tool: only under the `code` collapse, only for a model-direct call (a
+   * transport sub-dispatch keeps its own names), and only for a name absent
+   * from the scope's `knownNames` — which retains tools restricted away, so a
+   * restricted `run_code_review` still reports `UNKNOWN_TOOL` rather than
+   * silently executing as the transport.
+   * @param name - the tool name the model wrote.
+   * @param scope - the viewing scope whose effective presentation mode applies.
+   * @param nested - whether the call is a transport sub-dispatch, not a model-direct call.
+   * @returns `run_code` when the call is a recoverable near-miss, else `name` unchanged.
+   */
+  private recoverCodeModeTransportName(name: string, scope: ScopeKey | undefined, nested: boolean): string {
+    if (!this.collapses(name, scope, nested)) return name
+    if (!isRunCodeNearMiss(name)) return name
+    return this.view(scope).knownNames.has(name) ? name : RUN_CODE_NAME
+  }
+
   private unknownToolError(name: string, scope: ScopeKey | undefined, nested: boolean): ToolNotFoundError {
     return this.collapses(name, scope, nested)
       ? new ToolNotFoundError(name, codeModeUnknownToolRoute())
@@ -1402,9 +1445,13 @@ export class ToolRuntime extends Service {
     const token = createExecutionToken()
     const callId = exec.callId
     const rootCallId = exec.rootCallId ?? callId
-    const name = exec.name
     const agent = exec.agent
     const parent = exec.parent
+    // Recovery runs before every name-derived decision below — visibility, the
+    // collapse, and the run context the three dispatch sites read — so a
+    // recovered call is indistinguishable from one that named the transport
+    // correctly in the first place.
+    const name = this.recoverCodeModeTransportName(exec.name, agent, parent !== undefined)
     const signal = exec.signal
     // Distinguish a mode-collapsed call (visible in the scope, denied only by
     // the `code` collapse) from a genuinely unknown tool. A collapsed call is
