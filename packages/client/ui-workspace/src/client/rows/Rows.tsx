@@ -221,7 +221,7 @@ function assertNever(value: never): never {
 }
 
 interface SessionStatus {
-  state: StateDotState | 'unread'
+  state: StateDotState | 'unread' | 'finalized' | 'later'
   label: string
 }
 
@@ -265,6 +265,8 @@ function sessionStatuses(
     return subagents === undefined ? [primary] : [primary, subagents]
   }
   if (subagents !== undefined) return [subagents]
+  if (node.customStatus === 'finalized') return [{ state: 'finalized', label: t('status.finalized') }]
+  if (node.customStatus === 'later') return [{ state: 'later', label: t('status.later') }]
   if (node.unread) return [{ state: 'unread', label: t('status.unread') }]
   if (node.completed) return [{ state: 'done', label: t('status.completed') }]
   return [{ state: 'done', label: t('status.idle') }]
@@ -277,6 +279,10 @@ function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ..
     <>
       {primary.state === 'unread' ? (
         <span className={clsx(css.dot, css.dotUnread)} data-state="unread" aria-hidden="true" />
+      ) : primary.state === 'finalized' ? (
+        <span className={clsx(css.dot, css.dotFinalized)} data-state="finalized" aria-hidden="true" />
+      ) : primary.state === 'later' ? (
+        <span className={clsx(css.dot, css.dotLater)} data-state="later" aria-hidden="true" />
       ) : (
         <StateDot state={primary.state} />
       )}
@@ -310,6 +316,10 @@ function SessionHoverContent({
         <div className={css.hoverStatus} key={status.label}>
           {status.state === 'unread' ? (
             <span className={clsx(css.dot, css.dotUnread)} aria-hidden="true" />
+          ) : status.state === 'finalized' ? (
+            <span className={clsx(css.dot, css.dotFinalized)} aria-hidden="true" />
+          ) : status.state === 'later' ? (
+            <span className={clsx(css.dot, css.dotLater)} aria-hidden="true" />
           ) : (
             <StateDot state={status.state} />
           )}
@@ -436,9 +446,19 @@ export function SessionNodeItem({
       icon: <span className={clsx(css.dot, css.dotUnread)} aria-hidden="true" />,
     },
     {
+      id: 'set-later',
+      label: t('status.setLater'),
+      icon: <span className={clsx(css.dot, css.dotLater)} aria-hidden="true" />,
+    },
+    {
       id: 'set-completed',
       label: t('status.setCompleted'),
       icon: <StateDot state="done" />,
+    },
+    {
+      id: 'set-finalized',
+      label: t('status.setFinalized'),
+      icon: <span className={clsx(css.dot, css.dotFinalized)} aria-hidden="true" />,
     },
     {
       id: 'set-idle',
@@ -541,8 +561,12 @@ export function SessionNodeItem({
                 onSetStatus?.(node.id, 'warning')
               } else if (id === 'set-unread') {
                 onSetStatus?.(node.id, 'unread')
+              } else if (id === 'set-later') {
+                onSetStatus?.(node.id, 'later')
               } else if (id === 'set-completed') {
                 onSetStatus?.(node.id, 'completed')
+              } else if (id === 'set-finalized') {
+                onSetStatus?.(node.id, 'finalized')
               } else if (id === 'set-idle') {
                 onSetStatus?.(node.id, 'idle')
               } else if (id === 'unread' || id === 'read') {
@@ -637,9 +661,19 @@ export function RecentSessionNodeItem({
       icon: <span className={clsx(css.dot, css.dotUnread)} aria-hidden="true" />,
     },
     {
+      id: 'set-later',
+      label: t('status.setLater'),
+      icon: <span className={clsx(css.dot, css.dotLater)} aria-hidden="true" />,
+    },
+    {
       id: 'set-completed',
       label: t('status.setCompleted'),
       icon: <StateDot state="done" />,
+    },
+    {
+      id: 'set-finalized',
+      label: t('status.setFinalized'),
+      icon: <span className={clsx(css.dot, css.dotFinalized)} aria-hidden="true" />,
     },
     {
       id: 'set-idle',
@@ -710,8 +744,12 @@ export function RecentSessionNodeItem({
                 onSetStatus?.(node.id, 'warning')
               } else if (id === 'set-unread') {
                 onSetStatus?.(node.id, 'unread')
+              } else if (id === 'set-later') {
+                onSetStatus?.(node.id, 'later')
               } else if (id === 'set-completed') {
                 onSetStatus?.(node.id, 'completed')
+              } else if (id === 'set-finalized') {
+                onSetStatus?.(node.id, 'finalized')
               } else if (id === 'set-idle') {
                 onSetStatus?.(node.id, 'idle')
               } else if (id === 'unread' || id === 'read') {

@@ -15,8 +15,8 @@ export type SessionGroupBy = 'workspace' | 'flat'
 /** Session order: user-arranged only, or user-arranged plus activity promotion. */
 export type SessionOrderBy = 'manual' | 'updated'
 
-/** Five selectable user status types (including explicit idle/dismissed). */
-export type CustomSessionStatus = 'ongoing' | 'warning' | 'unread' | 'completed' | 'idle'
+/** Seven selectable user status types (including finalized, later, and explicit idle/dismissed). */
+export type CustomSessionStatus = 'ongoing' | 'warning' | 'unread' | 'completed' | 'finalized' | 'later' | 'idle'
 
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
 export interface WorkspaceViewState {
@@ -109,7 +109,6 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       },
       autoCompleteSession: (d, sessionId: string) => {
         d.customSessionStatuses = d.customSessionStatuses ?? {}
-        d.completedSessions = d.completedSessions ?? {}
         d.triagedSessions = d.triagedSessions ?? {}
         d.completedSessions[sessionId] = true
         d.customSessionStatuses[sessionId] = 'completed'
@@ -120,19 +119,19 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         d.customSessionStatuses = d.customSessionStatuses ?? {}
         d.triagedSessions = d.triagedSessions ?? {}
         d.triagedSessions[sessionId] = true
-        if (status === 'idle') {
-          d.customSessionStatuses[sessionId] = 'idle'
-          d.completedSessions[sessionId] = false
-          d.unreadSessions[sessionId] = false
-        } else if (status === 'completed') {
+        if (status === 'completed') {
           d.customSessionStatuses[sessionId] = 'completed'
+          d.completedSessions[sessionId] = true
+          d.unreadSessions[sessionId] = false
+        } else if (status === 'finalized') {
+          d.customSessionStatuses[sessionId] = 'finalized'
           d.completedSessions[sessionId] = true
           d.unreadSessions[sessionId] = false
         } else if (status === 'unread') {
           d.customSessionStatuses[sessionId] = 'unread'
           d.unreadSessions[sessionId] = true
           d.completedSessions[sessionId] = false
-        } else if (status === 'ongoing' || status === 'warning') {
+        } else if (status === 'ongoing' || status === 'warning' || status === 'later') {
           d.customSessionStatuses[sessionId] = status
           d.completedSessions[sessionId] = false
           d.unreadSessions[sessionId] = false
@@ -148,7 +147,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         d.triagedSessions[sessionId] = true
         if (d.completedSessions[sessionId]) {
           d.completedSessions[sessionId] = false
-          d.customSessionStatuses[sessionId] = 'idle'
+          d.customSessionStatuses[sessionId] = undefined
         } else {
           d.completedSessions[sessionId] = true
           d.customSessionStatuses[sessionId] = 'completed'
@@ -164,7 +163,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
           d.customSessionStatuses[sessionId] = 'completed'
           d.unreadSessions[sessionId] = false
         } else {
-          d.customSessionStatuses[sessionId] = 'idle'
+          d.customSessionStatuses[sessionId] = undefined
         }
       },
       toggleUnreadSession: (d, sessionId: string) => {
@@ -173,7 +172,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         d.triagedSessions[sessionId] = true
         if (d.unreadSessions[sessionId]) {
           d.unreadSessions[sessionId] = false
-          d.customSessionStatuses[sessionId] = 'idle'
+          d.customSessionStatuses[sessionId] = undefined
         } else {
           d.unreadSessions[sessionId] = true
           d.customSessionStatuses[sessionId] = 'unread'
@@ -189,7 +188,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
           d.customSessionStatuses[sessionId] = 'unread'
           d.completedSessions[sessionId] = false
         } else {
-          d.customSessionStatuses[sessionId] = 'idle'
+          d.customSessionStatuses[sessionId] = undefined
         }
       },
     },

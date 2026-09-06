@@ -250,7 +250,7 @@ function sessionNode(
   customStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>,
 ): SessionNode {
   const custom = customStatuses?.[s.id]
-  const isCompleted = custom === 'completed' || completedMap?.[s.id] === true
+  const isCompleted = s.completed === true || custom === 'completed' || custom === 'finalized' || completedMap?.[s.id] === true
   const isUnread = custom === 'unread' || unreadMap?.[s.id] === true
   const isRunning = custom === 'ongoing' || s.running
   const customWarning = custom === 'warning' ? ('question' as PendingInteractionStatus) : undefined
@@ -382,47 +382,37 @@ export function deriveRecentAndInProgress(
   // Active in-progress (running, subagents, pending interaction) -> 50
   // Auto-completed / newly completed (not yet triaged by user) -> 45 (stays at top until user changes status)
   // User custom ongoing -> 40
+  // User custom later (Concluir Depois) -> 38 (stays at top so user does not forget)
   // User custom warning -> 35
   // User custom unread or unread state -> 30
   // Recent un-triaged conversation -> 10 (stays at top until user selects a status option)
-  // User-triaged completed or idle -> -1 (leaves recent section after user action)
+  // User-triaged completed, finalized, or idle -> -1 (leaves recent section after user action)
   const scored = candidates.map((s) => {
     const custom = customStatuses?.[s.id]
     const runningSubagents = (descendants.get(s.id)?.runningCount ?? 0) > 0
     const isActive = s.running || runningSubagents || s.pendingInteraction !== undefined
-    const isCompleted = custom === 'completed' || completedSessions?.[s.id] === true
-    const isDismissed = custom === 'idle'
-    const isUserTriaged = triagedSessions?.[s.id] === true
+    const isCompleted = custom === 'completed' || custom === 'finalized' || completedSessions?.[s.id] === true
 
-    // Actively running or waiting interaction always leads
-    if (isActive) {
-      return { summary: s, score: 50, updatedAt: s.updatedAt }
+    // Actively running, waiting interaction, ongoing, or warning all share top active tier (score 30)
+    // and are sorted by recency (updatedAt)
+    if (isActive || custom === 'ongoing' || custom === 'warning') {
+      return { summary: s, score: 30, updatedAt: s.updatedAt }
     }
 
-    // When the user explicitly triaged/altered it to completed or idle, it DESCE!
-    if (isUserTriaged && (isCompleted || isDismissed)) {
-      return { summary: s, score: -1, updatedAt: s.updatedAt }
+    // User custom later (Concluir Depois) -> score 28 (stays pinned so user does not forget)
+    if (custom === 'later') return { summary: s, score: 28, updatedAt: s.updatedAt }
+
+    // Auto-completed (newly completed on task finish) that has NOT yet been triaged by user:
+    // It stays visible at the top with its green completed dot until the user triages it!
+    if (isCompleted && triagedSessions?.[s.id] === false) {
+      return { summary: s, score: 25, updatedAt: s.updatedAt }
     }
 
-    // Auto-completed (or completed) but user has NOT yet altered/triaged it:
-    // It stays visible at the top with its green completed dot!
-    if (isCompleted && !isUserTriaged) {
-      return { summary: s, score: 45, updatedAt: s.updatedAt }
-    }
+    // Unread sessions -> score 20
+    if (custom === 'unread' || unreadSessions?.[s.id] === true) return { summary: s, score: 20, updatedAt: s.updatedAt }
 
-    // Explicit user active statuses
-    if (custom === 'ongoing') return { summary: s, score: 40, updatedAt: s.updatedAt }
-    if (custom === 'warning') return { summary: s, score: 35, updatedAt: s.updatedAt }
-    if (custom === 'unread' || unreadSessions?.[s.id] === true) return { summary: s, score: 30, updatedAt: s.updatedAt }
-
-    // If dismissed/idle
-    if (isDismissed) {
-      return { summary: s, score: -1, updatedAt: s.updatedAt }
-    }
-
-    // Otherwise: recent conversation that has NOT been triaged yet.
-    // It remains in "Recentes e Em Andamento" until the user explicitly selects a status option!
-    return { summary: s, score: 10, updatedAt: s.updatedAt }
+    // When triaged, completed, finalized, dismissed, or idle, it stays in its group/leaves recent section
+    return { summary: s, score: -1, updatedAt: s.updatedAt }
   })
 
   const activeOrRecent = scored.filter(item => item.score > 0)

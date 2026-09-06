@@ -432,6 +432,26 @@ describe('deriveRecentAndInProgress', () => {
 
     expect(result.map(s => s.id)).toEqual([sid('running')])
   })
+
+  it('pins later status in recent section and excludes user-triaged finalized sessions', () => {
+    const sLater = summary('later-task', 10)
+    const sFinalized = summary('finalized-task', 20)
+    const sessions = list(sLater, sFinalized)
+
+    const result = deriveRecentAndInProgress(
+      sessions,
+      noArchive,
+      { [sid('finalized-task')]: true },
+      {},
+      { [sid('later-task')]: 'later', [sid('finalized-task')]: 'finalized' },
+      { [sid('finalized-task')]: true },
+      5,
+    )
+
+    // later is pinned with custom status 'later'; finalized is triaged and omitted from top
+    expect(result.map(s => s.id)).toEqual([sid('later-task')])
+    expect(result[0]?.customStatus).toBe('later')
+  })
 })
 
 describe('createWorkspaceViewStore', () => {
@@ -466,6 +486,12 @@ describe('createWorkspaceViewStore', () => {
     store.actions.setSessionStatus('s4', 'warning')
     expect(store.getSnapshot().customSessionStatuses?.s4).toBe('warning')
     store.actions.setSessionStatus('s4', 'completed')
+    expect(store.getSnapshot().completedSessions.s4).toBe(true)
+    store.actions.setSessionStatus('s4', 'later')
+    expect(store.getSnapshot().customSessionStatuses?.s4).toBe('later')
+    expect(store.getSnapshot().completedSessions.s4).toBe(false)
+    store.actions.setSessionStatus('s4', 'finalized')
+    expect(store.getSnapshot().customSessionStatuses?.s4).toBe('finalized')
     expect(store.getSnapshot().completedSessions.s4).toBe(true)
     store.actions.setSessionStatus('s4', 'idle')
     expect(store.getSnapshot().customSessionStatuses?.s4).toBeUndefined()
