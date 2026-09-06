@@ -405,6 +405,7 @@ describe('deriveRecentAndInProgress', () => {
       { [sid('completed')]: true },
       { [sid('unread')]: true },
       { [sid('custom-warn')]: 'warning' },
+      {},
       5,
     )
 
@@ -424,6 +425,7 @@ describe('deriveRecentAndInProgress', () => {
     const result = deriveRecentAndInProgress(
       sessions,
       archived('archived-run'),
+      {},
       {},
       {},
       {},
