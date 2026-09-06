@@ -2,9 +2,25 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionNotesPopover } from '../src/client/header/SessionNotesPopover.tsx'
+import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { zh } from '../src/client/locales.ts'
 
-const t = (key: keyof typeof zh) => zh[key] ?? key
+// The component may call `t` with a shared `common` key as well as a workspace
+// one — `LocaleKeysOf` is the namespace union PLUS the common vocabulary — so the
+// fake must accept the whole domain and echo back anything the zh dictionary lacks.
+const t: TranslateNS<'workspace'> = key => (zh as Record<string, string>)[key] ?? key
+
+// The framework injects the whole session standard kit. These components read
+// only the seats named at each render site, so the rest are inert stubs that
+// exist to satisfy the prop contract rather than to be called.
+const frameworkSeats = {
+  useSession: (() => undefined) as never,
+  useProjection: (() => undefined) as never,
+  useInput: (() => undefined) as never,
+  inputActions: {} as never,
+  useSessions: (() => undefined) as never,
+  useWorkspaces: (() => undefined) as never,
+}
 
 describe('SessionNotesPopover', () => {
   const sessionId = 'test-session-123'
@@ -19,13 +35,13 @@ describe('SessionNotesPopover', () => {
   afterEach(cleanup)
 
   it('renders the trigger button with notes label', () => {
-    render(<SessionNotesPopover sessionId={sessionId as never} inputActions={inputActions} t={t} />)
+    render(<SessionNotesPopover {...frameworkSeats} sessionId={sessionId as never} inputActions={inputActions} t={t} />)
     const trigger = screen.getByRole('button', { name: /备注/i })
     expect(trigger).toBeDefined()
   })
 
   it('opens dialog, allows typing notes and auto-saves to localStorage', () => {
-    render(<SessionNotesPopover sessionId={sessionId as never} inputActions={inputActions} t={t} />)
+    render(<SessionNotesPopover {...frameworkSeats} sessionId={sessionId as never} inputActions={inputActions} t={t} />)
     const trigger = screen.getByRole('button', { name: /备注/i })
     fireEvent.click(trigger)
 
@@ -36,7 +52,7 @@ describe('SessionNotesPopover', () => {
   })
 
   it('switches to reminders tab and adds a new reminder', () => {
-    render(<SessionNotesPopover sessionId={sessionId as never} inputActions={inputActions} t={t} />)
+    render(<SessionNotesPopover {...frameworkSeats} sessionId={sessionId as never} inputActions={inputActions} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: /备注/i }))
 
     // Switch to reminders tab
@@ -66,7 +82,7 @@ describe('SessionNotesPopover', () => {
       reminders: [{ id: '1', text: 'Conferir guia de custas', completed: false, createdAt: Date.now() }],
     }))
 
-    render(<SessionNotesPopover sessionId={sessionId as never} inputActions={inputActions} t={t} />)
+    render(<SessionNotesPopover {...frameworkSeats} sessionId={sessionId as never} inputActions={inputActions} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: /备注/i }))
 
     const insertBtn = screen.getByRole('button', { name: /插入到输入框/i })

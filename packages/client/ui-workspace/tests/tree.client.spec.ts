@@ -426,6 +426,7 @@ describe('deriveRecentAndInProgress', () => {
       archived('archived-run'),
       {},
       {},
+      {},
       5,
     )
 
