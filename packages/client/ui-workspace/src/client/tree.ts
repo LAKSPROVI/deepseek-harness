@@ -250,12 +250,12 @@ function sessionNode(
   customStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>,
 ): SessionNode {
   const custom = customStatuses?.[s.id]
-  const isCompleted = custom === 'completed'
-    || (completedMap?.[s.id] !== undefined ? completedMap[s.id] === true : s.completed === true)
+  const isCompleted = custom === 'completed' || completedMap?.[s.id] === true
   const isUnread = custom === 'unread' || unreadMap?.[s.id] === true
   const isRunning = custom === 'ongoing' || s.running
   const customWarning = custom === 'warning' ? ('question' as PendingInteractionStatus) : undefined
   const effectivePending = s.pendingInteraction ?? customWarning
+  const effectiveCustom = custom === 'idle' ? undefined : custom
 
   return {
     id: s.id,
@@ -266,7 +266,7 @@ function sessionNode(
     completed: isCompleted,
     unread: isUnread,
     updatedAt: s.updatedAt,
-    ...(custom === undefined ? {} : { customStatus: custom }),
+    ...(effectiveCustom === undefined ? {} : { customStatus: effectiveCustom }),
     ...(effectivePending === undefined ? {} : { pendingInteraction: effectivePending }),
   }
 }
@@ -378,27 +378,37 @@ export function deriveRecentAndInProgress(
   }
 
   // Score candidate sessions:
-  // Active in-progress (running, subagents, pending interaction) -> 30
-  // Unread -> 20
-  // Completed -> -1 (leaves recent list once explicitly completed)
+  // Active in-progress (running, subagents, pending interaction) -> 50
+  // User custom ongoing -> 40
+  // User custom warning -> 35
+  // User custom unread or unread state -> 30
+  // Recent un-triaged conversation -> 10 (stays at top until user selects a status option)
+  // Completed or explicitly dismissed/idle -> -1 (leaves recent list)
   const scored = candidates.map((s) => {
     const custom = customStatuses?.[s.id]
     const runningSubagents = (descendants.get(s.id)?.runningCount ?? 0) > 0
-    const isActive = custom === 'ongoing' || custom === 'warning' || s.running || runningSubagents || s.pendingInteraction !== undefined
-    const isCompleted = custom === 'completed'
-      || (completedSessions?.[s.id] !== undefined ? completedSessions[s.id] === true : false)
-    const isUnread = custom === 'unread' || unreadSessions?.[s.id] === true || (s.completed === true && unreadSessions?.[s.id] === undefined && !isCompleted)
+    const isActive = s.running || runningSubagents || s.pendingInteraction !== undefined
+    const isCompleted = custom === 'completed' || completedSessions?.[s.id] === true
+    const isDismissed = custom === 'idle'
 
-    // Completed sessions leave the Recent/In-Progress section once marked completed by the user
-    if (isCompleted) {
+    // Actively running or waiting interaction always leads
+    if (isActive) {
+      return { summary: s, score: 50, updatedAt: s.updatedAt }
+    }
+
+    // Explicitly completed or marked as read/idle leaves the top section
+    if (isCompleted || isDismissed) {
       return { summary: s, score: -1, updatedAt: s.updatedAt }
     }
 
-    let score = 0
-    if (isActive) score = 30
-    else if (isUnread) score = 20
+    // Explicit user active statuses
+    if (custom === 'ongoing') return { summary: s, score: 40, updatedAt: s.updatedAt }
+    if (custom === 'warning') return { summary: s, score: 35, updatedAt: s.updatedAt }
+    if (custom === 'unread' || unreadSessions?.[s.id] === true) return { summary: s, score: 30, updatedAt: s.updatedAt }
 
-    return { summary: s, score, updatedAt: s.updatedAt }
+    // Otherwise: recent conversation that has NOT been triaged yet.
+    // It remains in "Recentes e Em Andamento" until the user explicitly selects a status option!
+    return { summary: s, score: 10, updatedAt: s.updatedAt }
   })
 
   const activeOrRecent = scored.filter(item => item.score > 0)

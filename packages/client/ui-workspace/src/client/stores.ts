@@ -15,8 +15,8 @@ export type SessionGroupBy = 'workspace' | 'flat'
 /** Session order: user-arranged only, or user-arranged plus activity promotion. */
 export type SessionOrderBy = 'manual' | 'updated'
 
-/** Four selectable user status types. */
-export type CustomSessionStatus = 'ongoing' | 'warning' | 'unread' | 'completed'
+/** Five selectable user status types (including explicit idle/dismissed). */
+export type CustomSessionStatus = 'ongoing' | 'warning' | 'unread' | 'completed' | 'idle'
 
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
 export interface WorkspaceViewState {
@@ -103,10 +103,10 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       setSessionOrder: (d, accountKey: string, order: string[]) => {
         d.sessionOrderByAccount[accountKey] = order
       },
-      setSessionStatus: (d, sessionId: string, status: CustomSessionStatus | 'idle' | undefined) => {
+      setSessionStatus: (d, sessionId: string, status: CustomSessionStatus | undefined) => {
         d.customSessionStatuses = d.customSessionStatuses ?? {}
-        if (!status || status === 'idle') {
-          d.customSessionStatuses[sessionId] = undefined
+        if (status === 'idle') {
+          d.customSessionStatuses[sessionId] = 'idle'
           d.completedSessions[sessionId] = false
           d.unreadSessions[sessionId] = false
         } else if (status === 'completed') {
@@ -117,8 +117,12 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
           d.customSessionStatuses[sessionId] = 'unread'
           d.unreadSessions[sessionId] = true
           d.completedSessions[sessionId] = false
-        } else {
+        } else if (status === 'ongoing' || status === 'warning') {
           d.customSessionStatuses[sessionId] = status
+          d.completedSessions[sessionId] = false
+          d.unreadSessions[sessionId] = false
+        } else {
+          d.customSessionStatuses[sessionId] = undefined
           d.completedSessions[sessionId] = false
           d.unreadSessions[sessionId] = false
         }
@@ -127,7 +131,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         d.customSessionStatuses = d.customSessionStatuses ?? {}
         if (d.completedSessions[sessionId]) {
           d.completedSessions[sessionId] = false
-          d.customSessionStatuses[sessionId] = undefined
+          d.customSessionStatuses[sessionId] = 'idle'
         } else {
           d.completedSessions[sessionId] = true
           d.customSessionStatuses[sessionId] = 'completed'
@@ -140,15 +144,15 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         if (completed) {
           d.customSessionStatuses[sessionId] = 'completed'
           d.unreadSessions[sessionId] = false
-        } else if (d.customSessionStatuses[sessionId] === 'completed') {
-          d.customSessionStatuses[sessionId] = undefined
+        } else {
+          d.customSessionStatuses[sessionId] = 'idle'
         }
       },
       toggleUnreadSession: (d, sessionId: string) => {
         d.customSessionStatuses = d.customSessionStatuses ?? {}
         if (d.unreadSessions[sessionId]) {
           d.unreadSessions[sessionId] = false
-          d.customSessionStatuses[sessionId] = undefined
+          d.customSessionStatuses[sessionId] = 'idle'
         } else {
           d.unreadSessions[sessionId] = true
           d.customSessionStatuses[sessionId] = 'unread'
@@ -161,8 +165,8 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         if (unread) {
           d.customSessionStatuses[sessionId] = 'unread'
           d.completedSessions[sessionId] = false
-        } else if (d.customSessionStatuses[sessionId] === 'unread') {
-          d.customSessionStatuses[sessionId] = undefined
+        } else {
+          d.customSessionStatuses[sessionId] = 'idle'
         }
       },
     },
