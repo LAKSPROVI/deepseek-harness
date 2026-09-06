@@ -58,16 +58,23 @@ const COLLAPSE_SECTION_ORDER = 99
 const CODE_ONLY_INSTRUCTION = `\`${RUN_CODE_NAME}\` is the only tool you can call directly — a tool call naming any other tool fails. Reach every tool the SDK declares below from inside the program.`
 
 /**
- * Model-facing route appended to an `UNKNOWN_TOOL` failure when a Code Mode
- * agent names anything other than `run_code` in a direct call. Covers a real
- * collapsed tool AND — the common case — a hallucinated transport name
- * (`run_code_ide`, `runCode`, …): identical guidance either way, so the model
- * switches to `run_code` on the first failure instead of retrying a dead name
- * until the repeat guard trips. One home for the string so the collapsed-tool
- * denial and the unknown-name denial can never drift apart.
+ * Route appended to an `UNKNOWN_TOOL` failure when a Code Mode agent names a
+ * VISIBLE tool in a direct call: the tool is real and callable, just not from
+ * the top level, so the fix is to move that same call inside the program.
  */
-const codeModeDirectCallRoute = (name: string): string =>
+const codeModeCollapsedToolRoute = (name: string): string =>
   `only \`${RUN_CODE_NAME}\` is callable directly — call \`${name}\` from inside a \`${RUN_CODE_NAME}\` program instead`
+
+/**
+ * Route appended when a Code Mode agent names a tool that is registered
+ * NOWHERE — overwhelmingly a hallucinated transport name (`run_code_ide`,
+ * `runCode`, …). The bad name must NOT be echoed as a call target: a model
+ * that read "call `run_code_ide` from inside a program" mutated it to
+ * `run_code_ide_ide` and looped. Point only at the real transport and how to
+ * reissue.
+ */
+const codeModeUnknownToolRoute = (): string =>
+  `in code mode the only tool you can call directly is \`${RUN_CODE_NAME}\` — reissue this as a \`${RUN_CODE_NAME}\` call with your program in its \`code\` argument, and call the tools you need from inside that program`
 
 const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
   typescript: renderToolsSdk,
@@ -1345,12 +1352,12 @@ export class ToolRuntime extends Service {
    * no tool. Under Code Mode any non-`run_code` name reaches here only when it
    * is registered nowhere (a real collapsed tool is denied earlier, in
    * {@link createExecution}) — the hallucinated-transport-name case — so it
-   * carries the same route to `run_code` the collapsed denial gives. Every
+   * carries the route to `run_code` instead of a bare `unknown tool`. Every
    * other unknown name stays bare.
    */
   private unknownToolError(name: string, scope: ScopeKey | undefined, nested: boolean): ToolNotFoundError {
     return this.collapses(name, scope, nested)
-      ? new ToolNotFoundError(name, codeModeDirectCallRoute(name))
+      ? new ToolNotFoundError(name, codeModeUnknownToolRoute())
       : new ToolNotFoundError(name)
   }
 
@@ -1465,7 +1472,7 @@ export class ToolRuntime extends Service {
         return {
           kind: 'final-result',
           exec: execution,
-          result: toolErrorResult(new ToolNotFoundError(name, codeModeDirectCallRoute(name))),
+          result: toolErrorResult(new ToolNotFoundError(name, codeModeCollapsedToolRoute(name))),
         }
       }
       return { kind: 'ready', exec: execution }

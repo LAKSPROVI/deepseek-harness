@@ -1723,16 +1723,17 @@ describe('the run_code dispatch bridge', () => {
     )
   })
 
-  it('routes a hallucinated model-direct call under code mode to run_code', async () => {
+  it('routes a hallucinated model-direct call under code mode to run_code without echoing the bad name', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, {})
     const registry = new ToolRuntime(ctx, { mode: 'code' })
     registerEcho(ctx, 'write')
     // `run_code_ide` is registered nowhere — the shape a model hallucinates
-    // when it half-remembers the transport name. A collapsed VISIBLE tool
-    // already carries the route; an unknown name must too, or the model reads
-    // a bare `unknown tool` and retries the dead name until the repeat guard
-    // fires instead of switching to `run_code`.
+    // when it half-remembers the transport name. The route must NOT tell it to
+    // "call `run_code_ide` from inside a program": a model that read that
+    // mutated the name to `run_code_ide_ide` and looped until the repeat guard
+    // fired. The bad name appears only in the `unknown tool "…"` prefix; the
+    // actionable half names `run_code` alone.
     const result = await registry.execute({
       signal: testToolSignal,
       callId: CallId('call-1'),
@@ -1742,8 +1743,10 @@ describe('the run_code dispatch bridge', () => {
     expect(result.isError).toBe(true)
     expect(result.error?.info).toEqual({ name: 'ToolNotFoundError', code: 'UNKNOWN_TOOL' })
     expect(result.error?.message).toBe(
-      `unknown tool "run_code_ide": only \`${RUN_CODE_NAME}\` is callable directly — call \`run_code_ide\` from inside a \`${RUN_CODE_NAME}\` program instead`,
+      `unknown tool "run_code_ide": in code mode the only tool you can call directly is \`${RUN_CODE_NAME}\` — reissue this as a \`${RUN_CODE_NAME}\` call with your program in its \`code\` argument, and call the tools you need from inside that program`,
     )
+    // The bad name never appears as a call target in the guidance.
+    expect(result.error?.message).not.toContain('call `run_code_ide`')
   })
 
   it('leaves an unknown model-direct call bare under native mode', async () => {
