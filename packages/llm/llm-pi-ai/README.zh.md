@@ -157,6 +157,7 @@ pi-ai 依据提供方 id 与 baseURL 决定每个请求的形状：系统提示�
 ## 词汇差异
 
 - pi-ai 工具调用参数是已解析对象；harness 存储原始 JSON 字符串。适配器会解析输入，并将输出重新字符串化。
+- 出站的工具名会被收敛到 `[A-Za-z0-9_-]`、最长 64 个字符——这是 Anthropic 文档给出的上限，其前置网关也不会更宽松。assistant 消息里的名字完全来自**模型**，而历史每次请求都会整份重发，因此一个杜撰的名字不是让某一次调用失败：它会让该会话后续**每一次请求都发不出去**，而且重试也救不回来，因为被拒绝的内容就在被重放的历史里。这只是最后一道兜底——agent 循环已经记录了实际执行的名字（见 [agent-loop](../../core/agent-loop/README.zh.md#loop-lifecycle-agentts)）；收敛存在的意义，是让循环无法回收的名字只损失一次调用，而不是毁掉整个会话。工具结果的名字取自同一份已收敛的 assistant 转换，因此调用与结果不会不一致。
 - pi-ai 将失败报告为流内错误事件；它们会映射到 `finish {kind:'error'|'aborted', failure}` 分片。提供方特定错误文本会区分终止型 `QUOTA` 与暂时型 `RATE_LIMIT`，针对已解析模型上下文窗口评估的文本与 usage 信号则将溢出规范化为 `CONTEXT_WINDOW_EXCEEDED`。终止时的 `stop` 若消息不含内容块，则会映射为 `finish {kind:'error'}`，code 为 `EMPTY_RESPONSE`（默认策略会重试），而非成功空消息。
 - 提供方报告独立推理计数时，pi-ai 会将其公开；适配器会在该值已定义时映射它（包括零），且不会更改输出 usage。
 - pi-ai 的 `off` 思考级别会原样穿过 Harness 能力 seam，并在分派时变为被省略的 pi-ai 通用 `reasoning` 选项。

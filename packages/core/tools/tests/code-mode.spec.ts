@@ -1780,6 +1780,23 @@ describe('the run_code dispatch bridge', () => {
     expect(result.error?.message).not.toContain('call `execute_code`')
   })
 
+  it('exposes the name a call will execute under, so the loop can record it', async () => {
+    // The loop needs this BEFORE dispatch: the name it writes into the
+    // assistant message is replayed to the provider on every later turn, so
+    // recording the invented one outlives the call and can break the whole
+    // conversation.
+    const { ctx } = await setup()
+    registerEcho(ctx)
+    expect(ctx.tools.resolveCallName('run_code_ide')).toBe(RUN_CODE_NAME)
+    expect(ctx.tools.resolveCallName('run_code_ide_ide')).toBe(RUN_CODE_NAME)
+    expect(ctx.tools.resolveCallName(RUN_CODE_NAME)).toBe(RUN_CODE_NAME)
+    // A real visible tool keeps its name — the collapse denies it with a route,
+    // and rewriting it to the transport would hide a genuine mistake.
+    expect(ctx.tools.resolveCallName('echo')).toBe('echo')
+    // So does a name that is no near-miss of the transport.
+    expect(ctx.tools.resolveCallName('execute_code')).toBe('execute_code')
+  })
+
   it('never recovers a near-miss name that is registered but restricted away', async () => {
     // Recovery keys off `knownNames`, not visibility, precisely so a real tool
     // masked from this agent stays UNKNOWN_TOOL instead of silently executing

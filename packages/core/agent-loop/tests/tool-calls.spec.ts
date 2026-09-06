@@ -759,4 +759,53 @@ describe('code-mode native-tool denial through the agent loop', () => {
       code: 'UNKNOWN_TOOL',
     })
   })
+
+  it('records the recovered transport name in the assistant message, not the one the model invented', async () => {
+    // History is replayed to the provider on every later turn, so the name
+    // persisted here outlives the call. An invented one — any length, any
+    // shape — would make every subsequent request unsendable, not just fail
+    // this call, and no retry could clear it.
+    const adapter = new MockAdapter([
+      multiCall([{ id: 'call-1', name: 'run_code_ide', args: { code: 'noop', description: 'Run the program' } }]),
+      textResponse('ok'),
+    ])
+    const ctx = await codeModeHarness(adapter)
+
+    const agent = ctx.agentLoop.create(SessionId('code-recovered-name'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'run something' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    const sessionEvents = events(agent)
+    const assistant = sessionEvents.find(event => event.type === 'assistant/message')
+    expect(assistant).toBeDefined()
+    const call = assistant!.data.message.content.find(block => block.type === 'tool-call')
+    expect(call?.name).toBe('run_code')
+
+    // The call ran: recovery is not a prettier denial.
+    const toolResult = sessionEvents.find(event => event.type === 'tool/result')
+    expect(toolResult?.data.error).toBeUndefined()
+  })
+
+  it('tells the model its tool name was corrected instead of recovering silently', async () => {
+    // Silent recovery is reinforcement: the invented name "works", so the model
+    // keeps and elaborates it. Naming the correction is what makes it converge.
+    const adapter = new MockAdapter([
+      multiCall([{ id: 'call-1', name: 'run_code_ide', args: { code: 'noop', description: 'Run the program' } }]),
+      textResponse('ok'),
+    ])
+    const ctx = await codeModeHarness(adapter)
+
+    const agent = ctx.agentLoop.create(SessionId('code-correction-notice'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'run something' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    const notices = events(agent)
+      .filter(event => event.type === 'agent/inbox/spliced')
+      .flatMap(event => event.data.inserted)
+      .filter(message => message.source.kind === 'plugin' && message.source.plugin === 'tool-name-recovery')
+    expect(notices).toHaveLength(1)
+    const text = notices[0]!.content.map(block => block.type === 'text' ? block.text : '').join('')
+    expect(text).toContain('run_code_ide')
+    expect(text).toContain('run_code`')
+  })
 })

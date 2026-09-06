@@ -1392,6 +1392,23 @@ export class ToolRuntime extends Service {
    * @param nested - whether the call is a transport sub-dispatch, not a model-direct call.
    * @returns `run_code` when the call is a recoverable near-miss, else `name` unchanged.
    */
+  /**
+   * The name a model-direct call will actually execute under: the reserved
+   * transport when the model wrote a near-miss of it, else the name unchanged.
+   *
+   * Public because recovering the DISPATCH is only half the repair. The name
+   * the model invented is also written into the assistant message, and that
+   * message is replayed to the provider on every later turn — so an invented
+   * name outlives the call that carried it and can make the whole conversation
+   * unsendable, not just fail once. The loop records what this returns.
+   * @param name - the tool name the model wrote.
+   * @param scope - the calling agent, whose presentation mode decides recovery.
+   * @returns the name that will execute.
+   */
+  resolveCallName(name: string, scope?: ScopeKey): string {
+    return this.recoverCodeModeTransportName(name, scope, false)
+  }
+
   private recoverCodeModeTransportName(name: string, scope: ScopeKey | undefined, nested: boolean): string {
     if (!this.collapses(name, scope, nested)) return name
     if (!isRunCodeNearMiss(name)) return name

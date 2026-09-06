@@ -36,6 +36,33 @@ interface PiAiReplayState {
   blocks: PiAiReplayBlock[]
 }
 
+/**
+ * Widest tool name every provider on this transport accepts. Anthropic's
+ * Messages API documents 64 characters over `[a-zA-Z0-9_-]`, and the gateways
+ * in front of it are no more permissive, so one conservative shape covers all
+ * of them without a per-provider table.
+ */
+const WIRE_TOOL_NAME_MAX = 64
+
+/**
+ * Clamp an outgoing tool name to a shape the provider will accept.
+ *
+ * The name in an assistant message is whatever the MODEL emitted, and history
+ * is resent in full on every request — so a single invented name does not fail
+ * one call, it makes every later request in that conversation unsendable. That
+ * is not theoretical: a model looping on `run_code_ide` grew the name by `_ide`
+ * per attempt until the API rejected the message, and no retry could recover
+ * because the rejection lived in the history being replayed.
+ *
+ * Last-ditch guard, not the repair: the loop already records the name that
+ * actually executed. This exists so a name it could not recover degrades one
+ * call instead of killing the session.
+ */
+function wireToolName(name: string): string {
+  const safe = name.replaceAll(/[^A-Za-z0-9_-]/gu, '_')
+  return safe.length > WIRE_TOOL_NAME_MAX ? safe.slice(0, WIRE_TOOL_NAME_MAX) : safe
+}
+
 /** Parse tool-call argument JSON; tolerate model malformations with {}. */
 function parseArguments(raw: string): Record<string, unknown> {
   try {
@@ -151,7 +178,7 @@ function foreignAssistant(message: Message): AssistantMessage {
       case 'tool-call': content.push({
         type: 'toolCall',
         id: block.id,
-        name: block.name,
+        name: wireToolName(block.name),
         arguments: parseArguments(block.arguments),
       }); break
       case 'image':
@@ -199,7 +226,7 @@ function replayedAssistant(message: Message, source: ModelMessageSource, rawStat
       case 'tool-call': return {
         type: 'toolCall',
         id: block.id,
-        name: block.name,
+        name: wireToolName(block.name),
         arguments: parseArguments(block.arguments),
         ...replay.type === 'tool-call' && replay.thoughtSignature !== undefined ? { thoughtSignature: replay.thoughtSignature } : {},
       }
