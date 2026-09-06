@@ -28,8 +28,17 @@ import type { ProjectionsBaseline } from './projection-store.ts'
 import { resolvedClientTimeZone } from '../time-zone.ts'
 import { SessionQueueMirror } from './queue-mirror.ts'
 
-/** Messages requested per history page. */
+/** Messages requested per history page (page-up / gap repair). */
 export const PAGE_MESSAGES = 50
+
+/**
+ * Messages requested for the FIRST page of a session open. Kept small so a
+ * very large session renders its recent exchanges in seconds instead of
+ * blocking on the whole tail page (the host computes a render view per tool
+ * event, so page cost scales with message count — measured 162s for 50
+ * messages on a 31 MB session). `loadOlder` pulls `PAGE_MESSAGES` on scroll.
+ */
+export const FIRST_PAGE_MESSAGES = 8
 
 /** The fetch carrier's transient cold-start timeout response. */
 function isHistoryTimeout(error: RpcError): boolean {
@@ -649,11 +658,16 @@ export class Session implements SessionFace {
     this.openState = 'loading'
     this.openError = null
     this.notifier.markDirty()
+    // Small first page for a top-level session: a very large history renders
+    // its recent exchanges fast, and loadOlder backfills the rest on scroll.
+    // Subagent transcripts keep the full page (their open is a different, less
+    // hot path and several callers assert its exact request).
+    const firstPage = this.address === undefined ? FIRST_PAGE_MESSAGES : PAGE_MESSAGES
     try {
-      let { result } = await this.history({ maxMessages: PAGE_MESSAGES })
+      let { result } = await this.history({ maxMessages: firstPage })
       if (generation !== this.openGeneration) return
       if (!result.ok && this.address === undefined && isHistoryTimeout(result.error)) {
-        result = (await this.history({ maxMessages: PAGE_MESSAGES })).result
+        result = (await this.history({ maxMessages: firstPage })).result
         if (generation !== this.openGeneration) return
       }
       if (!result.ok) {
@@ -665,7 +679,7 @@ export class Session implements SessionFace {
       // Gap detection: baseline past the window tail and liveBuffer did not cover it -> pull the tail page once more.
       const tailSeq = this.windowTailSeq()
       if (this.subscribedLastSeq !== null && tailSeq !== null && this.subscribedLastSeq > tailSeq) {
-        result = (await this.history({ maxMessages: PAGE_MESSAGES })).result
+        result = (await this.history({ maxMessages: firstPage })).result
         if (generation !== this.openGeneration) return
         if (result.ok) this.installWindow(result.value.events, result.value.hasMore, result.value.projections)
       }
