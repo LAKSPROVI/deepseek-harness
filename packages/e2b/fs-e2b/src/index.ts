@@ -478,7 +478,12 @@ export class E2BFileSystem extends FileSystem {
       throw new FsError(`cannot overwrite existing "${target.displayPath}" without reading it first`, 'FS_NOT_OBSERVED')
     }
     if (expected?.kind === 'replaceIfVersion') {
-      if (existing === undefined || entryVersion(existing) !== expected.version) {
+      // Match dsh-fs-local: a target deleted after the read gets its own phrasing so
+      // the model-facing wrapper can point at recreation rather than a bare re-read.
+      if (existing === undefined) {
+        throw new FsError(`cannot write "${target.displayPath}": the file was deleted after it was read`, 'FS_STALE_VERSION')
+      }
+      if (entryVersion(existing) !== expected.version) {
         throw new FsError(`cannot write "${target.displayPath}": file changed since it was read`, 'FS_STALE_VERSION')
       }
     }

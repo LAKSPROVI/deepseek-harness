@@ -112,6 +112,23 @@ describe('default deployment (with dsh-fs-observation-policy)', () => {
       expect(retried.isError).toBe(false)
       expect(await readFile(join(dir, 'a.txt'), 'utf8')).toBe('replaced')
     })
+
+    it('a write onto a file deleted after the read recovers by recreation', async () => {
+      await writeFile(join(dir, 'a.txt'), 'original')
+      await call('read', { file_path: 'a.txt' })
+      await rm(join(dir, 'a.txt')) // out-of-band deletion
+      const stale = await call('write', { file_path: 'a.txt', content: 'recreated' })
+      expect(stale.isError).toBe(true)
+      expect(stale.error).toMatchObject({ info: { code: 'FS_STALE_VERSION' } })
+      // The deletion case names recreation, not just a re-read.
+      expect(text(stale)).toContain('the file was deleted after it was read')
+      expect(text(stale)).toContain('retry to recreate it')
+      // Follow the remedy: re-read (records the absence), then retry.
+      expect((await call('read', { file_path: 'a.txt' })).isError).toBe(true)
+      const retried = await call('write', { file_path: 'a.txt', content: 'recreated' })
+      expect(retried.isError).toBe(false)
+      expect(await readFile(join(dir, 'a.txt'), 'utf8')).toBe('recreated')
+    })
   })
 
   describe('read', () => {

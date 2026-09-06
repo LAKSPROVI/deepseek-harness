@@ -437,7 +437,10 @@ describe('writeText', () => {
     const version = await versionOf(target)
     await unlink(path)
     await expect(fs.writeText(target, 'v2', { kind: 'replaceIfVersion', version }))
-      .rejects.toMatchObject({ code: 'FS_STALE_VERSION' })
+      .rejects.toMatchObject({
+        code: 'FS_STALE_VERSION',
+        message: expect.stringContaining('the file was deleted after it was read'),
+      })
     await expect(stat(path)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 

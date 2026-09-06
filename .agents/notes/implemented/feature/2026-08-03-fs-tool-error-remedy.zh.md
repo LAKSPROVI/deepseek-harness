@@ -13,19 +13,21 @@ Status: implemented
 `dsh-tool-fs` 拥有一个面向模型的错误包装层 `remediateFsError`（位于 `src/error.ts`），在 `write.ts` 与 `edit.ts` 中于沙箱拒绝映射之后应用。它为陈旧版本错误追加恢复指令，其余无关错误原样透传。[未读取变更的统一诊断](../bug-fix/2026-09-03-normalized-unread-fs-tool-diagnostic.zh.md)取代本记录最初对 `FS_NOT_OBSERVED` 文本的处理方式。
 
 - `FS_STALE_VERSION`（包括缺失的编辑目标——它与陈旧错误共用同一错误码）追加 `— re-read the file, then retry`。
+- 目标在读取后被删除的受防护 `write` 是可恢复情形——重新读取会记录缺失，随后重试解析为 `createIfAbsent`——因此包装层为其给出面向重建的恢复指令 `— re-read the file to record the deletion, then retry to recreate it`。包装层通过提供方稳定的删除条件字符串 `cannot write "<path>": the file was deleted after it was read` 来选择该分支，该字符串由 `dsh-fs-local` 与 `dsh-fs-e2b` 在 `replaceIfVersion` 无目标分支上发出（版本不匹配分支仍为 `file changed since it was read`）。该措辞是面向机器的条件字符串，不是面向模型的恢复指令；恢复指令仍只在包装层追加。
 
-结构化 `FsError` 错误码保持不变，使重试/权限/UI 层继续基于它路由；原始错误作为 `cause` 链入。提供方消息保持面向机器且不变。
+结构化 `FsError` 错误码保持不变，使重试/权限/UI 层继续基于它路由；原始错误作为 `cause` 链入。提供方消息保持面向机器，除上述更精确的删除条件字符串外均不变。
 
 在 `edit.ts` 中，`fs/edit-intent` waterfall（瀑布式事件）与提供方变更位于同一个 `try` 内，因此策略插件的 `FS_NOT_OBSERVED` 拒绝和提供方拒绝都会经过面向模型的包装层。
 
 ## 考虑过的替代方案
 
-- **在 `dsh-fs` / `dsh-fs-local` 的提供方消息中追加恢复指令。** 被拒绝：这些消息是面向机器的 seam 词汇，被重试、权限、UI 和面向模型的各层消费；面向模型的措辞应位于模型边界，即 `dsh-tool-fs` 已经拥有结果格式化之处（[文件系统能力 seam](../architecture/2026-06-17-filesystem-capability-seam.zh.md)）。
+- **在 `dsh-fs` / `dsh-fs-local` 的提供方消息中追加恢复指令。** 被拒绝：这些消息是面向机器的 seam 词汇，被重试、权限、UI 和面向模型的各层消费；面向模型的措辞应位于模型边界，即 `dsh-tool-fs` 已经拥有结果格式化之处（[文件系统能力 seam](../architecture/2026-06-17-filesystem-capability-seam.zh.md)）。提供方仍拥有*条件*措辞——删除恢复分支依据一条提供方短语来选择——但恢复指令本身绝不放在提供方。
 - **改为在提示词引导中加入恢复方式。** 被拒绝：失败发生在任务中途；静态指令无法可靠地影响重试决策，而错误消息恰好在模型必须行动时出现。
 - **用新的 `FsError` 错误码表达恢复指令。** 被拒绝：这两种失败对应的条件，重试层本就已经处理；拆分错误码会使相同语义采用不同路由。
+- **给删除目标情形单独的 `FsError` 错误码，使包装层按错误码而非短语分支。** 被拒绝，理由同上一条：重试和 UI 层对每个 `FS_STALE_VERSION` 的处理方式本就相同（重新读取、重试），删除情形也经由同一路径解析；新错误码会仅为措辞关心的区别而分叉路由。匹配提供方的条件字符串可将该分叉保留在拥有措辞的包装层内。
 
 ## 后果
 
-`FS_STALE_VERSION` 的模型可见文本包含追加的恢复指令。单元测试覆盖该文本、错误码保留、cause 链和无关值透传；组装后的工具路径断言恢复指令到达模型。
+`FS_STALE_VERSION` 的模型可见文本包含追加的恢复指令——当提供方报告 write 目标在读取后被删除时为面向重建的变体，否则为普通的重新读取。单元测试覆盖两种文本、错误码保留、cause 链和无关值透传；组装后的工具路径断言每种恢复指令都到达模型，且遵循面向重建的恢复指令（重新读取后重试）会重建被删除的文件。
 
-[文件系统缺失观测后续决策](../bug-fix/2026-08-09-filesystem-absence-observation.zh.md)使外部删除场景下的陈旧恢复指令能够生效。失败的重新读取仍返回 `FS_NOT_FOUND`，但会记录确认缺失：随后 edit 返回 `FS_NOT_FOUND`，不再附加陈旧恢复指令；write 则以原子 `createIfAbsent` 重试，并保留任何并发创建者写入的文件。
+[文件系统缺失观测后续决策](../bug-fix/2026-08-09-filesystem-absence-observation.zh.md)使外部删除场景下的陈旧恢复指令能够生效。失败的重新读取仍返回 `FS_NOT_FOUND`，但会记录确认缺失：随后 edit 返回 `FS_NOT_FOUND`，不再附加陈旧恢复指令；write 则以原子 `createIfAbsent` 重试，并保留任何并发创建者写入的文件。此处新增的面向重建措辞在模型必须行动的时刻把该路径讲清楚，因此在会话自身通过 shell `rm` 带外删除文件（未记录 `fs/observed` 缺失）时，模型会被告知重新读取正是解锁重试的动作，而不必自行推断。

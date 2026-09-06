@@ -181,7 +181,10 @@ export class LocalFileSystem extends FileSystem {
 
       if (expected?.kind === 'replaceIfVersion') {
         // Stale guard: the file must still exist at the version the owner observed.
-        if (!existing) throw new FsError(`cannot write "${target.displayPath}": file no longer exists`, 'FS_STALE_VERSION')
+        // The deletion case keeps its own phrasing so the model-facing wrapper can
+        // point at recreation (a re-read records the absence; the retried write then
+        // resolves to createIfAbsent) instead of a bare "re-read and retry".
+        if (!existing) throw new FsError(`cannot write "${target.displayPath}": the file was deleted after it was read`, 'FS_STALE_VERSION')
         if (existing.version !== expected.version) {
           throw new FsError(`cannot write "${target.displayPath}": file changed since it was read`, 'FS_STALE_VERSION')
         }

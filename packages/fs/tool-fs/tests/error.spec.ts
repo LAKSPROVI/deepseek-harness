@@ -17,6 +17,15 @@ describe('remediateFsError', () => {
     expect(remedied.cause).toBe(original)
   })
 
+  it('points a write onto a deleted-after-read target at recreation, not a bare re-read', () => {
+    const original = new FsError('cannot write "x": the file was deleted after it was read', 'FS_STALE_VERSION')
+    const remedied = remediateFsError(original, 'x') as FsError
+    expect(remedied).toBeInstanceOf(FsError)
+    expect(remedied.message).toBe('cannot write "x": the file was deleted after it was read — re-read the file to record the deletion, then retry to recreate it')
+    expect(remedied.code).toBe('FS_STALE_VERSION')
+    expect(remedied.cause).toBe(original)
+  })
+
   it('normalizes policy and provider FS_NOT_OBSERVED failures to one diagnostic', () => {
     const sources = [
       new FsError('edit requires reading "x" first', 'FS_NOT_OBSERVED'),
