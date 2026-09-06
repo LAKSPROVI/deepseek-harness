@@ -417,6 +417,7 @@ export function SessionNodeItem({
   const [menuOpen, setMenuOpen] = useState(false)
   const isUnread = node.unread === true
   const isCompleted = node.completed
+  const hasMarker = isUnread || isCompleted || node.customStatus !== undefined
 
   const statusSubmenu: MenuItem[] = [
     {
@@ -453,11 +454,19 @@ export function SessionNodeItem({
       icon: <IconChecklistOutline14 size={16} />,
       submenu: statusSubmenu,
     },
-    {
-      id: isUnread ? 'read' : 'unread',
-      label: isUnread ? t('menu.markRead') : t('menu.markUnread'),
-      icon: <IconChecklistOutline14 size={16} />,
-    },
+    ...(hasMarker ? [
+      {
+        id: 'read',
+        label: t('menu.markRead'),
+        icon: <IconChecklistOutline14 size={16} />,
+      },
+    ] : [
+      {
+        id: 'unread',
+        label: t('menu.markUnread'),
+        icon: <IconChecklistOutline14 size={16} />,
+      },
+    ]),
     {
       id: isCompleted ? 'incomplete' : 'completed',
       label: isCompleted ? t('menu.markIncomplete') : t('menu.markCompleted'),
@@ -609,6 +618,7 @@ export function RecentSessionNodeItem({
   const [menuOpen, setMenuOpen] = useState(false)
   const isUnread = node.unread === true
   const isCompleted = node.completed
+  const hasMarker = isUnread || isCompleted || node.customStatus !== undefined
 
   const statusSubmenu: MenuItem[] = [
     {
@@ -645,11 +655,19 @@ export function RecentSessionNodeItem({
       icon: <IconChecklistOutline14 size={16} />,
       submenu: statusSubmenu,
     },
-    {
-      id: isUnread ? 'read' : 'unread',
-      label: isUnread ? t('menu.markRead') : t('menu.markUnread'),
-      icon: <IconChecklistOutline14 size={16} />,
-    },
+    ...(hasMarker ? [
+      {
+        id: 'read',
+        label: t('menu.markRead'),
+        icon: <IconChecklistOutline14 size={16} />,
+      },
+    ] : [
+      {
+        id: 'unread',
+        label: t('menu.markUnread'),
+        icon: <IconChecklistOutline14 size={16} />,
+      },
+    ]),
     {
       id: isCompleted ? 'incomplete' : 'completed',
       label: isCompleted ? t('menu.markIncomplete') : t('menu.markCompleted'),
