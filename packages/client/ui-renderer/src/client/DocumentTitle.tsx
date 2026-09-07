@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const DEFAULT_CLIENT_TITLE = 'Harness LakatoS'
+const DEFAULT_CLIENT_TITLE = 'Harness Lakatoss'
 
 /** Props for the browser title projection. */
 export interface DocumentTitleProps {
