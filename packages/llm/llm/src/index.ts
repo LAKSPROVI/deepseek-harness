@@ -29,7 +29,23 @@ import type { LlmCallConfig, LlmCallConfigAdapterDefaults } from './call-config.
 import { HarnessError, INVALID_CREDENTIAL_CODE } from './error.ts'
 import { normalizeLlmFailure } from './adapter-failure.ts'
 import { normalizeApiKey } from './api-key.ts'
-import { contentHasImage, projectImagesForTextModel } from './content.ts'
+import { contentNeedsModalityFallback, projectUnsupportedModalities } from './content.ts'
+
+/** True for the core modality values accepted at runtime discovery boundaries. */
+function isCanonicalModelModality(value: unknown): value is ModelModality {
+  return value === 'text' || value === 'image' || value === 'file'
+}
+
+/** Preserve one discovered list while dropping unknown values and duplicates. */
+function normalizeDiscoveredModalities(value: unknown): ModelModality[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const seen = new Set<ModelModality>()
+  return value.filter((modality): modality is ModelModality => {
+    if (!isCanonicalModelModality(modality) || seen.has(modality)) return false
+    seen.add(modality)
+    return true
+  })
+}
 
 export * from './attribution.ts'
 export * from './brand.ts'
@@ -575,11 +591,13 @@ export class LlmRuntime extends Service {
     for (const model of discovered) {
       if (typeof model.id !== 'string' || model.id.length === 0 || seen.has(model.id)) continue
       seen.add(model.id)
+      const inputModalities = normalizeDiscoveredModalities(model.inputModalities)
       models.push({
         id: model.id,
         ...model.name === undefined ? {} : { name: model.name },
         ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
         ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
+        ...inputModalities === undefined ? {} : { inputModalities },
       })
     }
     return models
@@ -928,11 +946,24 @@ export class LlmRuntime extends Service {
           ? deepFreeze({ ...options, ...resolvedConfig })
           : { ...options, ...resolvedConfig }
       const projectedOptions = modelInfo.inputModalities !== undefined
-        && !modelInfo.inputModalities.includes('image')
-        && resolvedOptions.messages.some(message => contentHasImage(message.content))
+        && resolvedOptions.messages.some(message => (
+          contentNeedsModalityFallback(message.content, modelInfo.inputModalities as readonly ModelModality[])
+        ))
         ? Object.isFrozen(resolvedOptions)
-          ? deepFreeze({ ...resolvedOptions, messages: projectImagesForTextModel(resolvedOptions.messages) as Message[] })
-          : { ...resolvedOptions, messages: projectImagesForTextModel(resolvedOptions.messages) as Message[] }
+          ? deepFreeze({
+            ...resolvedOptions,
+            messages: projectUnsupportedModalities(
+              resolvedOptions.messages,
+              modelInfo.inputModalities,
+            ) as Message[],
+          })
+          : {
+            ...resolvedOptions,
+            messages: projectUnsupportedModalities(
+              resolvedOptions.messages,
+              modelInfo.inputModalities,
+            ) as Message[],
+          }
         : resolvedOptions
       const stream = dispatch(this.forAdapter(projectedOptions, adapter))
       iterator = stream[Symbol.asyncIterator]()

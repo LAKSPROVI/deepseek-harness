@@ -44,7 +44,7 @@
         maxTitleBytes: 80
 
     - id: session-title-llm
-      name: '@deepseek-ai/dsh-session-title-first-prompt-llm'
+      name: '@deepseek-ai/dsh-session-title-all-prompts-llm'
       config:
         targetWords: 5
         targetCjkCharacters: 10
@@ -291,6 +291,17 @@
 
     - id: subagent
       name: '@deepseek-ai/dsh-subagent'
+
+    # Process-wide Team domain: Remote endpoints, durable projection, roster,
+    # mailbox, task board, and continuable-child ownership. Presets choose
+    # whether their agents receive the model-facing Team tools.
+    - id: agent-team
+      name: '@deepseek-ai/dsh-agent-team'
+      config:
+        maxMembers: 9
+        maxDebateRounds: 8
+        freshProvider: spawn
+        forkProvider: fork
 
     - id: subagent-spawn-in-process
       name: '@deepseek-ai/dsh-subagent-spawn-in-process'

@@ -188,6 +188,9 @@ describe('createFixtureApi', () => {
     expect(catalog.result.value.groups.map(group => group.name)).toEqual(['DeepSeek', 'OpenAI'])
     expect(catalog.result.value.groups[0]?.models.map(model => model.id))
       .toEqual(['deepseek-v4-flash', 'deepseek-v4-pro'])
+    expect(catalog.result.value.currentModel).toMatchObject({
+      id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash',
+    })
 
     const selected = await api.sessions.selectModel(req({
       sessionId,
@@ -195,7 +198,10 @@ describe('createFixtureApi', () => {
       model: 'gpt-5',
     }))
     if (!selected.result.ok) throw new Error('selection failed')
-    expect(selected.result.value.selected).toEqual({ provider: 'openai', model: 'gpt-5' })
+    expect(selected.result.value).toMatchObject({
+      selected: { provider: 'openai', model: 'gpt-5' },
+      currentModel: { id: 'gpt-5', name: 'GPT-5' },
+    })
     const history = await api.sessions.history(req({ sessionId }))
     if (!history.result.ok) throw new Error('history failed')
 

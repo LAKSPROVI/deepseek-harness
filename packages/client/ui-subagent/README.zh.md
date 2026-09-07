@@ -8,6 +8,10 @@ Web subagent 功能 owner：向 `conversation.session.header.lineage` 贡献当�
 
 one-shot child 始终选用只读编辑器，并将 transcript（文本记录）说明为已完成的执行记录。可继续 child 仅在其确切 parent 不可用且 child 未在运行时选用只读编辑器，并以文案说明恢复路径；此类 child 仍在运行期间，selector 会让位给普通编辑器——其输入区与 Send 操作被禁用，但独立的 Stop 保持可用，停止后只读替代恢复。确切 parent 存活时，可继续 child 保留普通输入 chrome，其会话通过 `subagent.prompt` 路由提示词：child 运行期间输入和 Send 保持可用，因为每条后续消息都会进入 child 的 FIFO inbox，而独立的 Stop 经由 `subagent.interrupt` 路由。本包绝不接收宿主上下文，也不调用面向模型的工具。目录与编辑器行为由 [Web subagent 对话 Agent Note](../../../.agents/notes/implemented/feature/2026-07-27-web-subagent-conversations.zh.md) 与[当前轮次中断 Agent Note](../../../.agents/notes/implemented/feature/2026-08-06-continuable-subagent-interrupt.zh.md) 规定。
 
+## Agent Teams Web view
+
+`conversation.view` contribution 显示为 **Equipe de agentes**，并消费 `agentTeam` Session projection、Lead Session 的 read-only `session.models` directory，以及生成式 `agentTeams` Remote action。**Criar integrante** 提供关联的 provider／model selector：继承选项会省略两个 route 字段，显式 provider 则必须选择该 provider 公布的一个 model。catalog 整体失败时仍可继承创建并可 retry；单个 provider 失败不会隐藏成功加载的 group。其余巴西葡萄牙语界面覆盖 **Integrantes**（每张 teammate 卡片都带有 **💬 Orientar** 快捷按钮，可打开预先聚焦到该成员的 guidance 表单）、**Tarefas**（侧边栏表单可创建带 subject、description 和可选 write scope 的任务，List／Kanban 切换按 pending／in-progress／completed 分栏展示任务）、**Debate**（含一键将 debate synthesis、发言 transcript 与 transition history 复制到剪贴板的 Markdown 导出）、guidance、当前 turn interrupt、protocol transition、loading state、本地错误、帮助和无障碍 label。稳定 protocol value 在线上协议与持久化中继续使用英语；组件只翻译 presentation，并原样保留 name、topic、note、description、persona 与 provider diagnostic。[用户指南](../../../docs/user/guide/agent-teams.zh.md)负责点击流程，[Agent Teams 子系统](../../../docs/subsystems/agent-team.zh.md)负责 projection 与 composition map。
+
 普通侧边栏会省略带 subagent origin 的会话行，因此 parent 页头目录是它们的导航入口。普通 fork 仍保留在侧边栏中。
 
 `@` source 仍然刻意保持独立且惰性。候选是从 `ctx.sessions.list` 零 RPC 得到的运行中 child；pick 会插入字面文本 `@label `，codec 投影为 `@label`。它不参与命令裁决，也不会把 label 解析成继续执行地址。

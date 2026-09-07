@@ -5,9 +5,10 @@ import type {} from '@deepseek-ai/dsh-attachment'
 // Activates the webServer Context merge used below.
 import type { WebRoute, WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
 import { toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
-import { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
+import { API_PATH, FILE_TRANSFER_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
 import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from './http-bridge.ts'
 import { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
+import { handleRawFileTransfer } from './raw-file-route.ts'
 import { HostConnectionService } from './rpc-host.ts'
 import { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink.ts'
 
@@ -21,24 +22,25 @@ export type {
 } from './rpc.ts'
 export { HostConnectionService } from './rpc-host.ts'
 
-export { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
+export { API_PATH, FILE_TRANSFER_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'client-connection'
 
-/** Headroom for RPC JSON fields around aggregate base64 image payloads. */
+/** Headroom for RPC JSON fields around aggregate base64 attachment payloads. */
 const REQUEST_ENVELOPE_HEADROOM_BYTES = 1024 * 1024
 
-function assertImageBodyCapacity(ctx: Context, maxRequestBodyBytes: number): void {
+function assertAttachmentBodyCapacity(ctx: Context, maxRequestBodyBytes: number): void {
   const attachments = ctx.get('attachments')
   if (attachments === undefined) return
-  const requiredImageBodyBytes = Math.ceil(
-    attachments.imageLimits.maxMessageImageBytes * 4 / 3,
-  ) + REQUEST_ENVELOPE_HEADROOM_BYTES
-  if (maxRequestBodyBytes < requiredImageBodyBytes) {
+  // Generic files use the raw streaming route and never enter this buffered
+  // JSON/base64 carrier. Images remain encoded in prompt RPC requests.
+  const requiredBodyBytes = Math.ceil(attachments.imageLimits.maxMessageImageBytes * 4 / 3)
+    + REQUEST_ENVELOPE_HEADROOM_BYTES
+  if (maxRequestBodyBytes < requiredBodyBytes) {
     throw new Error(
       `client-connection maxRequestBodyBytes (${String(maxRequestBodyBytes)}) must be at least `
-      + `${String(requiredImageBodyBytes)} for the configured aggregate image limit`,
+      + `${String(requiredBodyBytes)} for the configured aggregate attachment limits`,
     )
   }
 }
@@ -57,7 +59,7 @@ export interface ConnectionConfig {
    * that is not a bare, canonical authority fails the plugin load.
    */
   trustedHosts?: string[]
-  /** Maximum buffered JSON body for every `/api` request. Default: 300 MiB. */
+  /** Maximum buffered JSON body for every `/api` request. Default: 600 MiB. */
   maxRequestBodyBytes?: number
 }
 
@@ -134,7 +136,7 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
   // Config boundary: a malformed entry fails the load loudly here rather than
   // silently authorizing its hostname prefix at request time.
   for (const entry of trustedHosts) assertTrustedAuthority(entry)
-  if (ctx.get('apiProxy') !== undefined) assertImageBodyCapacity(ctx, maxRequestBodyBytes)
+  if (ctx.get('apiProxy') !== undefined) assertAttachmentBodyCapacity(ctx, maxRequestBodyBytes)
   const connection = new HostConnectionService(ctx, trustedHosts)
   const fetchHandler = connection.createSharedFetchHandler(API_PATH, {
     async fetch(request) {
@@ -158,6 +160,24 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
       return toFetchHandler(apiProxy).fetch(request)
     },
   })
+  const fileRoute: WebRoute = {
+    kind: 'exact',
+    path: FILE_TRANSFER_PATH,
+    handler: async (req, res) => {
+      if (!isTrustedApiRequest(req, trustedHosts)) {
+        res.writeHead(403)
+        res.end('forbidden')
+        return
+      }
+      const apiProxy = ctx.get('apiProxy')
+      if (apiProxy === undefined) {
+        res.writeHead(404)
+        res.end('not found')
+        return
+      }
+      await handleRawFileTransfer(req, res, apiProxy)
+    },
+  }
   const route: WebRoute = {
     kind: 'prefix',
     path: API_PATH,
@@ -171,8 +191,9 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
     },
   }
   ctx.effect(() => ctx.webServer.register(route), 'client-connection: /api route')
+  ctx.effect(() => ctx.webServer.register(fileRoute), 'client-connection: raw file route')
   ctx.inject(['apiProxy'], (apiCtx) => {
-    assertImageBodyCapacity(apiCtx, maxRequestBodyBytes)
+    assertAttachmentBodyCapacity(apiCtx, maxRequestBodyBytes)
     const downlinks = new WebSocketDownlinks(apiCtx.apiProxy)
     const registerDownlink = (
       path: string,

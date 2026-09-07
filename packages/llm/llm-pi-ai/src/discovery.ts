@@ -59,6 +59,34 @@ interface ListingEntry {
   context_length?: unknown
   max_tokens?: unknown
   max_output_tokens?: unknown
+  /** 9Router-owned metadata; all other capability namespaces are ignored. */
+  x_9r?: unknown
+}
+
+/** A JSON object, excluding arrays and null. */
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+/**
+ * Input modalities promoted by 9Router's functional probes. Claims and every
+ * non-proved state are inconclusive, so absence means unknown rather than a
+ * negative capability. The namespace is read narrowly to keep agent-level
+ * evidence such as `agent_surface_v1` out of model input metadata.
+ */
+function promotedInputModalities(namespace: unknown): LlmDiscoveredModel['inputModalities'] {
+  const capabilities = record(record(namespace)?.['capabilities_v1'])
+  const input = record(capabilities?.['input'])
+  const proved = (modality: 'image' | 'file'): boolean =>
+    record(record(input?.[modality])?.['probe'])?.['state'] === 'proved'
+  const image = proved('image')
+  const file = proved('file')
+  if (image && file) return ['text', 'image', 'file']
+  if (image) return ['text', 'image']
+  if (file) return ['text', 'file']
+  return undefined
 }
 
 /** A positive integer field of a listing entry, or `undefined` when absent or unusable. */
@@ -151,11 +179,13 @@ function readListing(body: unknown): LlmDiscoveredModel[] {
     const name = label(entry?.name, entry?.display_name)
     const contextWindow = capacity(entry?.context_window, entry?.context_length)
     const maxTokens = capacity(entry?.max_output_tokens, entry?.max_tokens)
+    const inputModalities = promotedInputModalities(entry?.x_9r)
     models.push({
       id,
       ...name === undefined ? {} : { name },
       ...contextWindow === undefined ? {} : { contextWindow },
       ...maxTokens === undefined ? {} : { maxTokens },
+      ...inputModalities === undefined ? {} : { inputModalities },
     })
   }
   return models

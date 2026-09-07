@@ -6,16 +6,17 @@
  * @module @deepseek-ai/dsh-subagent/run-settlement
  */
 
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { JobOutcome } from '@deepseek-ai/dsh-jobs'
 import type { SubagentResult, SubagentRun } from './types.ts'
 
 /** Flatten a child's final output blocks to the task's final text. */
 function finalText(blocks: ContentBlock[]): string {
-  return blocks
-    .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
-    .map(block => block.text)
-    .join('')
+  return blocks.flatMap((block) => {
+    if (block.type === 'text') return [block.text]
+    if (block.type === 'file') return [textOnlyFileText(block.attachment)]
+    return []
+  }).join('')
 }
 
 /** Render a failed stop reason with optional provider-authored detail. */

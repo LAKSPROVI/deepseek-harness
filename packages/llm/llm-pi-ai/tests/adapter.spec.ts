@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { AttachmentId, AttachmentStore, ImageVariantId } from '@deepseek-ai/dsh-attachment'
 import type {
+  FileAttachmentRef,
   ImageAttachmentLimits,
   ImageAttachmentRef,
   ImageRequestPolicy,
@@ -9,7 +10,7 @@ import type {
   SaveImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
-import LlmRuntime, { createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, userAgent } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, textOnlyFileText, textOnlyImageText, userAgent } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -30,6 +31,13 @@ const IMAGE_REF: ImageAttachmentRef = {
   bytes: 1,
   width: 1,
   height: 1,
+}
+
+const FILE_REF: FileAttachmentRef = {
+  attachmentId: AttachmentId(`sha256:${'f'.repeat(64)}`),
+  mediaType: 'application/pdf',
+  bytes: 7,
+  name: 'brief.pdf',
 }
 
 async function harness(baseURL: string, overrides: Record<string, unknown> = {}): Promise<Context> {
@@ -73,7 +81,7 @@ describe('PiAiAdapter provider routing', () => {
     })
     expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
     expect(result.finish).toEqual({ kind: 'stop' })
-    expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 1 })
+    expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 1, reasoningTokens: 0 })
     expect(server.paths).toEqual(['/chat/completions'])
   })
 
@@ -616,6 +624,78 @@ describe('provider profile lifecycle', () => {
     expect(server.requests).toHaveLength(1)
   })
 
+  it('applies the verified GPT-5.6 effort profile on any configured 9Router route', async () => {
+    vi.stubEnv('PI_TEST_KEY', 'test-key')
+    const levels = ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+    const server = await mockServer(['default', ...levels, 'minimal'].map(() => ({ events: textEvents })))
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        '9router': {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-completions',
+          baseURL: `${server.url}/v1`,
+          models: [
+            { id: 'kr/gpt-5.6-sol-thinking-agentic' },
+            { id: 'other-model', reasoningEfforts: { minimal: 'minimal' } },
+          ],
+        },
+      },
+    })
+
+    const info = await ctx.llm.resolveModelInfo('9router', 'kr/gpt-5.6-sol-thinking-agentic')
+    expect(info.reasoning).toEqual({
+      efforts: [
+        { id: ReasoningEffortId('off'), name: 'Off' },
+        { id: ReasoningEffortId('low'), name: 'Low' },
+        { id: ReasoningEffortId('medium'), name: 'Medium' },
+        { id: ReasoningEffortId('high'), name: 'High' },
+        { id: ReasoningEffortId('xhigh'), name: 'XHigh' },
+        { id: ReasoningEffortId('max'), name: 'Max' },
+      ],
+      defaultEffort: ReasoningEffortId('off'),
+    })
+    expect((await ctx.llm.resolveModelInfo('9router', 'other-model')).reasoning?.efforts.map(effort => effort.id))
+      .toEqual([ReasoningEffortId('minimal')])
+
+    await assemble(ctx, {
+      provider: '9router',
+      model: 'kr/gpt-5.6-sol-thinking-agentic',
+      messages: [],
+    })
+    for (const level of levels) {
+      await assemble(ctx, {
+        provider: '9router',
+        model: 'kr/gpt-5.6-sol-thinking-agentic',
+        reasoningEffort: ReasoningEffortId(level),
+        messages: [],
+      })
+    }
+    expect(server.requests.map(request => (request as { reasoning_effort?: string }).reasoning_effort))
+      .toEqual(['none', 'none', 'low', 'medium', 'high', 'xhigh', 'max'])
+
+    await assemble(ctx, {
+      provider: '9router',
+      model: 'other-model',
+      reasoningEffort: ReasoningEffortId('minimal'),
+      messages: [],
+    })
+    expect(server.requests.at(-1)).toMatchObject({ reasoning_effort: 'minimal' })
+
+    const minimal = await assemble(ctx, {
+      provider: '9router',
+      model: 'kr/gpt-5.6-sol-thinking-agentic',
+      reasoningEffort: ReasoningEffortId('minimal'),
+      messages: [],
+    })
+    expect(minimal.finish).toMatchObject({
+      kind: 'error',
+      failure: { code: 'UNSUPPORTED_REASONING_EFFORT' },
+    })
+    expect(server.requests).toHaveLength(levels.length + 2)
+  })
+
   it('dispatches the compat-switched dialect on a declared route', async () => {
     vi.stubEnv('PI_TEST_KEY', 'test-key')
     const server = await mockServer([{ events: textEvents }, { events: textEvents }])
@@ -872,44 +952,30 @@ describe('provider profile lifecycle', () => {
     expect(new LlmError('x', 'X')).toBeInstanceOf(Error)
   })
 
-  it('rejects unsupported or unresolved image input before provider I/O', async () => {
-    const adapter = adapterOf({ openai: {}, deepseek: {} })
-    const drain = async (options: Parameters<PiAiAdapter['stream']>[0]): Promise<void> => {
-      for await (const _chunk of adapter.stream(options)) { /* drain */ }
-    }
+  it('projects unsupported attachments before direct adapter context conversion', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const adapter = adapterOf({
+      deepseek: { baseURL: server.url },
+    })
 
-    await expect(drain({
+    for await (const _chunk of adapter.stream({
       provider: 'deepseek',
       model: 'deepseek-v4-flash',
       messages: [createUserMessage({
-        content: [{ type: 'image', attachment: IMAGE_REF }],
+        content: [
+          { type: 'image', attachment: IMAGE_REF },
+          { type: 'file', attachment: FILE_REF },
+        ],
         source: { kind: 'plugin', plugin: 'test' },
       })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
-    await expect(drain({
-      provider: 'openai',
-      model: 'gpt-4.1',
-      messages: [createUserMessage({
-        content: [{ type: 'image', attachment: IMAGE_REF }],
-        source: { kind: 'plugin', plugin: 'test' },
-      })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
-    await expect(drain({
-      provider: 'openai',
-      model: 'gpt-4.1',
-      messages: [createUserMessage({
-        content: [{
-          type: 'tool-result',
-          toolCallId: 'call-outer' as never,
-          content: [{
-            type: 'tool-result',
-            toolCallId: 'call-inner' as never,
-            content: [{ type: 'image', attachment: IMAGE_REF }],
-          }],
-        }],
-        source: { kind: 'plugin', plugin: 'test' },
-      })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
+    })) { /* drain */ }
+
+    expect(server.requests[0]).toMatchObject({
+      messages: [{
+        role: 'user',
+        content: `${textOnlyImageText(IMAGE_REF)}${textOnlyFileText(FILE_REF)}`,
+      }],
+    })
   })
 
   it('validates profiles at the shared resolver boundary', () => {

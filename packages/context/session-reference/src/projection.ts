@@ -2,7 +2,7 @@
 
 import { isCompactCheckpointSource } from '@deepseek-ai/dsh-compaction'
 import type { SessionSurfaceSnapshot } from '@deepseek-ai/dsh-session-query'
-import { assertNever } from '@deepseek-ai/dsh-llm'
+import { assertNever, textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import { TextRetainer } from '@deepseek-ai/dsh-output-retention'
 import { stringifyTagSafeJson } from './serialization.ts'
 import type { ReferencedConversationItem } from './types.ts'
@@ -137,8 +137,12 @@ export function retainReferencedSession(
   }
 }
 
-function textContent(content: readonly { type: string; text?: string }[]): string {
-  return content.flatMap(block => block.type === 'text' && typeof block.text === 'string' ? [block.text] : []).join('\n')
+function textContent(content: readonly ContentBlock[]): string {
+  return content.flatMap((block) => {
+    if (block.type === 'text') return [block.text]
+    if (block.type === 'file') return [textOnlyFileText(block.attachment)]
+    return []
+  }).join('\n')
 }
 
 function truncateWithNotice(text: string, maxOutputBytes: number): { text: string; omittedBytes: number } {

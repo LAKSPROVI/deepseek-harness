@@ -40,6 +40,11 @@ export interface ISessions {
    */
   open(id: SessionId): void
   /**
+   * Explicitly mark a session as unread (re-arming the completion / unread reminder dot).
+   * @param id - session id to mark unread.
+   */
+  markUnread(id: SessionId): void
+  /**
    * Open a healthy catalog child through its exact direct-parent address.
    * @param address - catalog-derived parent and child ids.
    */

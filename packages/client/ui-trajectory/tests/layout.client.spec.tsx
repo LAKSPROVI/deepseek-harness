@@ -8,6 +8,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import type {
   ConversationLocation, ConversationSnapshot, RequestView,
 } from '@deepseek-ai/dsh-client-runtime/client'
+import { textOnlyFileText } from '@deepseek-ai/dsh-llm/content'
 import { TrajectoryGroupHeader } from '../src/client/TrajectoryGroupHeader.tsx'
 import { TrajectoryTurn } from '../src/client/TrajectoryTurn.tsx'
 import { TrajectoryTurnHeader } from '../src/client/TrajectoryTurnHeader.tsx'
@@ -16,6 +17,14 @@ import {
 } from '../src/client/layout.ts'
 
 afterEach(cleanup)
+
+const FILE_REF = {
+  attachmentId: 'sha256:0123456789abcdef' as never,
+  mediaType: 'application/pdf',
+  bytes: 42,
+  name: 'brief.pdf',
+} as const
+const FILE_TEXT = textOnlyFileText(FILE_REF)
 
 describe('TrajectoryTurnHeader', () => {
   it('renders Turn N and the four metric column labels', () => {
@@ -89,6 +98,92 @@ describe('deriveTrajectoryLayout', () => {
       previewMarkdown: '{"command":"ls"}',
     })
     expect(tool?.timeSeconds).toBe(1.3)
+  })
+
+  it('projects deterministic file metadata through message and assistant records', () => {
+    const nodes = [
+      {
+        kind: 'user', seq: 1, time: 1_000,
+        content: [
+          { type: 'file', attachment: FILE_REF },
+          { type: 'text', text: 'after file' },
+        ],
+        source: null,
+      },
+      {
+        kind: 'assistant', seq: 2, time: 2_000, turn: 1, step: 1,
+        blocks: [{ kind: 'other', block: { type: 'file', attachment: FILE_REF } }],
+      },
+    ] as unknown as ConversationSnapshot['nodes']
+
+    const cells = deriveTrajectoryLayout({ nodes, partial: null, runningCalls: [] })[0]
+      ?.groups.flatMap(group => group.cells) ?? []
+    const user = cells.find(cell => cell.kind === 'user')
+    const assistant = cells.find(cell => cell.kind === 'message')
+
+    expect(user).toMatchObject({
+      previewMarkdown: FILE_TEXT,
+      inputDetail: `${FILE_TEXT}\nafter file`,
+      sourceBlocks: [
+        { type: 'file', content: FILE_TEXT },
+        { type: 'text', content: 'after file' },
+      ],
+    })
+    expect(assistant).toMatchObject({
+      previewMarkdown: FILE_TEXT,
+      outputDetail: FILE_TEXT,
+      sourceBlocks: [{ type: 'file', content: FILE_TEXT }],
+    })
+  })
+
+  it('projects file metadata through tool results and compaction summaries', () => {
+    const nodes = [
+      {
+        kind: 'assistant', seq: 1, time: 1_000, turn: 1, step: 1,
+        blocks: [{ kind: 'tool-call', callId: 'c1', name: 'read', argsRaw: '{}' }],
+      },
+      {
+        kind: 'tool-result', seq: 2, time: 2_000, callId: 'c1',
+        call: { name: 'read', argsRaw: '{}' }, callTime: 1_100,
+        content: [
+          { type: 'file', attachment: FILE_REF },
+          { type: 'text', text: 'after file' },
+        ],
+        isError: false, callView: null, resultView: null,
+      },
+    ] as unknown as ConversationSnapshot['nodes']
+    const compaction: RequestView = {
+      purpose: 'compaction',
+      startSeq: 3,
+      turn: null,
+      step: 0,
+      startedAt: 3_000,
+      completedAt: 4_000,
+      status: 'complete',
+      summary: [{ type: 'file', attachment: FILE_REF }],
+    }
+
+    const turns = deriveTrajectoryLayout({
+      nodes, partial: null, runningCalls: [], requests: [compaction],
+    })
+    const cells = turns.flatMap(turn => turn.groups.flatMap(group => group.cells))
+    const tool = cells.find(cell => cell.kind === 'tool')
+    const compacted = cells.find(cell => cell.kind === 'compacted')
+
+    expect(tool).toMatchObject({
+      result: '',
+      resultPreviewMarkdown: FILE_TEXT,
+      outputDetail: `${FILE_TEXT}\nafter file`,
+      outputBlocks: [
+        { type: 'file', content: FILE_TEXT },
+        { type: 'text', content: 'after file' },
+      ],
+    })
+    expect(compacted).toMatchObject({
+      previewMarkdown: FILE_TEXT,
+      outputDetail: FILE_TEXT,
+      outputBlocks: [{ type: 'file', content: FILE_TEXT }],
+    })
   })
 
   it('adds runningCalls not already present and leaves their time blank', () => {

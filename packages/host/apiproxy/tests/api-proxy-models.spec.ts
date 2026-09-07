@@ -215,7 +215,14 @@ describe('Web session model selection', () => {
     } as never, { surfaceOp: 'append' })
     expect(expectValue(await api.sessions.selectModel(request({
       sessionId, provider: 'text-only', model: 'plain',
-    }))).selected).toEqual({ provider: 'text-only', model: 'plain' })
+    })))).toEqual({
+      selected: { provider: 'text-only', model: 'plain' },
+      currentModel: { id: 'plain', name: 'plain', inputModalities: ['text'] },
+    })
+    expect(expectValue(await api.sessions.models(request({ sessionId })))).toMatchObject({
+      current: { provider: 'text-only', model: 'plain' },
+      currentModel: { id: 'plain', name: 'plain', inputModalities: ['text'] },
+    })
 
     agent.session.append('user/message', {
       id: 'summary', role: 'user', source: { kind: 'plugin', plugin: 'compact' },
@@ -229,7 +236,7 @@ describe('Web session model selection', () => {
     } as never)
     expect(expectValue(await api.sessions.selectModel(request({
       sessionId, provider: 'text-only', model: 'plain',
-    }))).selected).toEqual({ provider: 'text-only', model: 'plain' })
+    }))).currentModel.inputModalities).toEqual(['text'])
     await ctx.fiber.dispose()
   })
 
@@ -281,6 +288,13 @@ describe('Web session model selection', () => {
       model: 'private-preview',
       reasoningEffort: 'max',
     })
+    expect(catalog.currentModel).toEqual({
+      id: 'private-preview',
+      name: 'private-preview',
+      reasoning: REASONING,
+    })
+    expect(catalog.groups.flatMap(group => group.models.map(model => model.id)))
+      .not.toContain('private-preview')
     expect(catalog.groups).toEqual([{
       id: 'deepseek-official',
       name: 'DeepSeek',
@@ -409,6 +423,100 @@ describe('Web session model selection', () => {
     stored = { provider: 'duplicate', model: 'same' }
     expect(expectValue(await api.sessions.models(request({ sessionId }))).current)
       .toEqual({ provider: 'deepseek-official', model: 'deepseek-chat' })
+    await ctx.fiber.dispose()
+  })
+
+  it('drops an unsupported logged effort when the current model exposes no reasoning levels', async () => {
+    const { ctx, sessionId } = await harness({
+      provider: 'text-only',
+      model: 'plain',
+      reasoningEffort: ReasoningEffortId('off'),
+    })
+    registerTextOnly(ctx)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+
+    const catalog = expectValue(await api.sessions.models(request({ sessionId })))
+    expect(catalog.current).toEqual({
+      provider: 'text-only',
+      model: 'plain',
+    })
+    await ctx.fiber.dispose()
+  })
+
+  it('repairs an unsupported logged effort before accepting a direct prompt', async () => {
+    const { ctx, agent, sessionId } = await harness({
+      provider: 'deepseek-official',
+      model: 'deepseek-chat',
+      reasoningEffort: ReasoningEffortId('medium'),
+    })
+    Object.assign(agent, { followup: vi.fn() })
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+
+    const accepted = await api.sessions.prompt(request({
+      sessionId,
+      mode: 'queue' as const,
+      content: [{ type: 'text' as const, text: 'hello' }],
+    }))
+    expect(accepted.result.ok).toBe(true)
+    await ctx.systemPrompt.assemble()
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request',
+      { turn: 1, step: 0, signal: new AbortController().signal },
+      () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+    )).resolves.toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-chat',
+      reasoningEffort: 'high',
+    })
+    await ctx.fiber.dispose()
+  })
+
+  it('does not overwrite a concurrent accepted selection while normalizing a stale effort', async () => {
+    const { ctx, sessionId } = await harness({
+      provider: 'deepseek-official',
+      model: 'deepseek-chat',
+      reasoningEffort: ReasoningEffortId('medium'),
+    })
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+    const started = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    const resolveModelInfo = ctx.llm.resolveModelInfo.bind(ctx.llm)
+    let paused = false
+    vi.spyOn(ctx.llm, 'resolveModelInfo').mockImplementation(async (provider, model, signal) => {
+      if (!paused && provider === 'deepseek-official' && model === 'deepseek-chat') {
+        paused = true
+        started.resolve(undefined)
+        await release.promise
+      }
+      return resolveModelInfo(provider, model, signal)
+    })
+
+    const catalogPending = api.sessions.models(request({ sessionId }))
+    await started.promise
+    const selected = expectValue(await api.sessions.selectModel(request({
+      sessionId,
+      provider: 'deepseek-official',
+      model: 'deepseek-reasoner',
+      reasoningEffort: 'max',
+    })))
+    release.resolve(undefined)
+
+    expect(selected.selected).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-reasoner',
+      reasoningEffort: 'max',
+    })
+    expect(expectValue(await catalogPending).current).toEqual(selected.selected)
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current).toEqual(selected.selected)
     await ctx.fiber.dispose()
   })
 

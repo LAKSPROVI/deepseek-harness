@@ -136,6 +136,25 @@ describe('chain semantics', () => {
     expect(reminders(agent)).toHaveLength(1)
   })
 
+  it('a name the model mutates between attempts stays one chain', async () => {
+    // A model that keeps getting a name wrong decorates it rather than repeats
+    // it: a denial naming `run_code_ide` came back as `run_code_ide_ide`, and a
+    // key on the raw name read that as a fresh call, resetting the counter that
+    // exists to catch the loop. Same segments, same arguments, one chain.
+    const ctx = await harness({ thresholds: [2] })
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'probe_ide', { q: 1 }),
+      toolCallResponse('c2', 'probe_ide_ide', { q: 1 }),
+      textResponse('done'),
+    ])
+    ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    expect(reminders(agent)).toHaveLength(1)
+  })
+
   it('excluded calls are transparent: they neither count nor reset', async () => {
     const ctx = await harness({ exclude: ['other'] })
     const adapter = new MockAdapter([

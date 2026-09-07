@@ -1,16 +1,107 @@
-# 持久图片附件
+# 持久附件
 
 [English](attachment.md) | 中文
 
-附件 seam 将二进制图片的所有权与会话日志分离。生产方把经过校验的编码字节交给 [`ctx.attachments`](#ctxattachments--attachmentstore-abstract-seam)；只有对象完成持久化后，该服务才会发布不可变的内容寻址引用。会话事件和模型可见的 `ImageBlock` 包含该引用及其元数据，绝不包含浏览器对象 URL、宿主临时路径、提供方 URL 或 base64 数据。
+附件 seam 将二进制所有权与会话日志分离。生产方把经过校验的字节交给 [`ctx.attachments`](#ctxattachments--attachmentstore-abstract-seam)；只有对象完成持久化后，该服务才会发布不可变的内容寻址引用。会话事件和模型可见的 `ImageBlock` 或 `FileBlock` 包含该引用及其元数据，绝不包含浏览器对象 URL、宿主临时路径、提供方 URL 或 base64 数据。
 
-未发送的浏览器草稿可以保留在内存中，原生客户端也可以将其暂存于操作系统临时存储。宿主接受用户消息后，会先把消息中的图片移到 `<DSH_HOME>/attachments/v1` 下，再追加用户事件。结构化模型图片输出遵循同样的先持久化、后追加事件规则。
+未发送的浏览器草稿可以保留在内存中，原生客户端也可以将其暂存于操作系统临时存储。宿主接受用户消息后，会先把附件移到 `<DSH_HOME>/attachments/v1` 下，再追加用户事件。图片使用经过校验的光栅归一化与请求版本；通用文件保留精确的不透明字节。
 
 来源：[`packages/attachment/attachment/src/types.ts`](../../packages/attachment/attachment/src/types.ts)
 
 ## 标识与经过校验的元数据
 
 `AttachmentId` 是带类型标记的不透明字符串。本地后端目前生成 `sha256:<digest>`，但消费方既不能解析这种表示，也不能据此派生文件系统路径。
+
+```ts type-equiv
+/** Durable, serializable reference to one immutable opaque file. */
+interface FileAttachmentRef {
+  /** Opaque content-addressed identifier; never a filesystem path or bearer URL. */
+  attachmentId: AttachmentId
+  /** Normalized declared media type, or `application/octet-stream`. */
+  mediaType: string
+  /** Exact stored byte length. */
+  bytes: number
+  /** Optional sanitized display name; storage never interprets it as a path. */
+  name?: string
+}
+```
+
+```ts type-equiv
+/** Deployment-resolved limits for generic-file admission. */
+interface FileAttachmentLimits {
+  /** Maximum exact bytes accepted for one file. */
+  maxFileBytes: number
+  /** Maximum generic-file count accepted in one message. */
+  maxFilesPerMessage: number
+  /** Maximum aggregate generic-file bytes accepted in one message. */
+  maxMessageFileBytes: number
+}
+```
+
+```ts type-equiv
+/** Base64-encoded generic-file upload accompanying one wire request. */
+interface EncodedFileAttachment {
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Canonical base64 encoding of the exact file bytes. */
+  data: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+```
+
+```ts type-equiv
+/** Session-scoped proof that a raw upload produced one immutable file. */
+interface UploadedFileAttachment {
+  /** Opaque integrity proof over the scope and complete attachment reference. */
+  uploadId: string
+  /** Exact reference authenticated by `uploadId`; callers cannot replace its metadata. */
+  attachment: FileAttachmentRef
+}
+```
+
+```ts type-equiv
+/** Request to validate and durably commit one opaque file. */
+interface SaveFileAttachment {
+  /** Exact file bytes; providers must not execute, decode, or extract them. */
+  data: Uint8Array
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+```
+
+```ts type-equiv
+/** Streaming request to validate and durably commit one opaque file. */
+interface SaveFileAttachmentStream {
+  /** Exact file bytes in producer order; Node.js `Readable` satisfies this interface. */
+  data: AsyncIterable<Uint8Array>
+  /** Optional exact byte count checked before publication. */
+  expectedBytes?: number
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+```
+
+```ts type-equiv
+/** Stored opaque bytes returned after reference and digest verification. */
+interface StoredFileAttachment {
+  ref: FileAttachmentRef
+  data: Uint8Array
+}
+```
+
+```ts type-equiv
+/** Single-use verified stream over one stored opaque file. */
+interface StoredFileAttachmentStream {
+  ref: FileAttachmentRef
+  /** Bytes are integrity-verified incrementally; corruption rejects iteration before successful completion. */
+  data: AsyncIterable<Uint8Array>
+}
+```
 
 ```ts type-equiv
 /** Raster image formats accepted by the version-one attachment path. */
@@ -142,6 +233,81 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 Immutable binary attachment service. Implementations validate bytes before publishing a reference.
 
 ```ts cordis-catalog
+/**
+ * Validate one opaque file without persisting it.
+ * @param input - exact bytes and untrusted display metadata.
+ * @returns completion after the complete file admission policy succeeds.
+ */
+validateFile(input: SaveFileAttachment): Promise<void>
+
+/**
+ * Validate count, individual bytes, and aggregate bytes for durable file references.
+ * @param refs - complete ordered file-reference batch.
+ */
+validateFileReferences(refs: readonly FileAttachmentRef[]): void
+
+/**
+ * Validate one ordered file batch without persisting any member.
+ * @param inputs - opaque files in owning-message order.
+ * @returns completion after batch and per-file validation succeeds.
+ */
+async validateFiles(inputs: readonly SaveFileAttachment[]): Promise<void>
+
+/**
+ * Validate the complete ordered file batch before committing any member.
+ * @param inputs - opaque files in owning-message order.
+ * @returns durable references in the same order after every member succeeds.
+ */
+async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]>
+
+/**
+ * Validate and durably commit one opaque file without interpreting its bytes.
+ * @param input - exact bytes and untrusted display metadata.
+ * @returns the immutable content-addressed file reference.
+ */
+saveFile(input: SaveFileAttachment): Promise<FileAttachmentRef>
+
+/**
+ * Read one opaque file and verify its digest and exact byte length.
+ * @param ref - durable reference from trusted session state.
+ * @param signal - optional cancellation for backend read and verification work.
+ * @returns exact verified bytes and the supplied reference.
+ */
+readFile(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachment>
+
+/**
+ * Stream one opaque file into durable storage and bind its receipt to an owning scope.
+ * @param scope - opaque owner identity that must accompany later admission.
+ * @param input - ordered byte source and untrusted display metadata.
+ * @param signal - optional cancellation for source consumption, staging, and publication.
+ * @returns a scoped proof and immutable reference after complete publication.
+ */
+saveFileStream( scope: string, input: SaveFileAttachmentStream, signal?: AbortSignal, ): Promise<UploadedFileAttachment>
+
+/**
+ * Verify a raw-upload receipt for its exact owner and immutable metadata.
+ * @param scope - opaque owner identity supplied when the upload was created.
+ * @param upload - proof and reference returned by `saveFileStream`.
+ * @returns the authenticated immutable reference.
+ */
+authorizeUploadedFile(scope: string, upload: UploadedFileAttachment): Promise<FileAttachmentRef>
+
+/**
+ * Verify an ordered receipt batch and enforce complete message limits.
+ * @param scope - opaque owner identity shared by every receipt.
+ * @param uploads - ordered raw-upload receipts.
+ * @returns authenticated references in the same order.
+ */
+async authorizeUploadedFiles( scope: string, uploads: readonly UploadedFileAttachment[], ): Promise<readonly FileAttachmentRef[]>
+
+/**
+ * Open a single-use verified byte stream without materializing the complete file.
+ * @param ref - durable reference from trusted session state.
+ * @param signal - optional cancellation observed during iteration.
+ * @returns the reference and byte source; integrity failures reject iteration.
+ */
+readFileStream(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachmentStream>
+
 /**
  * Validate one image without persisting it.
  * Batch callers validate every member before saving any member.

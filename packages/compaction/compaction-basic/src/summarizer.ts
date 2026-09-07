@@ -213,12 +213,21 @@ function finishError(finish: FinishReason): Error | undefined {
   }
 }
 
-/** Reject visual output and keep only text before synthesizing a user message. */
+/** True when summary output contains a file, including inside a tool result. */
+function contentHasFile(blocks: readonly ContentBlock[]): boolean {
+  return blocks.some(block => block.type === 'file'
+    || (block.type === 'tool-result' && contentHasFile(block.content)))
+}
+
+/** Reject non-textual attachment output and keep only text before synthesizing a user message. */
 function summaryText(
   blocks: readonly ContentBlock[],
 ): Array<Extract<ContentBlock, { type: 'text' }>> {
   if (contentHasImage(blocks)) {
     throw new LlmError('compaction summary cannot contain image output', 'UNSUPPORTED_CONTENT')
+  }
+  if (contentHasFile(blocks)) {
+    throw new LlmError('compaction summary cannot contain file output', 'UNSUPPORTED_CONTENT')
   }
   return blocks.filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
 }

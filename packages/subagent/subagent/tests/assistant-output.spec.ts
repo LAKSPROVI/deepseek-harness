@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { AssistantOutputFold, finalAssistantOutput } from '../src/assistant-output.ts'
+
+const fileBlock = {
+  type: 'file',
+  attachment: {
+    attachmentId: `sha256:${'f'.repeat(64)}`,
+    mediaType: 'text/plain',
+    bytes: 12,
+    name: 'notes.txt',
+  },
+} as unknown as Extract<ContentBlock, { type: 'file' }>
 
 function message(content: ContentBlock[]): SessionEvent {
   return { type: 'assistant/message', data: { message: { content } } } as SessionEvent
@@ -13,6 +23,10 @@ function textDelta(text: string): SessionEvent {
 
 function reasoningDelta(text: string): SessionEvent {
   return { type: 'assistant/chunk', data: { chunk: { type: 'reasoning-delta', text } } } as SessionEvent
+}
+
+function fileEnd(block = fileBlock): SessionEvent {
+  return { type: 'assistant/chunk', data: { chunk: { type: 'block-end', index: 0, block } } } as SessionEvent
 }
 
 function toolResult(text: string): SessionEvent {
@@ -84,6 +98,15 @@ describe('AssistantOutputFold', () => {
     fold.pushText('')
     fold.pushText('answer')
     expect(fold.collect()).toEqual([{ type: 'text', text: 'partial answer' }])
+  })
+
+  it('projects completed file blocks into the streamed fallback', () => {
+    const fold = new AssistantOutputFold()
+    fold.push(fileEnd())
+    expect(fold.collect()).toEqual([{
+      type: 'text',
+      text: textOnlyFileText(fileBlock.attachment),
+    }])
   })
 
   it('collects undefined until any output is folded', () => {

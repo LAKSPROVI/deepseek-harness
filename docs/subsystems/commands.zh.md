@@ -8,7 +8,14 @@
 
 ## 输入元数据
 
-该服务公开一个可选的非结构化输入描述符：提示文本加图片接受标志。命令的可用性由插件组合决定：每个消费注册表的适配器都会看到全部生效定义。
+该服务公开一个可选的非结构化输入描述符：提示文本加附件接受标志。命令的可用性由插件组合决定：每个消费注册表的适配器都会看到全部生效定义。
+
+```ts type-equiv
+/** One encoded composer attachment in the exact submitted position. */
+type EncodedCommandAttachment =
+  | ({ readonly type: 'image' } & EncodedImageAttachment)
+  | ({ readonly type: 'file' } & (EncodedFileAttachment | UploadedFileAttachment))
+```
 
 ```ts type-equiv
 /** Immutable metadata for a command's optional unstructured input. */
@@ -16,13 +23,13 @@ interface CommandInputDescriptor {
   /** Placeholder shown before the user supplies free-form input. */
   readonly hint: string
   /**
-   * Whether composer image attachments may accompany an invocation. Absent or
-   * false = the executor rejects an invocation carrying images and capable
+   * Whether composer attachments may accompany an invocation. Absent or false
+   * = the executor rejects an invocation carrying attachments and capable
    * composers refuse the submission before dispatch. A declaring command's
    * handler receives the admitted durable blocks and owns every further
    * grammar decision, including rejecting sub-commands that cannot use them.
    */
-  readonly images?: boolean
+  readonly attachments?: boolean
 }
 ```
 
@@ -55,6 +62,11 @@ interface CommandDefinition {
 取消由适配器负责，适配器会传入确切的目标 agent。`rawInput` 紧接在解析后的名称之后，并保留适配器传入的分隔符与后缀。结果会直接呈现给 UI，而不是工具结果或会话事件。
 
 ```ts type-equiv
+/** One durable attachment block admitted for a command handler. */
+type CommandAttachmentBlock = ImageBlock | FileBlock
+```
+
+```ts type-equiv
 /** Invocation passed to one registered command handler. */
 interface CommandInvocation {
   /** Pairing id already written to this invocation's `command/run` event. */
@@ -64,13 +76,12 @@ interface CommandInvocation {
   /** Exact text following the registered command name, including separator whitespace. */
   readonly rawInput: string
   /**
-   * Durably admitted image blocks accompanying this invocation, in submission
-   * order; empty unless the definition declares `input.images`. The handler
-   * owns their model-visible use — the registry never schedules them itself —
-   * and a handler whose grammar cannot use them in this invocation returns an
-   * error so the dispatching composer retains the originals.
+   * Durably admitted image and file blocks in submission order; empty unless
+   * the definition declares `input.attachments`. The handler owns their
+   * model-visible use and returns an error when its grammar cannot use them so
+   * the dispatching composer retains the originals.
    */
-  readonly attachments: readonly ImageBlock[]
+  readonly attachments: readonly CommandAttachmentBlock[]
   /** Cancellation signal owned by the dispatching UI request. */
   readonly signal: AbortSignal
 }
@@ -166,23 +177,24 @@ find(agent: Agent, name: string): CommandDefinition | undefined
  * handler-failure path is contained so the handler's own error stays the
  * reported failure.
  *
- * Image admission is enforced here, not in the composer: images sent to a
- * command that does not declare `input.images`, an absent attachment store,
- * and an exceeded attachment limit each settle as an error result before
- * the handler runs, and a rejected batch publishes no durable object.
+ * Attachment admission is enforced here, not in the composer: attachments
+ * sent to a command that does not declare `input.attachments`, an absent
+ * attachment store, and a refused image or file group each settle as an
+ * error result before the handler runs. The handler observes either the
+ * complete frozen mixed-order vector or no attachments.
  *
  * @param agent - exact receiving agent.
  * @param line - complete slash-command line.
- * @param images - base64-encoded composer images accompanying the line, in
- *   submission order; empty for a plain invocation.
+ * @param encodedAttachments - base64-encoded composer attachments in display
+ *   order; empty for a plain invocation.
  * @param signal - cancellation signal owned by the UI request.
  * @returns the settled execution (result + lifecycle pairing id), or
  *   `undefined` when syntax or name does not resolve.
  */
-@Remote async execute( agent: Agent, line: string, images: readonly EncodedImageAttachment[], signal: AbortSignal, ): Promise<CommandExecution | undefined>
+@Remote async execute( agent: Agent, line: string, encodedAttachments: readonly EncodedCommandAttachment[], signal: AbortSignal, ): Promise<CommandExecution | undefined>
 ```
 
-Types: [Agent](core.zh.md) · [EncodedImageAttachment](attachment.zh.md)
+Types: [Agent](core.zh.md)
 
 Source: [`packages/interaction/commands/src/index.ts`](../../packages/interaction/commands/src/index.ts)
 

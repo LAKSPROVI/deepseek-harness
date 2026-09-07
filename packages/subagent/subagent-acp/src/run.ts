@@ -22,7 +22,7 @@ import {
   type SessionNotification,
   type StopReason,
 } from '@agentclientprotocol/sdk'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { AssistantOutputFold } from '@deepseek-ai/dsh-subagent'
 import type { SubagentResult, SubagentRun, SubagentStartRequest, SubagentStopReason } from '@deepseek-ai/dsh-subagent'
@@ -166,14 +166,15 @@ export function acpContentText(content: AcpContentBlock): string {
 }
 
 /**
- * Translate the harness prompt blocks into ACP prompt blocks (text only).
- * @param prompt - the harness prompt; non-text blocks are dropped.
- * @returns the ACP text blocks, in order.
+ * Translate harness prompt blocks into ACP text without extending the wire protocol.
+ * @param prompt - harness prompt whose files become deterministic text handles.
+ * @returns ACP text blocks in source order; private and unsupported blocks are omitted.
  */
 export function toAcpPrompt(prompt: ContentBlock[]): AcpContentBlock[] {
   const blocks: AcpContentBlock[] = []
   for (const block of prompt) {
     if (block.type === 'text') blocks.push({ type: 'text', text: block.text })
+    if (block.type === 'file') blocks.push({ type: 'text', text: textOnlyFileText(block.attachment) })
   }
   return blocks
 }

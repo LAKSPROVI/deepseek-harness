@@ -134,20 +134,20 @@ it('accepts pasted images into the composer rail in order and removes them', asy
     expect(document.querySelector('[role="group"][aria-label="Pending images"]')).toBeNull()
   })
 
-  // An unsupported file announces a transient toast (the inline strip is
-  // gone) and the banner dismisses itself after its hold-and-fade lifetime.
+  // Generic files use an inert card, never the raster preview path.
   fireEvent.paste(textarea, {
     clipboardData: {
       items: [{ kind: 'file', type: 'text/plain', getAsFile: () => new File(['x'], 'notes.txt', { type: 'text/plain' }) }],
       getData: () => '',
     },
   })
-  const unsupportedMessage = 'Only PNG, JPG, WebP, and GIF images are supported'
-  const toast = await screen.findByText(unsupportedMessage)
-  expect(toast.closest('[role="alert"]')).not.toBeNull()
+  const files = await screen.findByRole('group', { name: 'Pending files' })
+  expect(within(files).getByText('notes.txt')).not.toBeNull()
+  expect(files.querySelector('img')).toBeNull()
+  fireEvent.click(within(files).getByRole('button', { name: 'Remove file notes.txt' }))
   await waitFor(() => {
-    expect(screen.queryByText(unsupportedMessage)).toBeNull()
-  }, { timeout: 6_000 })
+    expect(screen.queryByRole('group', { name: 'Pending files' })).toBeNull()
+  })
 })
 
 it('accepts a whole-page drop under the limits-labeled overlay and refuses an over-limit batch at intake', async () => {
@@ -165,7 +165,7 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'dropped.png', { type: 'image/png' })
   const dataTransfer = { types: ['Files'], files: [image], dropEffect: 'none' }
   fireEvent.dragEnter(document.body, { dataTransfer })
-  const overlayTitle = await screen.findByText('Drag images here to add them')
+  const overlayTitle = await screen.findByText('Drag files here to add them')
   const overlay = overlayTitle.closest('[role="status"]')
   if (overlay === null) throw new Error('drop overlay status missing')
   await waitFor(() => {
@@ -179,7 +179,7 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
     if (rail === null) throw new Error('attachment rail missing after page drop')
     expect([...rail.querySelectorAll('img')].map(img => img.getAttribute('alt'))).toEqual(['dropped.png'])
   }, { timeout: 5_000 })
-  expect(screen.queryByText('Drag images here to add them')).toBeNull()
+  expect(screen.queryByText('Drag files here to add them')).toBeNull()
 
   // An intake that would exceed the projected per-message count is refused as
   // a whole batch at add time: the banner names the limit and the rail keeps
@@ -197,6 +197,56 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
   expect(banner.closest('[role="alert"]')).not.toBeNull()
   const rail = document.querySelector('[role="group"][aria-label="Pending images"]')
   expect([...(rail?.querySelectorAll('img') ?? [])]).toHaveLength(1)
+})
+
+it('blocks a known text-only model while preserving the image draft and clears on removal', async () => {
+  mountAssembledApp('?fixture&fixtureModel=text-only')
+
+  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+  const start = tree.querySelector<HTMLButtonElement>('button[aria-label="New session in fixture"]')
+  if (start === null) throw new Error('fixture Workspace new-session action missing')
+  fireEvent.click(start)
+
+  const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 })
+  if (!(textarea instanceof HTMLTextAreaElement)) throw new Error('composer textarea missing')
+  fireEvent.change(textarea, { target: { value: 'keep this draft' } })
+  const image = new File([new Uint8Array([137, 80, 78, 71])], 'unsupported.png', { type: 'image/png' })
+  fireEvent.paste(textarea, {
+    clipboardData: {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => image }],
+      getData: () => '',
+    },
+  })
+
+  const guidance = 'This model does not support image input. Select an image-capable model or remove the image and try again.'
+  await waitFor(() => {
+    expect(textarea.disabled).toBe(true)
+    expect(textarea.placeholder).toBe(guidance)
+  })
+  const rail = document.querySelector('[role="group"][aria-label="Pending images"]')
+  if (rail === null) throw new Error('blocked attachment rail missing')
+  expect({
+    disabled: textarea.disabled,
+    draft: textarea.value,
+    guidance: textarea.placeholder,
+    images: [...rail.querySelectorAll('img')].map(img => img.getAttribute('alt')),
+  }).toMatchInlineSnapshot(`
+    {
+      "disabled": true,
+      "draft": "keep this draft",
+      "guidance": "This model does not support image input. Select an image-capable model or remove the image and try again.",
+      "images": [
+        "unsupported.png",
+      ],
+    }
+  `)
+
+  fireEvent.click(within(rail as HTMLElement).getByRole('button', { name: 'Remove image unsupported.png' }))
+  await waitFor(() => {
+    expect(textarea.disabled).toBe(false)
+    expect(document.querySelector('[role="group"][aria-label="Pending images"]')).toBeNull()
+  })
+  expect(textarea.value).toBe('keep this draft')
 })
 
 it('renders a host dimension rejection with the projected 2000px limit', async () => {

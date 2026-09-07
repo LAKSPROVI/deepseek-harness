@@ -1,7 +1,7 @@
 // Sessions remain resident after creation so they continue consuming mux frames off-screen.
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { AttachmentIdType, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentIdType, FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type {
   HistoryEntry, IApiClient, MessageId, MuxFrame, PromptContentPart, QueueAction, RpcError,
@@ -28,8 +28,22 @@ import type { ProjectionsBaseline } from './projection-store.ts'
 import { resolvedClientTimeZone } from '../time-zone.ts'
 import { SessionQueueMirror } from './queue-mirror.ts'
 
-/** Messages requested per history page. */
+/** Messages requested per history page (page-up / gap repair). */
 export const PAGE_MESSAGES = 50
+
+/**
+ * Messages requested for the FIRST page of a session open. Kept small so a
+ * very large session renders its recent exchanges in seconds instead of
+ * blocking on the whole tail page (the host computes a render view per tool
+ * event, so page cost scales with message count — measured 162s for 50
+ * messages on a 31 MB session). `loadOlder` pulls `PAGE_MESSAGES` on scroll.
+ */
+export const FIRST_PAGE_MESSAGES = 8
+
+/** The fetch carrier's transient cold-start timeout response. */
+function isHistoryTimeout(error: RpcError): boolean {
+  return error.code === 'internal' && error.message === 'signal timed out'
+}
 
 /** Manager-owned observers of a Session object's local state edges. */
 export interface SessionOptions {
@@ -219,21 +233,22 @@ export class Session implements SessionFace {
           },
         }
       } else {
-        if (content.some(part => part.type === 'image')) {
+        const textContent = content.flatMap(part => part.type === 'text'
+          ? [{ type: 'text' as const, text: part.text }]
+          : [])
+        if (textContent.length !== content.length) {
           result = {
             ok: false,
             error: {
               code: 'attachment-error',
-              message: 'Image input is unavailable for subagent continuations.',
-              details: { reason: 'SUBAGENT_IMAGE_UNSUPPORTED' },
+              message: 'Attachment input is unavailable for subagent continuations.',
+              details: { reason: 'SUBAGENT_ATTACHMENT_UNSUPPORTED' },
             },
           }
         } else {
           const routed = (await this.api.subagents.prompt({
             ...this.address,
-            content: content.flatMap(part => part.type === 'text'
-              ? [{ type: 'text' as const, text: part.text }]
-              : []),
+            content: textContent,
             clientTimeZone: resolvedClientTimeZone(),
           }, signal)).result
           result = routed.ok ? { ok: true, value: { accepted: true } } : routed
@@ -264,13 +279,16 @@ export class Session implements SessionFace {
   }
 
   /**
-   * Resolve one image referenced by this session into browser-consumable bytes.
+   * Resolve one attachment referenced by this session into browser-consumable bytes.
    * @param attachmentId - opaque id found in the folded session log.
-   * @returns the authenticated reference and decoded bytes.
+   * @returns the authenticated discriminated reference and decoded bytes.
    */
   async readAttachment(
     attachmentId: AttachmentIdType,
-  ): Promise<RpcResult<{ attachment: ImageAttachmentRef; data: Uint8Array }>> {
+  ): Promise<RpcResult<
+    | { type: 'image'; attachment: ImageAttachmentRef; data: Uint8Array }
+    | { type: 'file'; attachment: FileAttachmentRef; data: Uint8Array }
+  >> {
     try {
       const result = (await this.api.sessions.attachment({
         sessionId: this.sessionId,
@@ -279,9 +297,30 @@ export class Session implements SessionFace {
       if (!result.ok) return result
       const binary = atob(result.value.data)
       const data = Uint8Array.from(binary, char => char.charCodeAt(0))
-      return { ok: true, value: { attachment: result.value.attachment, data } }
+      return result.value.type === 'image'
+        ? { ok: true, value: { type: 'image', attachment: result.value.attachment, data } }
+        : { ok: true, value: { type: 'file', attachment: result.value.attachment, data } }
     } catch (error) {
       return transportError(error)
+    }
+  }
+
+  /** Resolve one image while rejecting a generic-file reference explicitly. */
+  async readImageAttachment(
+    attachmentId: AttachmentIdType,
+  ): Promise<RpcResult<{ attachment: ImageAttachmentRef; data: Uint8Array }>> {
+    const result = await this.readAttachment(attachmentId)
+    if (!result.ok) return result
+    if (result.value.type === 'image') {
+      return { ok: true, value: { attachment: result.value.attachment, data: result.value.data } }
+    }
+    return {
+      ok: false,
+      error: {
+        code: 'attachment-error',
+        message: 'The referenced attachment is not an image.',
+        details: { reason: 'ATTACHMENT_TYPE_MISMATCH' },
+      },
     }
   }
 
@@ -619,9 +658,18 @@ export class Session implements SessionFace {
     this.openState = 'loading'
     this.openError = null
     this.notifier.markDirty()
+    // Small first page for a top-level session: a very large history renders
+    // its recent exchanges fast, and loadOlder backfills the rest on scroll.
+    // Subagent transcripts keep the full page (their open is a different, less
+    // hot path and several callers assert its exact request).
+    const firstPage = this.address === undefined ? FIRST_PAGE_MESSAGES : PAGE_MESSAGES
     try {
-      let { result } = await this.history({ maxMessages: PAGE_MESSAGES })
+      let { result } = await this.history({ maxMessages: firstPage })
       if (generation !== this.openGeneration) return
+      if (!result.ok && this.address === undefined && isHistoryTimeout(result.error)) {
+        result = (await this.history({ maxMessages: firstPage })).result
+        if (generation !== this.openGeneration) return
+      }
       if (!result.ok) {
         this.openState = 'error'
         this.openError = result.error
@@ -631,7 +679,7 @@ export class Session implements SessionFace {
       // Gap detection: baseline past the window tail and liveBuffer did not cover it -> pull the tail page once more.
       const tailSeq = this.windowTailSeq()
       if (this.subscribedLastSeq !== null && tailSeq !== null && this.subscribedLastSeq > tailSeq) {
-        result = (await this.history({ maxMessages: PAGE_MESSAGES })).result
+        result = (await this.history({ maxMessages: firstPage })).result
         if (generation !== this.openGeneration) return
         if (result.ok) this.installWindow(result.value.events, result.value.hasMore, result.value.projections)
       }

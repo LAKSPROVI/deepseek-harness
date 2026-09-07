@@ -7,7 +7,7 @@
  * must stub); runtime-internal entry points (history staging, wire-frame
  * dispatch) stay on the class, invisible out here.
  */
-import type { AttachmentIdType, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentIdType, FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type {
   MessageId, PromptContentPart, QueueAction, RpcResult, SessionId,
 } from '@deepseek-ai/dsh-api-remotes/client'
@@ -43,12 +43,13 @@ export interface ISession {
     mode: 'queue' | 'steer',
     signal?: AbortSignal,
   ): Promise<RpcResult<{ accepted: true }>>
-  /**
-   * Resolve one durable image referenced by this session.
-   * @param attachmentId - opaque id found in the folded session log.
-   * @returns the authenticated reference and decoded bytes.
-   */
-  readAttachment(
+  /** Resolve one durable image or file referenced by this session. */
+  readAttachment(attachmentId: AttachmentIdType): Promise<RpcResult<
+    | { type: 'image'; attachment: ImageAttachmentRef; data: Uint8Array }
+    | { type: 'file'; attachment: FileAttachmentRef; data: Uint8Array }
+  >>
+  /** Resolve one durable image while preserving the image-only consumer contract. */
+  readImageAttachment(
     attachmentId: AttachmentIdType,
   ): Promise<RpcResult<{ attachment: ImageAttachmentRef; data: Uint8Array }>>
   /**

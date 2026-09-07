@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod'
+import type { ModelModality } from '@deepseek-ai/dsh-llm'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import type { ConfigurableProviderView, DiscoveredModelView } from './llm.ts'
@@ -36,12 +37,16 @@ export const llmModelsValueSchema = z.object({
   failures: z.array(modelCatalogFailureSchema),
 }) satisfies z.ZodType<Wire<ResponseValue<'llm.models'>>>
 
+/** Canonical model modality accepted on the discovery wire. */
+const modelModalitySchema = z.enum(['text', 'image', 'file']) satisfies z.ZodType<ModelModality>
+
 /** DiscoveredModelView row of llm.discoverModels. */
 export const discoveredModelViewSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).optional(),
   contextWindow: z.number().int().positive().optional(),
   maxTokens: z.number().int().positive().optional(),
+  inputModalities: z.array(modelModalitySchema).optional(),
 }) satisfies z.ZodType<Wire<DiscoveredModelView>>
 
 /** llm.discoverModels request payload. */

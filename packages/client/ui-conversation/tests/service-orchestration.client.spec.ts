@@ -10,11 +10,18 @@ import { makeTranslate, SlotTestRuntime } from '@deepseek-ai/dsh-client-test-run
 import type { QueuedMessage, SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 import { ComposerBlockRegistry } from '../src/client/input/blocks.ts'
 import { InputHub } from '../src/client/input/hub.ts'
-import { ConversationController, UnsupportedImageMediaTypeError } from '../src/client/service.ts'
+import { ConversationController } from '../src/client/service.ts'
 import { zh } from '../src/client/locales.ts'
 
-async function bench(readAttachment?: SessionFace['readAttachment']) {
+async function bench(
+  readAttachment?: SessionFace['readAttachment'],
+  fileTransfer?: {
+    upload(sessionId: string, file: File, signal?: AbortSignal): Promise<unknown>
+    downloadUrl(sessionId: string, attachment: unknown): string
+  },
+) {
   const runtime = await SlotTestRuntime.create()
+  if (fileTransfer !== undefined) runtime.provide('connection', { fileTransfer })
   const prompt = vi.fn(() => Promise.resolve({ ok: true as const, value: { accepted: true as const } }))
   const updateQueue = vi.fn(() => Promise.resolve({ ok: true as const, value: { accepted: true as const } }))
   const cancel = vi.fn(() => Promise.resolve({ ok: true as const, value: { accepted: true as const } }))
@@ -88,13 +95,13 @@ describe('ConversationController', () => {
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:draft-1')
     const revoked = vi.spyOn(URL, 'revokeObjectURL').mockReturnValue(undefined)
     try {
-      const [attachment] = b.root.createDraftImages([
+      const [attachment] = b.root.createDraftAttachments([
         new File([new Uint8Array(4)], 'a.png', { type: 'image/png' }),
       ])
       if (attachment === undefined) throw new Error('draft attachment missing')
-      b.root.input.for(b.runtime.sessions.scope('s1')!).addImages([attachment.id])
+      b.root.input.for(b.runtime.sessions.scope('s1')!).addAttachments([attachment.id])
       await b.runtime.sessions.remove('s1')
-      expect(b.root.draftImages([attachment.id])).toEqual([])
+      expect(b.root.draftAttachments([attachment.id])).toEqual([])
       expect(revoked).toHaveBeenCalledWith('blob:draft-1')
     } finally {
       created.mockRestore()
@@ -103,15 +110,78 @@ describe('ConversationController', () => {
     await b.runtime.dispose()
   })
 
-  it('validates every MIME type before allocating previews', async () => {
+  it('allocates previews only for raster images and keeps other types opaque', async () => {
     const b = await bench()
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview')
-    expect(() => b.root.createDraftImages([
+    // SVG is never rendered as an image: it rides the generic file lane, so it
+    // gets no object URL and no preview allocation.
+    const [png, svg] = b.root.createDraftAttachments([
       new File([Uint8Array.of(1)], 'valid.png', { type: 'image/png' }),
       new File([Uint8Array.of(2)], 'invalid.svg', { type: 'image/svg+xml' }),
-    ])).toThrow(UnsupportedImageMediaTypeError)
-    expect(created).not.toHaveBeenCalled()
+    ])
+    expect(png?.kind).toBe('image')
+    expect(svg?.kind).toBe('file')
+    expect(created).toHaveBeenCalledOnce()
     created.mockRestore()
+    await b.runtime.dispose()
+  })
+
+  it('rejects a client prompt preflight before encoding or RPC and preserves its draft', async () => {
+    const b = await bench()
+    const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preflight')
+    const [image] = b.root.createDraftAttachments([
+      new File([Uint8Array.of(1)], 'blocked.png', { type: 'image/png' }),
+    ])
+    if (image === undefined) throw new Error('draft image missing')
+    const arrayBuffer = vi.spyOn(image.file, 'arrayBuffer')
+    const remove = b.root.registerPromptAdmission(
+      b.runtime.sessions.behavior('s1').sessionId,
+      attachments => attachments.some(attachment => attachment.kind === 'image') ? 'Choose another model or remove the image.' : undefined,
+    )
+    b.shell.setDraft('keep this')
+    b.shell.addAttachments([image.id])
+    b.shell.submit()
+
+    await vi.waitFor(() => {
+      expect(b.shell.snapshot.phase).toBe('plain')
+    })
+    expect(b.shell.snapshot.draft).toBe('keep this')
+    expect(b.shell.snapshot.attachmentIds).toEqual([image.id])
+    expect(b.shell.notices.getSnapshot()).toMatchObject({
+      level: 'error', text: 'Choose another model or remove the image.',
+    })
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    expect(b.prompt).not.toHaveBeenCalled()
+
+    remove()
+    created.mockRestore()
+    await b.runtime.dispose()
+  })
+
+  it('reuses one raw upload receipt across retries and downloads files without base64 materialization', async () => {
+    const ref = {
+      attachmentId: AttachmentId('sha256:file'), mediaType: 'application/octet-stream', bytes: 3, name: 'a.bin',
+    }
+    const upload = vi.fn(() => Promise.resolve({ uploadId: 'receipt', attachment: ref }))
+    const downloadUrl = vi.fn(() => '/api/session.file?sessionId=s1&attachmentId=sha256%3Afile')
+    const readAttachment = vi.fn(() => Promise.reject(new Error('generic file must bypass RPC bytes')))
+    const b = await bench(readAttachment, { upload, downloadUrl })
+    const [attachment] = b.root.createDraftAttachments([
+      new File([Uint8Array.of(1, 2, 3)], 'a.bin', { type: 'application/octet-stream' }),
+    ])
+    if (attachment === undefined) throw new Error('draft attachment missing')
+    const arrayBuffer = vi.spyOn(attachment.file, 'arrayBuffer')
+    const sessionId = b.runtime.sessions.behavior('s1').sessionId
+
+    const first = await b.root.serializeDraftAttachments(sessionId, [attachment.id])
+    const second = await b.root.serializeDraftAttachments(sessionId, [attachment.id])
+    expect(first).toEqual([{ type: 'file', uploadId: 'receipt', attachment: ref }])
+    expect(second).toEqual(first)
+    expect(upload).toHaveBeenCalledOnce()
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    await expect(b.root.resolveAttachment(sessionId, ref)).resolves.toContain('/api/session.file')
+    expect(downloadUrl).toHaveBeenCalledOnce()
+    expect(readAttachment).not.toHaveBeenCalled()
     await b.runtime.dispose()
   })
 
@@ -124,7 +194,7 @@ describe('ConversationController', () => {
     } as const
     const pending = b.root.resolveImage(sessionId, attachment)
     b.root.releaseSessionImages(sessionId)
-    read.resolve({ ok: true, value: { attachment, data: Uint8Array.of(1) } })
+    read.resolve({ ok: true, value: { type: 'image', attachment, data: Uint8Array.of(1) } })
     await expect(pending).rejects.toThrow('historical image scope was released')
     await b.runtime.dispose()
   })

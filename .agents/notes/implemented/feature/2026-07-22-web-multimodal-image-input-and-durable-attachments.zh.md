@@ -18,7 +18,7 @@ Status: implemented
 
 粘贴或拖放的光栅图片是 Web 输入区对持久附件能力的首个应用场景。未发送文件仍是由客户端持有的临时草稿状态。每个丰富内容接入适配器都会解码自身协议块、证明路由能力，并在追加消息事件前把完整图片批次委托给附件服务。生成结构化图片输出的提供方适配器在追加相应助手块前，也必须持久提交输出。规范用户内容与助手内容只包含角色无关的 `ImageBlock` 引用。
 
-第一版支持粘贴和拖放 PNG、JPEG、WebP 与 GIF，支持仅图片或混合提示词，支持渲染历史用户图片与助手图片，并支持单击预览原图（展示与交互细节部分由[附件展示对齐 Note](2026-08-11-web-attachment-display-alignment.zh.md)取代）。文件选择、通用文件、PDF、音频、视频、图片复制和自定义上下文菜单仍分别作为后续工作。
+图片路径通过文件选择器、粘贴与拖放支持 PNG、JPEG、WebP 和 GIF，支持仅图片或混合提示词、历史用户与助手图片渲染，以及单击预览原图（展示与交互细节部分由[附件展示对齐 Note](2026-08-11-web-attachment-display-alignment.zh.md)取代）。[不透明通用文件](2026-08-29-opaque-generic-file-attachments.zh.md)通过独立的 `FileBlock` 使用同一输入与持久存储；PDF 解释、音频、视频、图片复制和自定义上下文菜单仍分别作为后续工作。
 
 ### 产品行为
 
@@ -56,15 +56,13 @@ interface ChatStoreState {
 
 interface InputState {
   draft: string
-  imageIds: readonly DraftAttachmentId[]
+  attachmentIds: readonly DraftAttachmentId[]
 }
 
-interface ComposerAttachment {
-  kind: 'image'
-  id: DraftAttachmentId
-  file: File
-  previewUrl: string
-}
+type ComposerAttachment =
+  | { kind: 'image'; id: DraftAttachmentId; file: File; previewUrl: string }
+  | { kind: 'file'; id: DraftAttachmentId; file: File }
+
 ```
 
 这一拆分把会话 provide 通道的输入 hook 与 actions 用作实时输入区状态的唯一订阅路径，同时避免把不可序列化的浏览器对象写进持久 JSON。只有纯文本草稿镜像使用 `localStorage`；附件标识符、浏览器 `File` 对象和对象 URL 都限定在实时会话输入外壳的 scope 内。未发送图片因此无法跨重载或会话 scope 释放保留。切换 Workspace 时，只有目标外壳接受完整图片批次，图文混合草稿才会移动；拒绝时，文本和图片都留在来源外壳。原生客户端可以在操作系统临时目录中暂存输入，但必须像对待浏览器对象 URL 一样对待该路径：不再需要时删除，并在消息被接受前把字节复制进持久存储。
@@ -140,9 +138,9 @@ Pi-AI 与直接 DeepSeek 适配器都会在请求时解析 `ctx.attachments`，�
 
 ### 限制与信任边界
 
-第一版仅接受 PNG、JPEG、WebP 和 GIF。不接受 SVG 和远程 URL。源文件输入默认限制为每张图片 32 MiB、每条消息 20 张图片和 100 MiB 图片总字节数、每张图片一亿解码像素，以及任一边 16384px。与提供方无关的主版本默认长边 2048px，独立安全上限 4 MiB。提供方请求的像素和编码字节上限是单独的路由策略。这些随部署变化的限制属于经过校验的后端配置，并在持久化或请求发送前强制执行。客户端连接载体为每个 API 请求设置独立且可配置的 `maxRequestBodyBytes` 上限，默认 160 MiB；如果该上限无法容纳源文件总量限制经 base64 和请求封装膨胀后的大小，加载就会失败。未声明长度的请求体在越过上限时即被拒绝，而不是先读完再拒。
+专用图片路径仅接受 PNG、JPEG、WebP 和 GIF；SVG 与远程 URL 绝不会进入光栅解码。源文件输入默认限制为每张图片 20 MiB、每条消息 20 张图片和 200 MiB 图片总字节数、每张图片 6400 万解码像素，以及任一边 8192px。与提供方无关的主版本默认长边 2048px，独立安全上限 4 MiB。通用文件独立使用每条消息 20 个、单文件 1 GiB、总计 1 GiB 的默认值。提供方请求的像素和编码字节上限仍是单独的路由策略。这些随部署变化的限制属于经过校验的后端配置，并在持久化或请求发送前强制执行。served Web 通用文件使用整体缓冲 JSON carrier 之外的流式 `POST` 与 `GET /api/session.file` route；图片以及不具备原始文件能力的 carrier 继续使用有界 base64 RPC。[原始流式传输决策](2026-08-29-raw-streaming-generic-file-transfer.zh.md)是传输、receipt 与授权语义的权威记录。
 
-格式错误的 base64、不支持或不匹配的媒体、截断的图片数据、超出字节限制、超出图片数量、超出像素限制、超出单边尺寸限制、对象缺失和完整性不匹配都会返回稳定的结构化错误。原始文件名只保留用于显示的末段，控制字符会被移除，并且任何本地路径都不会写入日志或返回浏览器。
+编码 carrier 上格式错误的 base64、不支持或不匹配的媒体、截断的图片数据、超出字节或数量限制、超出像素或尺寸限制、对象缺失和完整性不匹配都会返回稳定的结构化错误。原始文件名只保留用于显示的末段，控制字符会被移除，并且任何本地路径都不会写入日志或返回浏览器。
 
 ### 包与接口变更
 
@@ -155,7 +153,7 @@ Pi-AI 与直接 DeepSeek 适配器都会在请求时解析 `ctx.attachments`，�
 | `packages/llm/llm-deepseek` | 把官方视觉输入解析为确定性请求版本和 Files API ID。 |
 | `packages/compaction/compaction-basic` | 在摘要输入中保留图片，并明确拒绝非文本检查点输出。 |
 | `packages/host/apiproxy` 和 `packages/bundle/base` | 范围狭窄的上传协议、共享批量准入、限制和路由模型前置检查、先持久化再追加事件的顺序、会话授权读取，以及默认 profile 组合。 |
-| `packages/client/connection` 和 `packages/client/runtime` | 有界请求缓冲、协议类型、fixture（测试前置数据）图片、提示词上传、附件读取和持久引用折叠。 |
+| `packages/client/connection` 和 `packages/client/runtime` | 缓冲 RPC 与原始流式文件 carrier、协议类型、fixture 兼容上传、附件读取和持久引用折叠。 |
 | `packages/client/ui-conversation` | 每个会话的草稿图片、附件栏、用户与助手图片控件和原图预览。 |
 | `packages/acp/acp` | 条件式原生图片能力、原子内联图片准入，以及经过校验的助手图片交付。 |
 | `packages/mcp/mcp-client` | 无损规范 MCP 结果、经能力门禁的持久图片投影，以及针对不受支持丰富块的明确诊断。 |
@@ -226,4 +224,4 @@ UI 状态可能陈旧，也无法保护直接 SDK、ACP、回放或未收录模�
 - 原图预览解码的像素多于行内控件显示的像素。像素限制、一次只打开一个预览和对象 URL 释放可以约束但无法消除浏览器瞬时内存占用。
 - 能力元数据可能缺失或陈旧。宿主前置检查可以改善反馈，适配器强制检查仍是权威结果。
 - 未来输出提供方可能需要经过身份认证的下载，助手图片才能完成，这会增加延迟与新的故障点。先持久化再追加事件的顺序优先保障回放完整性。
-- 文件选择、通用文件与 PDF、音频与视频、持久草稿暂存、图片复制、自定义上下文菜单、输出提供方认证和按引用感知的垃圾回收仍是相互独立的设计。
+- PDF 解释、音频与视频、持久草稿暂存、图片复制、自定义上下文菜单、输出提供方认证和按引用感知的垃圾回收仍是相互独立的设计。文件选择与不透明通用文件由[通用文件附件决策](2026-08-29-opaque-generic-file-attachments.zh.md)负责。

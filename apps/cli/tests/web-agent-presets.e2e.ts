@@ -216,12 +216,35 @@ describe('the shipped Web composition', () => {
     }
   })
 
-  it('supplies both shipped presets, and only those, from the system root', async () => {
+  it('supplies every shipped preset, and only those, from the system root', async () => {
     const listed = await ctx.agentPresets.list()
 
-    expect(listed.map(preset => preset.id).sort()).toEqual(['code', 'cordis', 'minimal', 'standard'])
+    expect(listed.map(preset => preset.id).sort())
+      .toEqual(['agent-teams', 'code', 'cordis', 'minimal', 'standard'])
     expect(listed.every(preset => preset.trust === 'system')).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('standard')
+  })
+
+  it('composes Agent Teams with its scoped coordination and debate tools', async () => {
+    const handle = await ctx.agents.create({
+      sessionId: SessionId('preset-agent-teams'),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'agent-teams').then(() => undefined),
+    })
+    try {
+      expect(toolNames(ctx, handle.agent).filter(name => name !== 'glob' && name !== 'grep')).toEqual([
+        'ask_user_question', process.platform === 'win32' ? 'pwsh' : 'bash', 'create_goal', 'edit',
+        'exit_plan_mode', 'followup_task', 'get_goal', 'interrupt_agent', 'job_kill', 'job_list',
+        'job_output', 'list_agents', 'ralph', 'read', 'read_image', 'send_message', 'skill',
+        'spawn_teammate', 'team_debate_get', 'team_debate_start', 'team_debate_update',
+        'team_task_create', 'team_task_get', 'team_task_list', 'team_task_update', 'todo_write',
+        'update_goal', 'wait_agent', 'web_search', 'workflow', 'write',
+      ].sort())
+      expect(toolParameterNames(ctx, handle.agent, 'spawn_teammate'))
+        .toEqual(['context', 'description', 'llm_provider', 'model', 'name', 'persona', 'prompt'])
+      expect(toolNames(ctx, handle.agent)).not.toEqual(expect.arrayContaining(['subagent', 'subagent_fork']))
+    } finally {
+      await handle.dispose()
+    }
   })
 
   it('composes the full agent from `standard`', async () => {

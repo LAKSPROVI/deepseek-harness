@@ -29,17 +29,25 @@ const t = ((key: string, params?: Readonly<Record<string, unknown>>): string => 
     'image.openOriginal': '查看原图',
     'image.scrollLeft': '向左滚动图片',
     'image.scrollRight': '向右滚动图片',
-    'image.dropBlocked': '当前无法添加图片',
-    'image.dropTitle': '图片拖动到此处即可添加',
+    'attachment.dropBlocked': '当前无法添加附件',
+    'attachment.dropTitle': '文件拖动到此处即可添加',
+    'file.pending': '待发送文件',
+    'file.unnamed': '未命名文件',
   }
   if (key === 'image.remove') {
     const name = params?.name
     return `移除图片 ${typeof name === 'string' ? name : ''}`
   }
-  if (key === 'image.dropDesc') {
+  if (key === 'file.remove') {
+    const name = params?.name
+    return `移除文件 ${typeof name === 'string' ? name : ''}`
+  }
+  if (key === 'attachment.dropDesc') {
     const count = params?.count
-    const size = params?.size
-    return `最多 ${typeof count === 'number' ? String(count) : ''} 张，每张 ${typeof size === 'string' ? size : ''}`
+    return `最多 ${typeof count === 'number' ? String(count) : ''} 个附件`
+  }
+  if (key === 'attachment.dropDescMixed') {
+    return `图片最多 ${String(params?.imageCount)} 张（每张 ${String(params?.imageSize)}），文件最多 ${String(params?.fileCount)} 个（每个 ${String(params?.fileSize)}）`
   }
   return messages[key] ?? key
 }) as ComposerAttachmentsProps['t']
@@ -53,12 +61,20 @@ function attachment(id: string, name = `${id}.png`): ComposerAttachment {
   }
 }
 
+function fileAttachment(id: string, name = `${id}.pdf`): ComposerAttachment {
+  return {
+    kind: 'file',
+    id: id as ComposerAttachment['id'],
+    file: new File([Uint8Array.of(1)], name, { type: 'application/pdf' }),
+  }
+}
+
 function props(overrides: Partial<ComposerAttachmentsOwnerProps> = {}): ComposerAttachmentsProps {
   return {
     attachments: [],
     canAcceptDrop: true,
-    onAddImages: () => {},
-    onRemoveImage: () => {},
+    intakeAttachments: () => {},
+    onRemoveAttachment: () => {},
     t,
     ...overrides,
   } as unknown as ComposerAttachmentsProps
@@ -66,10 +82,14 @@ function props(overrides: Partial<ComposerAttachmentsOwnerProps> = {}): Composer
 
 describe('ComposerAttachments', () => {
   it('accepts file drops anywhere on the document and keeps non-file drags native', () => {
-    const onAddImages = vi.fn()
+    const intakeAttachments = vi.fn()
     const view = render(<ComposerAttachments {...props({
-      onAddImages,
-      dropLimits: { count: 20, size: '5MB' },
+      intakeAttachments,
+      dropLimits: {
+        images: { count: 20, size: '20MB' },
+        files: { count: 20, size: '20MB' },
+        combined: 20,
+      },
     })} />)
 
     expect(fireEvent.dragEnter(document.body, { dataTransfer: null })).toBe(true)
@@ -82,12 +102,12 @@ describe('ComposerAttachments', () => {
     const image = attachment('dropped').file
     const dataTransfer = { types: ['Files'], files: [image], dropEffect: 'none' }
     expect(fireEvent.dragEnter(document.body, { dataTransfer })).toBe(false)
-    expect(view.getByRole('status').textContent).toContain('图片拖动到此处即可添加')
-    expect(view.getByRole('status').textContent).toContain('最多 20 张，每张 5MB')
+    expect(view.getByRole('status').textContent).toContain('文件拖动到此处即可添加')
+    expect(view.getByRole('status').textContent).toContain('图片最多 20 张（每张 20MB），文件最多 20 个（每个 20MB）')
     expect(fireEvent.dragOver(document.body, { dataTransfer })).toBe(false)
     expect(dataTransfer.dropEffect).toBe('copy')
     expect(fireEvent.drop(document.body, { dataTransfer })).toBe(false)
-    expect(onAddImages).toHaveBeenCalledWith([image])
+    expect(intakeAttachments).toHaveBeenCalledWith([image])
     expect(view.queryByRole('status')).toBeNull()
   })
 
@@ -118,30 +138,30 @@ describe('ComposerAttachments', () => {
   })
 
   it('shows a blocked drop without forwarding its files', () => {
-    const onAddImages = vi.fn()
-    const view = render(<ComposerAttachments {...props({ canAcceptDrop: false, onAddImages })} />)
+    const intakeAttachments = vi.fn()
+    const view = render(<ComposerAttachments {...props({ canAcceptDrop: false, intakeAttachments })} />)
     const image = attachment('blocked').file
     const dataTransfer = { types: ['Files'], files: [image], dropEffect: 'copy' }
     fireEvent.dragEnter(document.body, { dataTransfer })
-    expect(view.getByRole('status').textContent).toBe('当前无法添加图片')
+    expect(view.getByRole('status').textContent).toBe('当前无法添加附件')
     fireEvent.dragOver(document.body, { dataTransfer })
     expect(dataTransfer.dropEffect).toBe('none')
     fireEvent.drop(document.body, { dataTransfer })
-    expect(onAddImages).not.toHaveBeenCalled()
+    expect(intakeAttachments).not.toHaveBeenCalled()
     expect(view.queryByRole('status')).toBeNull()
   })
 
   it('routes rail removal and closes previews on Escape or attachment removal', () => {
-    const onRemoveImage = vi.fn()
+    const onRemoveAttachment = vi.fn()
     const image = attachment('draft-1', 'pixel.png')
-    const initial = props({ attachments: [image], onRemoveImage })
+    const initial = props({ attachments: [image], onRemoveAttachment })
     const view = render(<ComposerAttachments {...initial} />)
 
     fireEvent.click(view.getByRole('button', { name: '移除图片 pixel.png' }))
-    expect(onRemoveImage).toHaveBeenCalledWith(image.id)
+    expect(onRemoveAttachment).toHaveBeenCalledWith(image.id)
     fireEvent.click(view.getByTitle('查看原图'))
     expect(view.getByRole('dialog', { name: '原图预览' })).toBeTruthy()
-    view.rerender(<ComposerAttachments {...props({ attachments: [], onRemoveImage })} />)
+    view.rerender(<ComposerAttachments {...props({ attachments: [], onRemoveAttachment })} />)
     expect(view.queryByRole('dialog', { name: '原图预览' })).toBeNull()
 
     view.rerender(<ComposerAttachments {...initial} />)
@@ -156,5 +176,29 @@ describe('ComposerAttachments', () => {
     expect(view.getByAltText('待发送图片')).toBeTruthy()
     fireEvent.click(view.getByTitle('查看原图'))
     expect(view.getByAltText('原图')).toBeTruthy()
+  })
+
+  it('renders an opaque draft file inertly and routes its removal', () => {
+    const onRemoveAttachment = vi.fn()
+    const file = fileAttachment('draft-doc', 'contract.pdf')
+    const view = render(<ComposerAttachments {...props({ attachments: [file], onRemoveAttachment })} />)
+
+    expect(view.getByText('contract.pdf')).toBeTruthy()
+    expect(view.container.querySelector('img')).toBeNull()
+    expect(view.queryByTitle('查看原图')).toBeNull()
+
+    fireEvent.click(view.getByRole('button', { name: '移除文件 contract.pdf' }))
+    expect(onRemoveAttachment).toHaveBeenCalledWith(file.id)
+  })
+
+  it('names an unnamed opaque file and keeps images previewable beside it', () => {
+    const view = render(<ComposerAttachments {...props({
+      attachments: [attachment('mixed-image', 'pixel.png'), fileAttachment('mixed-file', '')],
+    })} />)
+
+    expect(view.getByText('未命名文件')).toBeTruthy()
+    expect(view.getByRole('button', { name: '移除文件 未命名文件' })).toBeTruthy()
+    fireEvent.click(view.getByTitle('查看原图'))
+    expect(view.getByRole('dialog', { name: '原图预览' })).toBeTruthy()
   })
 })

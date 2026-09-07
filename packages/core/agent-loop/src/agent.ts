@@ -21,6 +21,7 @@ import {
   BlockAssembler,
   LlmError,
   createAssistantMessage,
+  createUserMessage,
   deepFreeze,
   errorChain,
   markAgentLoopRequest,
@@ -58,6 +59,33 @@ function requestProposal(header: EpochHeader): LlmCallConfig {
   if (header.adapterDefaults.reasoningEffort === true) delete proposal.reasoningEffort
   if (header.adapterDefaults.maxTokens === true) delete proposal.maxTokens
   return proposal
+}
+
+/**
+ * Tell the model that a tool name it wrote was corrected before the call ran.
+ *
+ * Silent recovery is reinforcement: the call succeeds under the invented name,
+ * so nothing contradicts it and the model keeps — and elaborates — the name
+ * that "worked" (`run_code_ide` grew a `_ide` per attempt across one session
+ * until the name was too long for the provider to accept). Saying it once per
+ * step is what turns recovery into convergence instead of drift.
+ * @param corrected - what the model wrote, mapped to what actually ran.
+ * @returns the notice to stage for the next step.
+ */
+function toolNameCorrectionNotice(corrected: ReadonlyMap<string, string>): UserMessage {
+  const lines = [...corrected].map(([wrote, ran]) => `- you wrote \`${wrote}\`; it ran as \`${ran}\``)
+  return createUserMessage({
+    content: [{
+      type: 'text',
+      text: `Tool name corrected:\n${lines.join('\n')}\nUse the corrected name from now on — the one you wrote is not a tool.`,
+    }],
+    source: {
+      kind: 'plugin',
+      plugin: 'tool-name-recovery',
+      form: 'notice',
+      summary: `tool name corrected × ${corrected.size}`,
+    },
+  })
 }
 
 /** Drives one session through turn and step boundaries. */
@@ -389,8 +417,22 @@ export class ReactLoopAgent implements Agent {
         continue
       }
 
+      // A tool name the model invented is not confined to the call it names:
+      // it is written into THIS message, and this message is replayed to the
+      // provider on every later turn. Recording the name that will actually
+      // execute keeps the conversation sendable — an invented name can be any
+      // length or shape, and one the provider rejects fails every subsequent
+      // request, not just this call.
+      const correctedToolNames = new Map<string, string>()
+      const content = assembler.blocks().map((block) => {
+        if (block.type !== 'tool-call') return block
+        const resolved = this.loopCtx.tools.resolveCallName(block.name, this)
+        if (resolved === block.name) return block
+        correctedToolNames.set(block.name, resolved)
+        return { ...block, name: resolved }
+      })
       const message = createAssistantMessage({
-        content: assembler.blocks(),
+        content,
         source: {
           provider: request.provider,
           model: request.model,
@@ -415,6 +457,14 @@ export class ReactLoopAgent implements Agent {
         this.loopCtx, turn, step, toolCalls, signal,
         context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
       )
+      // After the results, so the model reads the correction alongside the
+      // output it produced rather than before it exists.
+      if (correctedToolNames.size > 0 && !concluded) {
+        this.inbox.splice(
+          'next-step', this.inbox.nextStep.length, 0,
+          [toolNameCorrectionNotice(correctedToolNames)],
+        )
+      }
       return concluded ? { kind: 'completed' } : null
     }
   }

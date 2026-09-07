@@ -7,20 +7,24 @@
  * @module @deepseek-ai/dsh-commands/types
  */
 
+import type { EncodedAttachment } from '@deepseek-ai/dsh-attachment/types'
 import type { CommandId } from './brand.ts'
+
+/** One encoded composer attachment in the exact submitted position. */
+export type EncodedCommandAttachment = EncodedAttachment
 
 /** Immutable metadata for a command's optional unstructured input. */
 export interface CommandInputDescriptor {
   /** Placeholder shown before the user supplies free-form input. */
   readonly hint: string
   /**
-   * Whether composer image attachments may accompany an invocation. Absent or
-   * false = the executor rejects an invocation carrying images and capable
+   * Whether composer attachments may accompany an invocation. Absent or false
+   * = the executor rejects an invocation carrying attachments and capable
    * composers refuse the submission before dispatch. A declaring command's
    * handler receives the admitted durable blocks and owns every further
    * grammar decision, including rejecting sub-commands that cannot use them.
    */
-  readonly images?: boolean
+  readonly attachments?: boolean
 }
 
 /** Expected command outcome rendered directly by the dispatching UI. */

@@ -8,7 +8,7 @@ import { toPiContext } from '../src/context.ts'
 import { toPiReplayState } from '../src/replay.ts'
 import { mapStopReason, mapUsage, toStreamChunks } from '../src/stream.ts'
 
-function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0): Usage {
+function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0, reasoning?: number): Usage {
   return {
     input,
     output,
@@ -16,6 +16,7 @@ function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0): Usage {
     cacheWrite,
     totalTokens: input + output + cacheRead + cacheWrite,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    ...reasoning === undefined ? {} : { reasoning },
   }
 }
 
@@ -261,6 +262,35 @@ describe('toPiContext', () => {
     })
     const message = context.messages[0] as AssistantMessage
     expect(message.content[0]).toEqual({ type: 'toolCall', id: 'c1', name: 'f', arguments: {} })
+  })
+
+  it('clamps an outgoing tool name to a shape the provider accepts', () => {
+    // The name is whatever the MODEL emitted, and history is resent in full on
+    // every request — so one invented name does not fail a single call, it
+    // makes every later request in the conversation unsendable. Observed: a
+    // model looping on `run_code_ide` grew the name by `_ide` per attempt until
+    // the API rejected the message, with no retry able to clear it.
+    const runaway = `run_code${'_ide'.repeat(40)}`
+    const context = toPiContext({
+      provider: 'deepseek',
+      model: 'm',
+      messages: [createMessage({
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', id: CallId('c1'), name: runaway, arguments: '{}' },
+          { type: 'tool-call', id: CallId('c2'), name: 'has spaces/and.dots', arguments: '{}' },
+        ],
+        source: { kind: 'plugin', plugin: 'test' },
+      })],
+    })
+    const message = context.messages[0] as AssistantMessage
+    const names = message.content
+      .filter(block => block.type === 'toolCall')
+      .map(block => block.name)
+    expect(names[0]).toHaveLength(64)
+    expect(names[0]).toBe(runaway.slice(0, 64))
+    expect(names[1]).toBe('has_spaces_and_dots')
+    for (const name of names) expect(name).toMatch(/^[A-Za-z0-9_-]{1,64}$/u)
   })
 
   it('parses non-object argument JSON (arrays, scalars) to {}', () => {
@@ -874,14 +904,23 @@ describe('mapStopReason / mapUsage', () => {
     })
   })
 
-  it('maps cache fields only when nonzero', () => {
-    expect(mapUsage(usage(10, 5, 8, 2))).toEqual({
+  it.each([
+    ['omits undefined reasoning', usage(10, 5), { inputTokens: 10, outputTokens: 5 }],
+    ['preserves zero reasoning', usage(10, 5, 0, 0, 0), { inputTokens: 10, outputTokens: 5, reasoningTokens: 0 }],
+    ['preserves positive reasoning without subtracting it from output', usage(10, 5, 0, 0, 3), {
+      inputTokens: 10,
+      outputTokens: 5,
+      reasoningTokens: 3,
+    }],
+    ['maps reasoning alongside cache', usage(10, 5, 8, 2, 3), {
       inputTokens: 10,
       outputTokens: 5,
       cacheReadTokens: 8,
       cacheWriteTokens: 2,
-    })
-    expect(mapUsage(usage(10, 5))).toEqual({ inputTokens: 10, outputTokens: 5 })
+      reasoningTokens: 3,
+    }],
+  ] as const)('%s', (_name, source, expected) => {
+    expect(mapUsage(source)).toEqual(expected)
   })
 })
 

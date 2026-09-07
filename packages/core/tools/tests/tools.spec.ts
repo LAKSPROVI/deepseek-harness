@@ -449,6 +449,15 @@ describe('ToolRuntime', () => {
   it.each([
     [[], 'tool result blocked by post-execute policy'],
     [[{ type: 'reasoning', text: 'private rationale' }], '[reasoning content]'],
+    [[{
+      type: 'file',
+      attachment: {
+        attachmentId: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as never,
+        mediaType: 'text/plain',
+        bytes: 12,
+        name: 'notes.txt',
+      },
+    }], '[file not submitted because this model does not accept file input; attachment sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; name "notes.txt"; media type text/plain; 12 bytes]'],
   ] as const)('derives a stable failure message from non-text or empty block feedback', async (feedback, message) => {
     const ctx = await setup()
     ctx.tools.register(echoTool)

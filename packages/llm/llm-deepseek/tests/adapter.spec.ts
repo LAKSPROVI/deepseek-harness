@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { AttachmentId, ImageVariantId } from '@deepseek-ai/dsh-attachment'
-import type { AttachmentStore, ImageAttachmentRef, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentStore, FileAttachmentRef, ImageAttachmentRef, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import LlmRuntime, { CallId, createUserMessage,
   CONTEXT_WINDOW_EXCEEDED_CODE,
@@ -12,6 +12,8 @@ import LlmRuntime, { CallId, createUserMessage,
   ProviderRequestId,
   QUOTA_EXCEEDED_CODE,
   ReasoningEffortId,
+  textOnlyFileText,
+  textOnlyImageText,
   userAgent,
 } from '@deepseek-ai/dsh-llm'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -75,6 +77,13 @@ const imageRef: ImageAttachmentRef = {
   bytes: 3,
   width: 1,
   height: 1,
+}
+
+const fileRef: FileAttachmentRef = {
+  attachmentId: AttachmentId(`sha256:${'f'.repeat(64)}`),
+  mediaType: 'application/pdf',
+  bytes: 7,
+  name: 'brief.pdf',
 }
 
 function requestImage(ref = imageRef): RequestImageAttachment {
@@ -871,29 +880,36 @@ describe('DeepSeekAdapter against a mock server', () => {
   })
 
   it.each(['deepseek-v4-flash', 'unlisted-pass-through'])(
-    'rejects image input for text-only model %s before credentials, attachments, or fetch',
+    'projects unsupported attachments before direct adapter serialization for text-only model %s',
     async (model) => {
-      const server = await mockServer([])
-      const resolveApiKey = vi.fn(() => Promise.resolve('k'))
+      const server = await mockServer([{ kind: 'sse', events: textEvents }])
       const resolveAttachments = vi.fn(() => ({}) as AttachmentStore)
       const adapter = new DeepSeekAdapter({
         options: () => resolveAdapterOptions({ baseURL: server.url }),
-        resolveApiKey,
+        resolveApiKey: () => Promise.resolve('k'),
         resolveUserId: () => TEST_USER_ID,
         resolveAttachments,
       })
 
-      await expect(drain(adapter.stream({
+      await drain(adapter.stream({
         provider: 'deepseek-official',
         model,
         messages: [createUserMessage({
-          content: [{ type: 'image', attachment: imageRef }],
+          content: [
+            { type: 'image', attachment: imageRef },
+            { type: 'file', attachment: fileRef },
+          ],
           source: { kind: 'plugin', plugin: 'test' },
         })],
-      }))).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
-      expect(resolveApiKey).not.toHaveBeenCalled()
+      }))
+
+      expect(server.requests[0]).toMatchObject({
+        messages: [{
+          role: 'user',
+          content: `${textOnlyImageText(imageRef)}${textOnlyFileText(fileRef)}`,
+        }],
+      })
       expect(resolveAttachments).not.toHaveBeenCalled()
-      expect(server.requests).toHaveLength(0)
     },
   )
 

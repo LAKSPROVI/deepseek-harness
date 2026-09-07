@@ -130,16 +130,27 @@ describe('ToolResultPruner content transform', () => {
       name: 'nested',
       arguments: '{}',
     }
+    const file: ContentBlock = {
+      type: 'file',
+      attachment: {
+        attachmentId: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as never,
+        mediaType: 'text/plain',
+        bytes: 4,
+        name: 'kept.txt',
+      },
+    }
     const result = prune.pruneContent([
       { type: 'text', text: 'A'.repeat(40) },
       reasoning,
       { type: 'text', text: 'B'.repeat(30) },
+      file,
       call,
       { type: 'text', text: 'C'.repeat(30) },
     ])
     expect(result).toEqual([
       { type: 'text', text: `AAAA${PRUNE_MARKER}` },
       reasoning,
+      file,
       call,
       { type: 'text', text: 'CCC' },
     ])

@@ -43,6 +43,7 @@ import {
   contentHasImage,
   LlmAdapter,
   LlmError,
+  projectUnsupportedModalities,
   ReasoningEffortId,
 } from '@deepseek-ai/dsh-llm'
 import type {
@@ -58,6 +59,7 @@ import type {
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
+import { verifiedReasoningDefault } from './catalog.ts'
 import { toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 
@@ -178,7 +180,7 @@ function resolveReasoningLevel(
  * capability is unavailable, which leaves the surface offering only the
  * provider's default.
  * @param model - the resolved model descriptor.
- * @param defaultLevel - the profile's configured effort, already validated.
+ * @param defaultLevel - the configured or verified effort, already validated.
  * @returns the `reasoning` field, or an empty object when none can be offered.
  */
 function reasoningInfo(
@@ -191,7 +193,7 @@ function reasoningInfo(
     reasoning: {
       efforts: levels.map(level => ({
         id: ReasoningEffortId(level),
-        name: `${level.charAt(0).toUpperCase()}${level.slice(1)}`,
+        name: level === 'xhigh' ? 'XHigh' : `${level.charAt(0).toUpperCase()}${level.slice(1)}`,
       })),
       ...defaultLevel === undefined ? {} : { defaultEffort: ReasoningEffortId(defaultLevel) },
     },
@@ -292,7 +294,10 @@ export class PiAiAdapter extends LlmAdapter {
   private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
     const profile = this.profileOf(snapshot, provider)
     const resolvedModel = this.modelOf(snapshot, provider, model)
-    const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
+    const defaultLevel = describableReasoningLevel(
+      resolvedModel,
+      profile.reasoning ?? verifiedReasoningDefault(model),
+    )
     // Only a cap the deployment configured is a request default; the
     // catalog's `maxTokens` sizes the model and stops there.
     const configuredMaxTokens = profile.configuredMaxTokens.get(model)
@@ -335,7 +340,7 @@ export class PiAiAdapter extends LlmAdapter {
     const model = this.modelOf(snapshot, options.provider, options.model)
     const reasoning = resolveReasoningLevel(
       model,
-      options.reasoningEffort ?? profile.reasoning,
+      options.reasoningEffort ?? profile.reasoning ?? verifiedReasoningDefault(options.model),
     )
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 
@@ -347,7 +352,11 @@ export class PiAiAdapter extends LlmAdapter {
     using watchdog = idleWatchdog(upstream, streamIdleTimeoutMs, 'LLM_STREAM_IDLE_TIMEOUT')
 
     try {
-      const containsImage = options.messages.some(message => contentHasImage(message.content))
+      const projectedMessages = projectUnsupportedModalities(options.messages, model.input)
+      const requestOptions = projectedMessages === options.messages
+        ? options
+        : { ...options, messages: [...projectedMessages] }
+      const containsImage = requestOptions.messages.some(message => contentHasImage(message.content))
       if (containsImage && !model.input.includes('image')) {
         throw new LlmError(`pi-ai model "${model.id}" does not support image input`, 'UNSUPPORTED_CONTENT')
       }
@@ -359,8 +368,8 @@ export class PiAiAdapter extends LlmAdapter {
         this.config.onReplayDegrade?.({ provider: options.provider, model: options.model, reason })
       }
       const context = attachments === undefined
-        ? toPiContext(options, undefined, onReplayDegrade)
-        : await toPiContext({ ...options, signal: watchdog.signal }, attachments, onReplayDegrade, profile.maxRequestImageBytes, {
+        ? toPiContext(requestOptions, undefined, onReplayDegrade)
+        : await toPiContext({ ...requestOptions, signal: watchdog.signal }, attachments, onReplayDegrade, profile.maxRequestImageBytes, {
           maxPixels: profile.requestImagePixelBudget,
           maxBytes: profile.requestImageMaxBytes,
         })

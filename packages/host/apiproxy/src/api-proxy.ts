@@ -12,11 +12,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
-import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
-import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import { AttachmentError, admitEncodedFiles, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { createUserMessage, freezeMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { errorChain } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, LlmResolvedModelInfo, MessageSource } from '@deepseek-ai/dsh-llm'
 import { isAppendSurfaceEvent, isJsonValue } from '@deepseek-ai/dsh-session'
 import type { JsonValue, Session, SessionEvent, SessionEventMap, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
@@ -38,7 +38,7 @@ import type { PresetBearingSession } from '@deepseek-ai/dsh-agent-presets'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {
   ApiProxy, ConfigurableProviderView, CredentialView, GoalRef, HistoryEntry, HostFrame,
-  ModelCatalogFailure, ModelProviderGroup,
+  ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup,
   ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
   QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
   WorkspaceId, WorkspaceView,
@@ -91,7 +91,9 @@ import type { ApprovalOutcome, ApprovalRequestId } from '@deepseek-ai/dsh-user-a
 // `ctx.get('approval')` without a value dependency on the seam (optional composition).
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { approvalResponsePayloadSchema } from './api/approvals.schema.ts'
-import { imageLimitsProjectionSchema, sessionListMetadataProjectionSchema } from './api/sessions.schema.ts'
+import {
+  fileLimitsProjectionSchema, imageLimitsProjectionSchema, sessionListMetadataProjectionSchema,
+} from './api/sessions.schema.ts'
 import { questionResponsePayloadSchema } from './api/questions.schema.ts'
 import type { ClientResponse, RpcError, RpcReceipt, RpcRequest, RpcResponse } from './api/rpc.ts'
 import { RpcId } from './api/rpc.ts'
@@ -125,70 +127,168 @@ export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
 /** Conversation message event types (the pagination counting unit). */
 const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
 
-/** Validate one prompt as a batch before publishing any durable image object. */
-async function durablePromptContent(ctx: Context, content: readonly PromptContentPart[]): Promise<ContentBlock[]> {
+/** Validate and persist every upload before publishing its owning message. */
+async function durablePromptContent(
+  ctx: Context,
+  scope: string,
+  content: readonly PromptContentPart[],
+): Promise<ContentBlock[]> {
   if (content.every(part => part.type === 'text')) {
     return content.map(part => ({ type: 'text', text: part.text }))
   }
-  const refs = await admitEncodedImages(ctx.attachments, content.filter(part => part.type === 'image'))
-  let next = 0
-  return content.map(part => part.type === 'text'
-    ? { type: 'text', text: part.text }
-    // admitEncodedImages returns one reference per image part in order.
-    : { type: 'image', attachment: refs[next++] as ImageAttachmentRef })
+  const images = content.filter(part => part.type === 'image')
+  const encodedFiles = content.filter(part => part.type === 'file' && 'data' in part)
+  const uploadedFiles = content.filter(part => part.type === 'file' && 'uploadId' in part)
+  const [imageRefs, encodedRefs, uploadedRefs] = await Promise.all([
+    images.length === 0 ? [] : admitEncodedImages(ctx.attachments, images),
+    encodedFiles.length === 0 ? [] : admitEncodedFiles(ctx.attachments, encodedFiles),
+    uploadedFiles.length === 0 ? [] : ctx.attachments.authorizeUploadedFiles(scope, uploadedFiles),
+  ])
+  const fileRefs = [...encodedRefs, ...uploadedRefs]
+  if (fileRefs.length > 0) ctx.attachments.validateFileReferences(fileRefs)
+  let nextImage = 0
+  let nextEncoded = 0
+  let nextUploaded = 0
+  return content.map((part): ContentBlock => {
+    if (part.type === 'text') return { type: 'text', text: part.text }
+    if (part.type === 'image') {
+      return { type: 'image', attachment: imageRefs[nextImage++] as ImageAttachmentRef }
+    }
+    return {
+      type: 'file',
+      attachment: 'data' in part
+        ? encodedRefs[nextEncoded++] as FileAttachmentRef
+        : uploadedRefs[nextUploaded++] as FileAttachmentRef,
+    }
+  })
 }
 
-/** Search durable content for an image reference, including nested tool results. */
-function imageBlockIn(content: unknown, match: (ref: ImageAttachmentRef) => boolean): ImageAttachmentRef | undefined {
-  if (!Array.isArray(content)) return undefined
-  for (const value of content) {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
-    const block = value as { type?: unknown; attachment?: unknown; content?: unknown }
-    if (block.type === 'image' && typeof block.attachment === 'object' && block.attachment !== null) {
-      const ref = block.attachment as ImageAttachmentRef
-      if (match(ref)) return ref
+/** One discriminated durable attachment reference found in logged JSON. */
+type LoggedAttachment =
+  | { type: 'image'; ref: ImageAttachmentRef }
+  | { type: 'file'; ref: FileAttachmentRef }
+
+/** Resolve one attachment from an explicitly authorized durable content vector. */
+function referencedContent(
+  content: readonly import('@deepseek-ai/dsh-llm').ContentBlock[],
+  attachmentId: string,
+): LoggedAttachment | undefined {
+  for (const block of content) {
+    if (block.type === 'image' && String(block.attachment.attachmentId) === attachmentId) {
+      return { type: 'image', ref: block.attachment }
     }
-    if (block.type === 'tool-result') {
-      const nested = imageBlockIn(block.content, match)
-      if (nested !== undefined) return nested
+    if (block.type === 'file' && String(block.attachment.attachmentId) === attachmentId) {
+      return { type: 'file', ref: block.attachment }
     }
   }
   return undefined
 }
 
-/** Search every durable event carrier that can own model-visible content. */
-function imageInEvent(event: SessionEvent, match: (ref: ImageAttachmentRef) => boolean): ImageAttachmentRef | undefined {
-  const data = event.data as {
-    content?: unknown
-    message?: { content?: unknown }
-    inserted?: Array<{ content?: unknown }>
-    chunk?: { type?: unknown; block?: unknown }
-  }
-  const direct = imageBlockIn(data.content, match)
-  if (direct !== undefined) return direct
-  if (data.message !== undefined) {
-    const wrapped = imageBlockIn(data.message.content, match)
-    if (wrapped !== undefined) return wrapped
-  }
-  if (data.inserted !== undefined) {
-    for (const message of data.inserted) {
-      const inserted = imageBlockIn(message.content, match)
-      if (inserted !== undefined) return inserted
+/** Read one Agent Teams debate event without coupling the Host to that optional plugin. */
+function referencedTeamDebateAttachment(event: SessionEvent, attachmentId: string): LoggedAttachment | undefined {
+  const envelope = event as unknown as { type?: unknown; data?: unknown }
+  if (envelope.type !== 'team/debate' || typeof envelope.data !== 'object' || envelope.data === null) return undefined
+  const debate = (envelope.data as { debate?: unknown }).debate
+  if (typeof debate !== 'object' || debate === null) return undefined
+  const candidate = debate as { evidence?: unknown; contributions?: unknown }
+  const vectors: unknown[] = [candidate.evidence]
+  if (Array.isArray(candidate.contributions)) {
+    for (const contribution of candidate.contributions) {
+      if (typeof contribution === 'object' && contribution !== null) {
+        vectors.push((contribution as { content?: unknown }).content)
+      }
     }
   }
-  if (event.type === 'assistant/chunk' && data.chunk?.type === 'block-end') {
-    return imageBlockIn([data.chunk.block], match)
+  for (const vector of vectors) {
+    if (!Array.isArray(vector)) continue
+    for (const value of vector) {
+      if (typeof value !== 'object' || value === null) continue
+      const block = value as { type?: unknown; attachment?: unknown }
+      if (typeof block.attachment !== 'object' || block.attachment === null) continue
+      const ref = block.attachment as Record<string, unknown>
+      if (ref['attachmentId'] !== attachmentId || typeof ref['bytes'] !== 'number'
+        || !Number.isSafeInteger(ref['bytes']) || ref['bytes'] < 0
+        || typeof ref['mediaType'] !== 'string'
+        || (ref['name'] !== undefined && typeof ref['name'] !== 'string')) continue
+      if (block.type === 'file') return { type: 'file', ref: ref as unknown as FileAttachmentRef }
+      if (block.type === 'image' && ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(ref['mediaType'])
+        && typeof ref['width'] === 'number' && Number.isSafeInteger(ref['width']) && ref['width'] > 0
+        && typeof ref['height'] === 'number' && Number.isSafeInteger(ref['height']) && ref['height'] > 0) {
+        return { type: 'image', ref: ref as unknown as ImageAttachmentRef }
+      }
+    }
   }
   return undefined
 }
 
-/** Resolve the first reference matching one opaque id. */
-function referencedImage(events: readonly SessionEvent[], attachmentId: string): ImageAttachmentRef | undefined {
+/** Resolve an attachment only from authoritative model-visible content. */
+function referencedAttachment(events: readonly SessionEvent[], attachmentId: string): LoggedAttachment | undefined {
   for (const event of events) {
-    const found = imageInEvent(event, ref => String(ref.attachmentId) === attachmentId)
+    if (event.type === 'user/message') {
+      const found = referencedContent(event.data.content, attachmentId)
+      if (found !== undefined) return found
+      continue
+    }
+    const found = referencedTeamDebateAttachment(event, attachmentId)
     if (found !== undefined) return found
   }
   return undefined
+}
+
+/** Recursively resolve only a legacy image occurrence from durable event data. */
+function referencedImageIn(value: unknown, attachmentId: string): ImageAttachmentRef | undefined {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = referencedImageIn(item, attachmentId)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  if (typeof value !== 'object' || value === null) return undefined
+  const record = value as Record<string, unknown>
+  if (record['type'] === 'image' && typeof record['attachment'] === 'object' && record['attachment'] !== null) {
+    const ref = record['attachment'] as ImageAttachmentRef
+    if (String(ref.attachmentId) === attachmentId) return ref
+  }
+  for (const child of Object.values(record)) {
+    const found = referencedImageIn(child, attachmentId)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+
+/** Resolve a legacy image occurrence without admitting arbitrary generic-file metadata. */
+function referencedLegacyImage(events: readonly SessionEvent[], attachmentId: string): LoggedAttachment | undefined {
+  for (const event of events) {
+    const ref = referencedImageIn(event.data, attachmentId)
+    if (ref !== undefined) return { type: 'image', ref }
+  }
+  return undefined
+}
+
+/** Adapt an attachment byte iterator to a cancellable Fetch response body. */
+function attachmentResponseBody(
+  data: AsyncIterable<Uint8Array>,
+  signal: AbortSignal,
+): ReadableStream<Uint8Array> {
+  const iterator = data[Symbol.asyncIterator]()
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      signal.throwIfAborted()
+      const next = await iterator.next()
+      if (next.done) controller.close()
+      else controller.enqueue(next.value)
+    },
+    async cancel(reason) {
+      await iterator.return?.(reason)
+    },
+  })
+}
+
+/** Forced-download header with a fixed ASCII fallback and encoded display name. */
+function fileDisposition(name: string | undefined): string {
+  if (name === undefined) return 'attachment; filename="attachment"'
+  return `attachment; filename="attachment"; filename*=UTF-8''${encodeURIComponent(name)}`
 }
 
 /** Strict browser-zone profile: UTC or an IANA Area/Location-style identifier. */
@@ -258,6 +358,38 @@ function ok<T>(request: RpcRequest<unknown>, value: T): RpcResponse<T> {
   return { rpcId: request.rpcId, result: { ok: true, value } }
 }
 
+/** Project detached exact-route metadata onto the session model wire. */
+function projectModelInfo(info: LlmResolvedModelInfo): ModelCatalogModel {
+  const reasoning: ModelReasoning | undefined = info.reasoning === undefined
+    ? undefined
+    : {
+      efforts: info.reasoning.efforts.map(effort => ({
+        id: effort.id,
+        name: effort.name,
+        ...effort.description === undefined ? {} : { description: effort.description },
+      })),
+      ...info.reasoning.defaultEffort === undefined
+        ? {}
+        : { defaultEffort: info.reasoning.defaultEffort },
+    }
+  return {
+    id: info.id,
+    name: info.name,
+    ...info.description === undefined ? {} : { description: info.description },
+    ...info.inputModalities === undefined ? {} : { inputModalities: [...info.inputModalities] },
+    ...reasoning === undefined ? {} : { reasoning },
+  }
+}
+
+/** Resolve current-route metadata without turning an advisory read into a failure. */
+async function currentModelInfo(ctx: Context, current: ModelSelection): Promise<ModelCatalogModel | undefined> {
+  try {
+    return projectModelInfo(await ctx.llm.resolveModelInfo(current.provider, current.model))
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Build the provider/model catalog over every registered route. Shared by the
  * session-scoped `session.models` and host-scoped `llm.models`. Catalog
@@ -274,26 +406,13 @@ async function buildModelCatalog(ctx: Context): Promise<{
     try {
       const models = await ctx.llm.listModels(provider.id)
       const entries = await Promise.all(models.map(async (model) => {
-        const resolved = await ctx.llm.resolveModelInfo(provider.id, model.id)
-        const reasoning: ModelReasoning | undefined = resolved.reasoning === undefined
-          ? undefined
-          : {
-            efforts: resolved.reasoning.efforts.map(effort => ({
-              id: effort.id,
-              name: effort.name,
-              ...effort.description === undefined
-                ? {}
-                : { description: effort.description },
-            })),
-            ...resolved.reasoning.defaultEffort === undefined
-              ? {}
-              : { defaultEffort: resolved.reasoning.defaultEffort },
-          }
+        const exact = projectModelInfo(await ctx.llm.resolveModelInfo(provider.id, model.id))
         return {
           id: model.id,
           name: model.name,
           ...model.description === undefined ? {} : { description: model.description },
-          ...reasoning === undefined ? {} : { reasoning },
+          ...exact.inputModalities === undefined ? {} : { inputModalities: exact.inputModalities },
+          ...exact.reasoning === undefined ? {} : { reasoning: exact.reasoning },
         }
       }))
       const group: ModelProviderGroup = {
@@ -1071,12 +1190,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const pendingQuestions = new Map<RpcId, PendingQuestion>()
   const pendingApprovals = new Map<RpcId, PendingApproval>()
   const muxQueues = new Set<FrameQueue<RpcRequest<MuxFrame>>>()
-  const imageAdmissionChains = new WeakMap<Agent, Promise<void>>()
+  const attachmentAdmissionChains = new WeakMap<Agent, Promise<void>>()
 
-  /** Serialize image admission with model selection for one agent. */
-  function serializeImageAdmission<T>(agent: Agent, operation: () => Promise<T>): Promise<T> {
-    const result = (imageAdmissionChains.get(agent) ?? Promise.resolve()).then(operation)
-    imageAdmissionChains.set(agent, result.then(() => undefined, () => undefined))
+  /** Serialize attachment admission with model selection for one agent. */
+  function serializeAttachmentAdmission<T>(agent: Agent, operation: () => Promise<T>): Promise<T> {
+    const result = (attachmentAdmissionChains.get(agent) ?? Promise.resolve()).then(operation)
+    attachmentAdmissionChains.set(agent, result.then(() => undefined, () => undefined))
     return result
   }
 
@@ -1119,6 +1238,41 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     installModelSelection(agent.ctx, selection)
     selections.set(agent, selection)
     return selection
+  }
+
+  /**
+   * Replace only an effort invalidated by the current exact-model metadata.
+   * An unresolved model keeps its recorded identity and effort so the existing
+   * unavailable-route path, rather than an invented fallback, owns recovery.
+   */
+  async function currentSelectionFor(agent: Agent): Promise<{
+    current: ModelSelection
+    currentModel?: ModelCatalogModel
+  }> {
+    const selection = selectionFor(agent)
+    const current = selection.current
+    const currentModel = await currentModelInfo(ctx, current)
+    const requested = current.reasoningEffort
+    if (requested === undefined || currentModel === undefined
+      || currentModel.reasoning?.efforts.some(effort => effort.id === requested)) {
+      return { current, ...currentModel === undefined ? {} : { currentModel } }
+    }
+    const fallback = currentModel.reasoning?.defaultEffort
+    const normalized: ModelSelection = {
+      provider: current.provider,
+      model: current.model,
+      ...fallback === undefined ? {} : { reasoningEffort: ReasoningEffortId(fallback) },
+    }
+    // Exact-model resolution is asynchronous. A newer accepted selection wins
+    // rather than being overwritten by repair of the value it superseded.
+    const latest = selection.current
+    if (latest.provider !== current.provider || latest.model !== current.model
+      || latest.reasoningEffort !== current.reasoningEffort) {
+      const latestModel = await currentModelInfo(ctx, latest)
+      return { current: latest, ...latestModel === undefined ? {} : { currentModel: latestModel } }
+    }
+    selection.current = normalized
+    return { current: normalized, currentModel }
   }
 
   /** Pre-publication setup used by both fresh and resumed Web agents. */
@@ -1262,6 +1416,17 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       wire: { viewSchema: imageLimitsProjectionSchema, view: () => projectionCtx.attachments.imageLimits },
       stateVersion: 1,
     })
+    const fileLimits = projectionCtx.attachments.fileLimits
+    if (fileLimits !== undefined) {
+      projectionCtx.sessionProjections.register<'fileLimits', null>({
+        key: 'fileLimits',
+        stateSchema: zod.null(),
+        init: () => null,
+        apply: state => state,
+        wire: { viewSchema: fileLimitsProjectionSchema, view: () => fileLimits },
+        stateVersion: 1,
+      })
+    }
   })
 
   /** Project both durable inbox lists, optionally including the splice currently being emitted. */
@@ -1794,7 +1959,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const found = await agentFor(sessionId)
     if ('error' in found) return { refused: err(request, found.error) }
     const agent = found.agent
-    const selection = selectionFor(agent).current
+    const { current: selection } = await currentSelectionFor(agent)
     if (!routeServed(selection.provider)) {
       return {
         refused: err(request, {
@@ -2185,25 +2350,38 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const { sessionId } = request.payload
         const found = await agentFor(sessionId)
         if ('error' in found) return err(request, found.error)
-        const current = selectionFor(found.agent).current
-        const { groups, failures } = await buildModelCatalog(ctx)
+        const [{ groups, failures }, { current, currentModel }] = await Promise.all([
+          buildModelCatalog(ctx),
+          currentSelectionFor(found.agent),
+        ])
         const routable = routeServed(current.provider)
-        return ok(request, { current: { ...current }, routable, groups, failures })
+        return ok(request, {
+          current: { ...current },
+          ...currentModel === undefined ? {} : { currentModel },
+          routable,
+          groups,
+          failures,
+        })
       },
 
       async selectModel(request) {
         const { sessionId, provider, model, reasoningEffort } = request.payload
         const found = await agentFor(sessionId)
         if ('error' in found) return err(request, found.error)
-        return serializeImageAdmission(found.agent, async () => {
+        return serializeAttachmentAdmission(found.agent, async () => {
           try {
-            const resolved = await ctx.llm.resolveCallConfig({
+            const proposal = {
               provider,
               model,
               ...reasoningEffort === undefined
                 ? {}
                 : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
-            })
+            }
+            const [resolved, modelInfo] = await Promise.all([
+              ctx.llm.resolveCallConfig(proposal),
+              ctx.llm.resolveModelInfo(provider, model),
+            ])
+            const currentModel = projectModelInfo(modelInfo)
             const selected: ModelSelection = {
               provider: resolved.provider,
               model: resolved.model,
@@ -2219,7 +2397,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 `api-proxy: the model switch applies to this session but was not saved as the default: ${String(error)}`,
               )
             }
-            return ok(request, { selected: { ...selected } })
+            return ok(request, { selected: { ...selected }, currentModel })
           } catch (error: unknown) {
             return err(request, {
               code: 'model-unavailable',
@@ -2380,6 +2558,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ...(canonicalTimeZone === undefined ? {} : { clientTimeZone: canonicalTimeZone }),
         }
         const hasImage = content.some(part => part.type === 'image')
+        const hasAttachment = content.some(part => part.type !== 'text')
         const admit = async (): Promise<RpcResponse<{ accepted: true }>> => {
           try {
             if (hasImage) {
@@ -2393,7 +2572,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 })
               }
             }
-            const durable = await durablePromptContent(ctx, content)
+            const durable = await durablePromptContent(ctx, String(sessionId), content)
             const message: UserMessage = createUserMessage({ content: durable, source })
             if (mode === 'steer') agent.steer(message)
             else agent.followup(message)
@@ -2413,7 +2592,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }
           return ok(request, { accepted: true as const })
         }
-        return hasImage ? serializeImageAdmission(agent, admit) : admit()
+        return hasAttachment ? serializeAttachmentAdmission(agent, admit) : admit()
       },
 
       async attachment(request) {
@@ -2435,17 +2614,27 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
-        const ref = referencedImage(state.events, String(attachmentId))
-        if (ref === undefined) {
+        const logged = referencedAttachment(state.events, String(attachmentId))
+          ?? referencedLegacyImage(state.events, String(attachmentId))
+        if (logged === undefined) {
           return err(request, {
             code: 'attachment-error',
-            message: 'Image is not referenced by this session.',
+            message: 'Attachment is not referenced by this session.',
             details: { reason: 'ATTACHMENT_NOT_REFERENCED' },
           })
         }
         try {
-          const stored = await ctx.attachments.readImage(ref)
+          if (logged.type === 'image') {
+            const stored = await ctx.attachments.readImage(logged.ref)
+            return ok(request, {
+              type: 'image',
+              attachment: stored.ref,
+              data: Buffer.from(stored.data).toString('base64'),
+            })
+          }
+          const stored = await ctx.attachments.readFile(logged.ref)
           return ok(request, {
+            type: 'file',
             attachment: stored.ref,
             data: Buffer.from(stored.data).toString('base64'),
           })
@@ -2459,7 +2648,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }
           return err(request, {
             code: 'internal',
-            message: 'Unable to read image attachment.',
+            message: 'Unable to read attachment.',
             details: {},
           })
         }
@@ -3535,6 +3724,65 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     },
 
     downloads: {
+      async fileUpload(request, signal) {
+        try {
+          await readSessionState(request.sessionId)
+        } catch (error: unknown) {
+          if (error instanceof SessionNotFound) return new Response('session not found', { status: 404 })
+          return new Response('session authorization unavailable', { status: 500 })
+        }
+        try {
+          const receipt = await ctx.attachments.saveFileStream(
+            String(request.sessionId),
+            {
+              data: request.body,
+              expectedBytes: request.expectedBytes,
+              ...(request.mediaType === undefined ? {} : { mediaType: request.mediaType }),
+              ...(request.name === undefined ? {} : { name: request.name }),
+            },
+            signal,
+          )
+          return Response.json(receipt, { status: 201 })
+        } catch (error: unknown) {
+          signal.throwIfAborted()
+          if (error instanceof AttachmentError) {
+            const status = error.code === 'FILE_TOO_LARGE' || error.code === 'FILES_TOO_LARGE' ? 413 : 400
+            return new Response(error.message, { status })
+          }
+          return new Response('file upload failed', { status: 500 })
+        }
+      },
+
+      async fileDownload(request, signal) {
+        let state: SessionReadState
+        try {
+          state = await readSessionState(request.sessionId)
+        } catch (error: unknown) {
+          if (error instanceof SessionNotFound) return new Response('session not found', { status: 404 })
+          return new Response('attachment authorization unavailable', { status: 500 })
+        }
+        const logged = referencedAttachment(state.events, request.attachmentId)
+        if (logged === undefined || logged.type !== 'file') {
+          return new Response('attachment is not referenced by this session', { status: 404 })
+        }
+        try {
+          const stored = await ctx.attachments.readFileStream(logged.ref, signal)
+          return new Response(attachmentResponseBody(stored.data, signal), {
+            headers: {
+              'content-type': 'application/octet-stream',
+              'content-length': String(stored.ref.bytes),
+              'content-disposition': fileDisposition(stored.ref.name),
+              'x-content-type-options': 'nosniff',
+              'cache-control': 'private, no-store',
+            },
+          })
+        } catch (error: unknown) {
+          signal.throwIfAborted()
+          if (error instanceof AttachmentError) return new Response(error.message, { status: 404 })
+          return new Response('file download failed', { status: 500 })
+        }
+      },
+
       async sessionLog(request, signal) {
         // Clean error path first: missing services answer 500 and a missing
         // root artifact 404 before any zip byte is produced. The root content

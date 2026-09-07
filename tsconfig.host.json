@@ -280,8 +280,8 @@
     { "path": "./packages/jobs/jobs" },
     { "path": "./packages/jobs/jobs-local" },
     { "path": "./packages/jobs/tool-jobs" },
-    { "path": "./packages/experimental/agent-team" },
-    { "path": "./packages/experimental/tool-agent-team" },
+    { "path": "./packages/subagent/agent-team/tsconfig.host.json" },
+    { "path": "./packages/subagent/tool-agent-team" },
     { "path": "./packages/workflow/workflow" },
     { "path": "./packages/workflow/workflow-worker-thread" },
     { "path": "./packages/workflow/tool-workflow" },
@@ -310,6 +310,7 @@
     { "path": "./packages/lsp/lsp" },
     { "path": "./packages/lsp/lsp-stdio" },
     { "path": "./packages/lsp/tool-lsp" },
+    { "path": "./packages/automation/automation" },
     { "path": "./apps/cli" }
   ]
 }

@@ -13,6 +13,9 @@
     - button "Agent presets":
       - img
       - text: Agent presets
+    - button "Prompt library":
+      - img
+      - text: Prompt library
   - button "Open configuration file"
   - button "Close":
     - img

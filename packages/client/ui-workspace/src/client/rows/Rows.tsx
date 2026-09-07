@@ -8,15 +8,16 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import {
-  HoverCard, IconArchiveOutline20, IconBranchOutline16, IconEditOutline16,
+  HoverCard, IconArchiveOutline20, IconBranchOutline16, IconChecklistOutline14, IconCheckOutline16, IconEditOutline16,
   IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconPlusOutline16,
   IconTrashOutline16, IconTriangleRightFill14, Menu, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { MenuEntry, MenuItem, StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import { relativeTime } from '../tree.ts'
+import type { CustomSessionStatus } from '../stores.ts'
 import css from './Rows.module.css'
 
 /** The standard locale seat, prop-passed from the browser root. */
@@ -220,7 +221,7 @@ function assertNever(value: never): never {
 }
 
 interface SessionStatus {
-  state: StateDotState
+  state: StateDotState | 'unread' | 'finalized' | 'later'
   label: string
 }
 
@@ -229,7 +230,7 @@ interface SessionStatus {
  * outranks completion reminders.
  */
 function sessionStatuses(
-  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'runningSubagentCount' | 'completed'>,
+  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'runningSubagentCount' | 'completed' | 'unread' | 'customStatus'>,
   t: RowTranslate,
 ): readonly [SessionStatus, ...SessionStatus[]] {
   const subagents: SessionStatus | undefined = node.runningSubagentCount === 0
@@ -252,7 +253,7 @@ function sessionStatuses(
       pending = { state: 'warning', label: t('status.planReview') }
       break
     case 'question':
-      pending = { state: 'warning', label: t('status.waitingAnswer') }
+      pending = { state: 'warning', label: node.customStatus === 'warning' ? t('status.setWaitingDecision') : t('status.waitingAnswer') }
       break
     case undefined: break
     /* v8 ignore next -- closed PendingInteractionStatus union */
@@ -264,15 +265,27 @@ function sessionStatuses(
     return subagents === undefined ? [primary] : [primary, subagents]
   }
   if (subagents !== undefined) return [subagents]
+  if (node.customStatus === 'finalized') return [{ state: 'finalized', label: t('status.finalized') }]
+  if (node.customStatus === 'later') return [{ state: 'later', label: t('status.later') }]
+  if (node.unread) return [{ state: 'unread', label: t('status.unread') }]
   if (node.completed) return [{ state: 'done', label: t('status.completed') }]
   return [{ state: 'done', label: t('status.idle') }]
 }
 
 /** Primary status dot plus every status's screen-reader label, shared by the search and session rows. */
 function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ...SessionStatus[]] }) {
+  const primary = statuses[0]
   return (
     <>
-      <StateDot state={statuses[0].state} />
+      {primary.state === 'unread' ? (
+        <span className={clsx(css.dot, css.dotUnread)} data-state="unread" aria-hidden="true" />
+      ) : primary.state === 'finalized' ? (
+        <span className={clsx(css.dot, css.dotFinalized)} data-state="finalized" aria-hidden="true" />
+      ) : primary.state === 'later' ? (
+        <span className={clsx(css.dot, css.dotLater)} data-state="later" aria-hidden="true" />
+      ) : (
+        <StateDot state={primary.state} />
+      )}
       {statuses.map(status => (
         <span className={css.visuallyHidden} key={status.label}>{status.label}</span>
       ))}
@@ -281,17 +294,35 @@ function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ..
 }
 
 /** Hover-card body: full title, relative time, and every relevant live status. */
-function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number; t: RowTranslate }) {
+function SessionHoverContent({
+  node, workspaceName, now, t,
+}: {
+  node: SessionNode
+  workspaceName?: string | undefined
+  now: number
+  t: RowTranslate
+}) {
   const statuses = sessionStatuses(node, t)
   return (
     <div className={css.hoverContent}>
       <div className={css.hoverTitle}>{displayTitle(node, t)}</div>
+      {workspaceName !== undefined && (
+        <div className={css.hoverWorkspace}>{workspaceName}</div>
+      )}
       {/* Same placeholder rule as the row's trailing cell: no timestamp
           before the first prompt. */}
       {!node.blank && <div className={css.hoverTime}>{hoverTimeLabel(node.updatedAt, now, t)}</div>}
       {statuses.map(status => (
         <div className={css.hoverStatus} key={status.label}>
-          <StateDot state={status.state} />
+          {status.state === 'unread' ? (
+            <span className={clsx(css.dot, css.dotUnread)} aria-hidden="true" />
+          ) : status.state === 'finalized' ? (
+            <span className={clsx(css.dot, css.dotFinalized)} aria-hidden="true" />
+          ) : status.state === 'later' ? (
+            <span className={clsx(css.dot, css.dotLater)} aria-hidden="true" />
+          ) : (
+            <StateDot state={status.state} />
+          )}
           <span>{status.label}</span>
         </div>
       ))}
@@ -328,7 +359,7 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
     >
       <span className={css.searchResultHeading}>
         <span className={css.slot}>
-          {(primaryStatus.state !== 'done' || result.completed) && (
+          {(primaryStatus.state !== 'done' || result.completed || result.unread) && (
             <SessionStatusDots statuses={statuses} />
           )}
         </span>
@@ -359,7 +390,10 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
-export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, drag, flat = false, t }: {
+export function SessionNodeItem({
+  node, currentId, now, onOpen, onRename, onFork, onArchive, onMarkUnread, onToggleUnread, onToggleCompleted,
+  onSetStatus, drag, flat = false, t,
+}: {
   node: SessionNode
   currentId: string | undefined
   now: number
@@ -370,6 +404,14 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   onFork: (id: SessionNode['id']) => void
   /** Archive this session (row menu action; commits without a dialog). */
   onArchive: (id: SessionNode['id']) => void
+  /** Mark this session as unread (row menu action). */
+  onMarkUnread?: ((id: SessionNode['id']) => void) | undefined
+  /** Toggle unread/read state for this session. */
+  onToggleUnread?: ((id: SessionNode['id']) => void) | undefined
+  /** Toggle completed state for this session. */
+  onToggleCompleted?: ((id: SessionNode['id']) => void) | undefined
+  /** Set explicit session status. */
+  onSetStatus?: ((id: SessionNode['id'], status: CustomSessionStatus | 'idle') => void) | undefined
   /** Present only on draggable rows (workspace-group sessions outside search). */
   drag?: RowDragProps | undefined
   /** The row is rendered without a parent Workspace header. */
@@ -381,12 +423,75 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   const selected = node.id === currentId
   const statuses = sessionStatuses(node, t)
   const primaryStatus = statuses[0]
-  const showStatus = primaryStatus.state !== 'done' || row.completed
+  const showStatus = primaryStatus.state !== 'done' || row.completed || row.unread
   const [menuOpen, setMenuOpen] = useState(false)
-  // Archive hides the row through the registry-global archive set and never
-  // touches the session log, so it is not styled as destructive and needs no
-  // confirmation dialog.
-  const sessionMenuItems = [
+  const isUnread = node.unread === true
+  const isCompleted = node.completed
+  const hasMarker = isUnread || isCompleted || node.customStatus !== undefined
+
+  const statusSubmenu: MenuItem[] = [
+    {
+      id: 'set-ongoing',
+      label: t('status.setOngoing'),
+      icon: <StateDot state="ongoing" />,
+    },
+    {
+      id: 'set-warning',
+      label: t('status.setWaitingDecision'),
+      icon: <StateDot state="warning" />,
+    },
+    {
+      id: 'set-unread',
+      label: t('status.setUnread'),
+      icon: <span className={clsx(css.dot, css.dotUnread)} aria-hidden="true" />,
+    },
+    {
+      id: 'set-later',
+      label: t('status.setLater'),
+      icon: <span className={clsx(css.dot, css.dotLater)} aria-hidden="true" />,
+    },
+    {
+      id: 'set-completed',
+      label: t('status.setCompleted'),
+      icon: <StateDot state="done" />,
+    },
+    {
+      id: 'set-finalized',
+      label: t('status.setFinalized'),
+      icon: <span className={clsx(css.dot, css.dotFinalized)} aria-hidden="true" />,
+    },
+    {
+      id: 'set-idle',
+      label: t('status.clearStatus'),
+      icon: <IconChecklistOutline14 size={16} />,
+    },
+  ]
+
+  const sessionMenuItems: MenuEntry[] = [
+    {
+      id: 'status-submenu',
+      label: t('menu.setStatus'),
+      icon: <IconChecklistOutline14 size={16} />,
+      submenu: statusSubmenu,
+    },
+    ...(hasMarker ? [
+      {
+        id: 'read',
+        label: t('menu.markRead'),
+        icon: <IconChecklistOutline14 size={16} />,
+      },
+    ] : [
+      {
+        id: 'unread',
+        label: t('menu.markUnread'),
+        icon: <IconChecklistOutline14 size={16} />,
+      },
+    ]),
+    {
+      id: isCompleted ? 'incomplete' : 'completed',
+      label: isCompleted ? t('menu.markIncomplete') : t('menu.markCompleted'),
+      icon: <IconCheckOutline16 size={16} />,
+    },
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
     // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
@@ -450,9 +555,34 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
             items={sessionMenuItems}
             onSelect={(id) => {
               setMenuOpen(false)
-              if (id === 'rename') onRename(node.id, row.title)
-              if (id === 'fork') onFork(node.id)
-              if (id === 'archive') onArchive(node.id)
+              if (id === 'set-ongoing') {
+                onSetStatus?.(node.id, 'ongoing')
+              } else if (id === 'set-warning') {
+                onSetStatus?.(node.id, 'warning')
+              } else if (id === 'set-unread') {
+                onSetStatus?.(node.id, 'unread')
+              } else if (id === 'set-later') {
+                onSetStatus?.(node.id, 'later')
+              } else if (id === 'set-completed') {
+                onSetStatus?.(node.id, 'completed')
+              } else if (id === 'set-finalized') {
+                onSetStatus?.(node.id, 'finalized')
+              } else if (id === 'set-idle') {
+                onSetStatus?.(node.id, 'idle')
+              } else if (id === 'unread' || id === 'read') {
+                if (onSetStatus !== undefined) onSetStatus(node.id, id === 'unread' ? 'unread' : 'idle')
+                else if (onToggleUnread !== undefined) onToggleUnread(node.id)
+                else onMarkUnread?.(node.id)
+              } else if (id === 'completed' || id === 'incomplete') {
+                if (onSetStatus !== undefined) onSetStatus(node.id, id === 'completed' ? 'completed' : 'idle')
+                else onToggleCompleted?.(node.id)
+              } else if (id === 'rename') {
+                onRename(node.id, row.title)
+              } else if (id === 'fork') {
+                onFork(node.id)
+              } else if (id === 'archive') {
+                onArchive(node.id)
+              }
             }}
             portal
             closeOnPointerLeave
@@ -476,6 +606,189 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
       anchor={ownRow}
       content={<SessionHoverContent node={node} now={now} t={t} />}
       disabled={menuOpen || drag?.active === true}
+      copyText={row.blank ? undefined : row.title}
+      copyLabel={t('copy')}
+      copiedLabel={t('hover.copied')}
+    />
+  )
+}
+
+/**
+ * One row in the top "Recent & In Progress" section:
+ * Shows status dot, title, workspace badge, relative timestamp, and menu.
+ */
+export function RecentSessionNodeItem({
+  node, workspaceName, currentId, now, onOpen, onRename, onFork, onArchive, onToggleUnread, onToggleCompleted, onSetStatus, t,
+}: {
+  node: SessionNode
+  workspaceName: string
+  currentId: string | undefined
+  now: number
+  onOpen: (id: SessionNode['id']) => void
+  onRename: (id: SessionNode['id'], currentTitle: string) => void
+  onFork: (id: SessionNode['id']) => void
+  onArchive: (id: SessionNode['id']) => void
+  onToggleUnread?: ((id: SessionNode['id']) => void) | undefined
+  onToggleCompleted?: ((id: SessionNode['id']) => void) | undefined
+  onSetStatus?: ((id: SessionNode['id'], status: CustomSessionStatus | 'idle') => void) | undefined
+  t: RowTranslate
+}) {
+  const row = node
+  const title = displayTitle(node, t)
+  const selected = node.id === currentId
+  const statuses = sessionStatuses(node, t)
+  const primaryStatus = statuses[0]
+  const showStatus = primaryStatus.state !== 'done' || row.completed || row.unread
+  const [menuOpen, setMenuOpen] = useState(false)
+  const isUnread = node.unread === true
+  const isCompleted = node.completed
+  const hasMarker = isUnread || isCompleted || node.customStatus !== undefined
+
+  const statusSubmenu: MenuItem[] = [
+    {
+      id: 'set-ongoing',
+      label: t('status.setOngoing'),
+      icon: <StateDot state="ongoing" />,
+    },
+    {
+      id: 'set-warning',
+      label: t('status.setWaitingDecision'),
+      icon: <StateDot state="warning" />,
+    },
+    {
+      id: 'set-unread',
+      label: t('status.setUnread'),
+      icon: <span className={clsx(css.dot, css.dotUnread)} aria-hidden="true" />,
+    },
+    {
+      id: 'set-later',
+      label: t('status.setLater'),
+      icon: <span className={clsx(css.dot, css.dotLater)} aria-hidden="true" />,
+    },
+    {
+      id: 'set-completed',
+      label: t('status.setCompleted'),
+      icon: <StateDot state="done" />,
+    },
+    {
+      id: 'set-finalized',
+      label: t('status.setFinalized'),
+      icon: <span className={clsx(css.dot, css.dotFinalized)} aria-hidden="true" />,
+    },
+    {
+      id: 'set-idle',
+      label: t('status.clearStatus'),
+      icon: <IconChecklistOutline14 size={16} />,
+    },
+  ]
+
+  const sessionMenuItems: MenuEntry[] = [
+    {
+      id: 'status-submenu',
+      label: t('menu.setStatus'),
+      icon: <IconChecklistOutline14 size={16} />,
+      submenu: statusSubmenu,
+    },
+    ...(hasMarker ? [
+      {
+        id: 'read',
+        label: t('menu.markRead'),
+        icon: <IconChecklistOutline14 size={16} />,
+      },
+    ] : [
+      {
+        id: 'unread',
+        label: t('menu.markUnread'),
+        icon: <IconChecklistOutline14 size={16} />,
+      },
+    ]),
+    {
+      id: isCompleted ? 'incomplete' : 'completed',
+      label: isCompleted ? t('menu.markIncomplete') : t('menu.markCompleted'),
+      icon: <IconCheckOutline16 size={16} />,
+    },
+    { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
+    { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
+    { id: 'archive', label: t('menu.archiveSession'), icon: <IconArchiveOutline20 size={16} /> },
+  ]
+
+  const ownRow = (
+    <div
+      className={clsx(
+        css.sessionRow,
+        css.recentSessionRow,
+        selected && css.selected,
+        menuOpen && css.menuOpen,
+      )}
+      role="treeitem"
+      aria-selected={selected}
+      onClick={() => { onOpen(node.id) }}
+    >
+      <span className={css.slot}>
+        {showStatus && <SessionStatusDots statuses={statuses} />}
+      </span>
+      <span className={css.title}>{title}</span>
+      <span className={css.workspaceBadge} title={workspaceName}>{workspaceName}</span>
+      {!row.blank && <span className={css.time}>{timeLabel(row.updatedAt, now, t)}</span>}
+      {!row.blank && (
+        <span className={css.rowActions}>
+          <Menu
+            open={menuOpen}
+            onClose={() => { setMenuOpen(false) }}
+            items={sessionMenuItems}
+            onSelect={(id) => {
+              setMenuOpen(false)
+              if (id === 'set-ongoing') {
+                onSetStatus?.(node.id, 'ongoing')
+              } else if (id === 'set-warning') {
+                onSetStatus?.(node.id, 'warning')
+              } else if (id === 'set-unread') {
+                onSetStatus?.(node.id, 'unread')
+              } else if (id === 'set-later') {
+                onSetStatus?.(node.id, 'later')
+              } else if (id === 'set-completed') {
+                onSetStatus?.(node.id, 'completed')
+              } else if (id === 'set-finalized') {
+                onSetStatus?.(node.id, 'finalized')
+              } else if (id === 'set-idle') {
+                onSetStatus?.(node.id, 'idle')
+              } else if (id === 'unread' || id === 'read') {
+                if (onSetStatus !== undefined) onSetStatus(node.id, id === 'unread' ? 'unread' : 'idle')
+                else onToggleUnread?.(node.id)
+              } else if (id === 'completed' || id === 'incomplete') {
+                if (onSetStatus !== undefined) onSetStatus(node.id, id === 'completed' ? 'completed' : 'idle')
+                else onToggleCompleted?.(node.id)
+              } else if (id === 'rename') {
+                onRename(node.id, row.title)
+              } else if (id === 'fork') {
+                onFork(node.id)
+              } else if (id === 'archive') {
+                onArchive(node.id)
+              }
+            }}
+            portal
+            closeOnPointerLeave
+            anchor={(
+              <button
+                type="button"
+                className={css.iconButton}
+                aria-label={t('actions.session.aria', { name: title })}
+                onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v) }}
+              >
+                <IconEllipsisOutline16 />
+              </button>
+            )}
+          />
+        </span>
+      )}
+    </div>
+  )
+
+  return (
+    <HoverCard
+      anchor={ownRow}
+      content={<SessionHoverContent node={node} workspaceName={workspaceName} now={now} t={t} />}
+      disabled={menuOpen}
       copyText={row.blank ? undefined : row.title}
       copyLabel={t('copy')}
       copiedLabel={t('hover.copied')}

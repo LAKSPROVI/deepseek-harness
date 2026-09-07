@@ -1414,6 +1414,23 @@ describe('default one-shot summarizer', () => {
       .rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
   })
 
+  it('rejects file summary output instead of silently dropping it', async () => {
+    const { compact } = await summarizerHarness([
+      {
+        type: 'file',
+        attachment: {
+          attachmentId: AttachmentId(`sha256:${'d'.repeat(64)}`),
+          mediaType: 'application/pdf',
+          bytes: 42,
+          name: 'summary.pdf',
+        },
+      },
+      { type: 'text', text: 'partial summary' },
+    ])
+    await expect(compact.runSummarize(promptInput('history'), agent(conversation(1), MODEL)))
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
+  })
+
   it('rejects image summary output nested in a tool result', async () => {
     const { compact } = await summarizerHarness([{
       type: 'tool-result',
@@ -1426,6 +1443,24 @@ describe('default one-shot summarizer', () => {
           bytes: 1,
           width: 1,
           height: 1,
+        },
+      }],
+    }])
+    await expect(compact.runSummarize(promptInput('history'), agent(conversation(1), MODEL)))
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
+  })
+
+  it('rejects file summary output nested in a tool result', async () => {
+    const { compact } = await summarizerHarness([{
+      type: 'tool-result',
+      toolCallId: CallId('summary-file-tool'),
+      content: [{
+        type: 'file',
+        attachment: {
+          attachmentId: AttachmentId(`sha256:${'e'.repeat(64)}`),
+          mediaType: 'text/plain',
+          bytes: 7,
+          name: 'notes.txt',
         },
       }],
     }])

@@ -9,7 +9,7 @@ import z from '@deepseek-ai/schemastery'
 import { AnonymousEntries, NamedEntries, ScopedLayers, scopeOf, scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer, Scoped } from '@deepseek-ai/dsh-scope'
 import type { CallId, ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
-import { assertNever, deepFreeze, HarnessError } from '@deepseek-ai/dsh-llm'
+import { assertNever, deepFreeze, HarnessError, textOnlyFileText } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
 import type { JsonValue, UserMessage } from '@deepseek-ai/dsh-session'
@@ -56,6 +56,40 @@ const COLLAPSE_SECTION_ORDER = 99
  * model can only discover by being denied is one it corrects too late.
  */
 const CODE_ONLY_INSTRUCTION = `\`${RUN_CODE_NAME}\` is the only tool you can call directly — a tool call naming any other tool fails. Reach every tool the SDK declares below from inside the program.`
+
+/**
+ * Route appended to an `UNKNOWN_TOOL` failure when a Code Mode agent names a
+ * VISIBLE tool in a direct call: the tool is real and callable, just not from
+ * the top level, so the fix is to move that same call inside the program.
+ */
+const codeModeCollapsedToolRoute = (name: string): string =>
+  `only \`${RUN_CODE_NAME}\` is callable directly — call \`${name}\` from inside a \`${RUN_CODE_NAME}\` program instead`
+
+/**
+ * Route appended when a Code Mode agent names a tool that is registered
+ * NOWHERE — overwhelmingly a hallucinated transport name (`run_code_ide`,
+ * `runCode`, …). The bad name must NOT be echoed as a call target: a model
+ * that read "call `run_code_ide` from inside a program" mutated it to
+ * `run_code_ide_ide` and looped. Point only at the real transport and how to
+ * reissue.
+ */
+const codeModeUnknownToolRoute = (): string =>
+  `in code mode the only tool you can call directly is \`${RUN_CODE_NAME}\` — reissue this as a \`${RUN_CODE_NAME}\` call with your program in its \`code\` argument, and call the tools you need from inside that program`
+
+/**
+ * Compare tool names on alphanumerics alone, so separator style and casing
+ * never decide identity: `runCode`, `run-code` and `run_code` flatten alike.
+ */
+const flattenToolName = (name: string): string => name.toLowerCase().replaceAll(/[^a-z0-9]+/gu, '')
+
+/**
+ * Whether a name is a decorated near-miss of the reserved Code Mode transport
+ * — the shape a hallucinated transport name takes (`run_code_ide`, `runCode`,
+ * and the `run_code_ide_ide` mutation a denial that echoed the bad name
+ * produced). Exact `run_code` is not a near-miss: it needs no recovery.
+ */
+const isRunCodeNearMiss = (name: string): boolean =>
+  name !== RUN_CODE_NAME && flattenToolName(name).startsWith(flattenToolName(RUN_CODE_NAME))
 
 const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
   typescript: renderToolsSdk,
@@ -624,7 +658,11 @@ function errorMessage(error: unknown): string {
 /** Derive one failure message from policy feedback without changing its rendered blocks. */
 function failureMessageFromContent(content: ContentBlock[]): string {
   const text = content
-    .map(block => block.type === 'text' ? block.text : `[${block.type} content]`)
+    .map(block => block.type === 'text'
+      ? block.text
+      : block.type === 'file'
+        ? textOnlyFileText(block.attachment)
+        : `[${block.type} content]`)
     .join('\n')
   return text.length > 0 ? text : 'tool result blocked by post-execute policy'
 }
@@ -969,7 +1007,6 @@ export class ToolRuntime extends Service {
         yield ctx.systemPrompt.section(this.sdkSection())
       }
     }.bind(this), 'tools.presentAs()')
-    // oxlint-disable-next-line typescript/no-misused-promises -- synchronous composite teardown; direct return preserves disposer identity
     return dispose
   }
 
@@ -1326,6 +1363,65 @@ export class ToolRuntime extends Service {
   }
 
   /**
+   * Build the `UNKNOWN_TOOL` failure for a model-direct call that resolved to
+   * no tool. Under Code Mode any non-`run_code` name reaches here only when it
+   * is registered nowhere (a real collapsed tool is denied earlier, in
+   * {@link createExecution}) — the hallucinated-transport-name case — so it
+   * carries the route to `run_code` instead of a bare `unknown tool`. Every
+   * other unknown name stays bare.
+   */
+  /**
+   * Rewrite a model-direct Code Mode call that named a near-miss of the
+   * reserved transport onto `run_code` itself, so the program the call already
+   * carries runs instead of failing.
+   *
+   * A denial only ever ADVISES. Two rounds of sharpening the `UNKNOWN_TOOL`
+   * message — first adding the route, then removing the echoed bad name the
+   * model was mutating — still left a weak model repeating the same wrong
+   * transport name, because a model that ignores the first denial ignores the
+   * second. Recovering the call ends a loop no wording can.
+   *
+   * Deliberately narrow, in three ways that each close a path to shadowing a
+   * real tool: only under the `code` collapse, only for a model-direct call (a
+   * transport sub-dispatch keeps its own names), and only for a name absent
+   * from the scope's `knownNames` — which retains tools restricted away, so a
+   * restricted `run_code_review` still reports `UNKNOWN_TOOL` rather than
+   * silently executing as the transport.
+   * @param name - the tool name the model wrote.
+   * @param scope - the viewing scope whose effective presentation mode applies.
+   * @param nested - whether the call is a transport sub-dispatch, not a model-direct call.
+   * @returns `run_code` when the call is a recoverable near-miss, else `name` unchanged.
+   */
+  /**
+   * The name a model-direct call will actually execute under: the reserved
+   * transport when the model wrote a near-miss of it, else the name unchanged.
+   *
+   * Public because recovering the DISPATCH is only half the repair. The name
+   * the model invented is also written into the assistant message, and that
+   * message is replayed to the provider on every later turn — so an invented
+   * name outlives the call that carried it and can make the whole conversation
+   * unsendable, not just fail once. The loop records what this returns.
+   * @param name - the tool name the model wrote.
+   * @param scope - the calling agent, whose presentation mode decides recovery.
+   * @returns the name that will execute.
+   */
+  resolveCallName(name: string, scope?: ScopeKey): string {
+    return this.recoverCodeModeTransportName(name, scope, false)
+  }
+
+  private recoverCodeModeTransportName(name: string, scope: ScopeKey | undefined, nested: boolean): string {
+    if (!this.collapses(name, scope, nested)) return name
+    if (!isRunCodeNearMiss(name)) return name
+    return this.view(scope).knownNames.has(name) ? name : RUN_CODE_NAME
+  }
+
+  private unknownToolError(name: string, scope: ScopeKey | undefined, nested: boolean): ToolNotFoundError {
+    return this.collapses(name, scope, nested)
+      ? new ToolNotFoundError(name, codeModeUnknownToolRoute())
+      : new ToolNotFoundError(name)
+  }
+
+  /**
    * Execute through pre-policy, guards, around-dispatch, post-policy,
    * definition-owned content finalization, and final notification. Tool and
    * listener failures resolve as materialized error results; an invisible tool
@@ -1366,9 +1462,13 @@ export class ToolRuntime extends Service {
     const token = createExecutionToken()
     const callId = exec.callId
     const rootCallId = exec.rootCallId ?? callId
-    const name = exec.name
     const agent = exec.agent
     const parent = exec.parent
+    // Recovery runs before every name-derived decision below — visibility, the
+    // collapse, and the run context the three dispatch sites read — so a
+    // recovered call is indistinguishable from one that named the transport
+    // correctly in the first place.
+    const name = this.recoverCodeModeTransportName(exec.name, agent, parent !== undefined)
     const signal = exec.signal
     // Distinguish a mode-collapsed call (visible in the scope, denied only by
     // the `code` collapse) from a genuinely unknown tool. A collapsed call is
@@ -1436,10 +1536,7 @@ export class ToolRuntime extends Service {
         return {
           kind: 'final-result',
           exec: execution,
-          result: toolErrorResult(new ToolNotFoundError(
-            name,
-            `only \`${RUN_CODE_NAME}\` is callable directly — call \`${name}\` from inside a \`${RUN_CODE_NAME}\` program instead`,
-          )),
+          result: toolErrorResult(new ToolNotFoundError(name, codeModeCollapsedToolRoute(name))),
         }
       }
       return { kind: 'ready', exec: execution }
@@ -1544,7 +1641,7 @@ export class ToolRuntime extends Service {
     exec.signal = signal
     try {
       const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
-      if (!tool) throw new ToolNotFoundError(exec.name)
+      if (!tool) throw this.unknownToolError(exec.name, exec.agent, exec.parent !== undefined)
       state.bodyInvoked = true
       const returned = await tool.execute(exec.arguments, exec)
       const result = this.createSuccessResult(exec, tool, returned)
@@ -1766,7 +1863,7 @@ export class ToolRuntime extends Service {
         throw new TypeError('tools/post-execute cannot replace the value of a failed result')
       }
       const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
-      if (tool === undefined) throw new ToolNotFoundError(exec.name)
+      if (tool === undefined) throw this.unknownToolError(exec.name, exec.agent, exec.parent !== undefined)
       const replaced = this.createSuccessResult(exec, tool, decision.value)
       return this.markCanonical(exec, {
         ...replaced,
@@ -1835,7 +1932,7 @@ export class ToolRuntime extends Service {
       })
     }
     const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
-    if (tool === undefined) throw new ToolNotFoundError(exec.name)
+    if (tool === undefined) throw this.unknownToolError(exec.name, exec.agent, exec.parent !== undefined)
     const normalized = this.createSuccessResult(exec, tool, result.value)
     return this.markCanonical(exec, {
       ...normalized,

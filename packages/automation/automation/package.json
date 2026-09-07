@@ -1,0 +1,15 @@
+{
+  "name": "@deepseek-ai/dsh-automation",
+  "version": "0.1.0",
+  "description": "Enterprise Scheduled Automation & Task Lifecycle Engine with Real-Time Notifications",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}

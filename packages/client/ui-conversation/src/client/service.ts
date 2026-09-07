@@ -13,13 +13,19 @@ import type { Context } from '@deepseek-ai/cordis'
 // error, so scope resolution goes through the sessions service (scopeOf
 // method) instead of the standalone helper.
 import type { ISessions, SessionFace, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SubmitImageAttachment, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
+import type { SubmitAttachment, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import type {
+  FileAttachmentRef, ImageAttachmentRef, ImageMediaType, UploadedFileAttachment,
+} from '@deepseek-ai/dsh-attachment'
 import type { ComposerAttachment } from './contract/slots.ts'
 import type { QueueAction, QueueItemId } from './contract/queue.ts'
 import type { ComposerBlocks } from './input/blocks.ts'
 import type { DraftAttachmentId, SessionInputResolver } from './input/contract.ts'
 import type { InputSubmitMode } from './contract/composer-submission.ts'
+
+/** Synchronous client preflight for one ordinary model prompt. */
+export type PromptAdmissionCheck = (attachments: readonly ComposerAttachment[]) => string | undefined
 
 /**
  * The outward conversation face (`ctx.conversation`): the scope-addressed
@@ -34,6 +40,20 @@ export interface IConversation {
    * cannot import makes a session's input inert with its own reason.
    */
   readonly blocks: ComposerBlocks
+  /**
+   * Register a synchronous preflight for ordinary model prompts in one session.
+   * Returning text rejects before attachment encoding or Host RPC; undefined admits.
+   * @param sessionId - session whose ordinary prompts are checked.
+   * @param check - prompt attachment check.
+   * @returns disposer removing the check.
+   */
+  registerPromptAdmission(sessionId: SessionId, check: PromptAdmissionCheck): () => void
+  /**
+   * Resolve browser-owned draft attachments without serializing them.
+   * @param ids - ordered draft identities.
+   * @returns every registered matching attachment in input order.
+   */
+  draftAttachments(ids: readonly DraftAttachmentId[]): readonly ComposerAttachment[]
   /**
    * Send a prompt into the caller scope's session (queued turn).
    * @param text - prompt text, sent verbatim as one text block.
@@ -61,12 +81,11 @@ export interface IConversation {
 
 /** Create one browser-only draft descriptor; only its id enters input state. */
 function browserDraftAttachment(file: File): ComposerAttachment {
-  return {
-    kind: 'image',
-    id: crypto.randomUUID() as DraftAttachmentId,
-    previewUrl: URL.createObjectURL(file),
-    file,
-  }
+  const id = crypto.randomUUID() as DraftAttachmentId
+  const mediaType = imageMediaType(file.type)
+  return mediaType === undefined
+    ? { kind: 'file', id, file }
+    : { kind: 'image', id, previewUrl: URL.createObjectURL(file), file }
 }
 
 interface ImageUrlEntry {
@@ -94,9 +113,11 @@ export class ConversationController extends Service implements IConversation {
   readonly input: SessionInputResolver
   /** The per-session composer-block registry. */
   readonly blocks: ComposerBlocks
-  private readonly draftAttachments = new Map<DraftAttachmentId, ComposerAttachment>()
+  private readonly draftRegistry = new Map<DraftAttachmentId, ComposerAttachment>()
+  private readonly fileUploads = new Map<string, Promise<UploadedFileAttachment>>()
   private readonly imageUrls = new Map<string, ImageUrlEntry>()
   private readonly imageGenerations = new Map<SessionId, number>()
+  private readonly promptAdmissions = new Map<SessionId, Set<PromptAdmissionCheck>>()
   private readonly createdImageUrls = new Set<string>()
   private disposed = false
 
@@ -115,10 +136,23 @@ export class ConversationController extends Service implements IConversation {
       this.disposed = true
       for (const url of this.createdImageUrls) revokePreview(url)
       this.createdImageUrls.clear()
-      this.draftAttachments.clear()
+      this.draftRegistry.clear()
+      this.fileUploads.clear()
       this.imageUrls.clear()
       this.imageGenerations.clear()
+      this.promptAdmissions.clear()
     }, 'conversation attachment URL cache')
+  }
+
+  /** @inheritdoc */
+  registerPromptAdmission(sessionId: SessionId, check: PromptAdmissionCheck): () => void {
+    const checks = this.promptAdmissions.get(sessionId) ?? new Set<PromptAdmissionCheck>()
+    checks.add(check)
+    this.promptAdmissions.set(sessionId, checks)
+    return () => {
+      checks.delete(check)
+      if (checks.size === 0) this.promptAdmissions.delete(sessionId)
+    }
   }
 
   /**
@@ -134,95 +168,109 @@ export class ConversationController extends Service implements IConversation {
   }
 
   /**
-   * Submit ordered draft images with text through one host admission.
-   * @param session - target session.
-   * @param text - serialized prompt text.
-   * @param imageIds - ordered draft-local attachment ids.
-   * @param mode - queue or steer delivery selected by composer policy.
-   * @param signal - optional cancellation for the complete Host admission.
-   * @returns the Host admission outcome; local attachment preparation failures reject.
+   * Submit ordered draft attachments with text through one Host admission.
+   * Successful submission releases every supplied draft attachment; rejection
+   * leaves them owned by the composer for retry.
+   * @param session - exact session receiving the prompt.
+   * @param text - prompt text appended after the ordered attachments.
+   * @param attachmentIds - ordered runtime draft identities.
+   * @param mode - queue or steering submission mode.
+   * @param signal - optional cancellation for encoding and Host admission.
+   * @returns whether the Host accepted the prompt.
    */
   async sendSession(
     session: SessionFace,
     text: string,
-    imageIds: readonly DraftAttachmentId[],
+    attachmentIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
     signal?: AbortSignal,
   ): Promise<SubmitOutcome> {
-    const attachments = this.draftImages(imageIds)
-    if (attachments.length !== imageIds.length) {
-      throw new Error('conversation.sendSession: one or more draft images are no longer available')
+    const attachments = this.draftAttachments(attachmentIds)
+    if (attachments.length !== attachmentIds.length) {
+      throw new Error('conversation.sendSession: one or more draft attachments are no longer available')
     }
-    const uploaded = await this.serializeImages(attachments.map(attachment => attachment.file))
+    for (const check of this.promptAdmissions.get(session.sessionId) ?? []) {
+      const rejection = check(attachments)
+      if (rejection !== undefined) return { kind: 'error', text: rejection }
+    }
+    const uploaded = await Promise.all(attachments.map(
+      attachment => this.encodeAttachment(session.sessionId, attachment, signal),
+    ))
     const content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
     const result = await session.prompt(content, mode, signal)
     if (!result.ok) return { kind: 'error' }
-    this.releaseDraftImages(attachments)
+    this.releaseDraftAttachments(attachments)
     return { kind: 'success' }
   }
 
   /**
-   * Create runtime-only draft images and their object URLs.
-   * @param files - browser files to register after MIME validation.
-   * @returns ordered draft descriptors.
+   * Create runtime-only draft attachments; only images receive object URLs.
+   * @param files - browser-selected files in submission order.
+   * @returns registered composer attachments owned by this controller.
    */
-  createDraftImages(files: readonly File[]): readonly ComposerAttachment[] {
-    for (const file of files) imageMediaType(file.type)
-    return files.map((file) => {
-      const attachment = browserDraftAttachment(file)
-      this.draftAttachments.set(attachment.id, attachment)
-      this.createdImageUrls.add(attachment.previewUrl)
-      return attachment
-    })
-  }
-
-  /**
-   * Resolve ordered input-state ids to runtime-owned draft images.
-   * @param ids - draft attachment ids.
-   * @returns descriptors that remain live, in requested order.
-   */
-  draftImages(ids: readonly DraftAttachmentId[]): readonly ComposerAttachment[] {
-    const attachments: ComposerAttachment[] = []
-    for (const id of ids) {
-      const attachment = this.draftAttachments.get(id)
-      if (attachment !== undefined) attachments.push(attachment)
+  createDraftAttachments(files: readonly File[]): readonly ComposerAttachment[] {
+    const attachments = files.map(browserDraftAttachment)
+    for (const attachment of attachments) {
+      this.draftRegistry.set(attachment.id, attachment)
+      if (attachment.kind === 'image') this.createdImageUrls.add(attachment.previewUrl)
     }
     return attachments
   }
 
   /**
-   * Serialize ordered draft images to command-submit wire payloads without
-   * sending or releasing them (the composer releases only after the command
-   * settles successfully).
-   * @param imageIds - ordered draft-local attachment ids.
-   * @returns base64 payloads in id order.
+   * Resolve ordered input-state ids to runtime-owned draft attachments.
+   * @param ids - ordered draft identities.
+   * @returns every currently registered matching attachment in the same order.
    */
-  async serializeDraftImages(imageIds: readonly DraftAttachmentId[]): Promise<readonly SubmitImageAttachment[]> {
-    const attachments = this.draftImages(imageIds)
-    if (attachments.length !== imageIds.length) {
-      throw new Error('conversation.serializeDraftImages: one or more draft images are no longer available')
+  draftAttachments(ids: readonly DraftAttachmentId[]): readonly ComposerAttachment[] {
+    return ids.flatMap((id) => {
+      const attachment = this.draftRegistry.get(id)
+      return attachment === undefined ? [] : [attachment]
+    })
+  }
+
+  /**
+   * Serialize ordered draft attachments without sending or releasing them.
+   * @param sessionId - session scope for raw-upload receipts.
+   * @param ids - ordered draft identities.
+   * @param signal - optional cancellation for file reads or raw uploads.
+   * @returns encoded wire attachments in the same order.
+   */
+  async serializeDraftAttachments(
+    sessionId: SessionId,
+    ids: readonly DraftAttachmentId[],
+    signal?: AbortSignal,
+  ): Promise<readonly SubmitAttachment[]> {
+    const attachments = this.draftAttachments(ids)
+    if (attachments.length !== ids.length) {
+      throw new Error('conversation.serializeDraftAttachments: one or more draft attachments are no longer available')
     }
-    return Promise.all(attachments.map(attachment => this.encodeImage(attachment.file)))
+    return Promise.all(attachments.map(attachment => this.encodeAttachment(sessionId, attachment, signal)))
   }
 
   /**
-   * Release one browser-owned draft image and preview URL.
-   * @param id - draft attachment id.
+   * Release one browser-owned draft attachment and any image preview URL.
+   * @param id - runtime draft identity to release.
    */
-  releaseDraftImage(id: DraftAttachmentId): void {
-    const attachment = this.draftAttachments.get(id)
+  releaseDraftAttachment(id: DraftAttachmentId): void {
+    const attachment = this.draftRegistry.get(id)
     if (attachment === undefined) return
-    this.draftAttachments.delete(id)
-    this.createdImageUrls.delete(attachment.previewUrl)
-    revokePreview(attachment.previewUrl)
+    this.draftRegistry.delete(id)
+    for (const key of this.fileUploads.keys()) {
+      if (key.endsWith(`:${id}`)) this.fileUploads.delete(key)
+    }
+    if (attachment.kind === 'image') {
+      this.createdImageUrls.delete(attachment.previewUrl)
+      revokePreview(attachment.previewUrl)
+    }
   }
 
   /**
-   * Release a set of browser-owned draft images.
-   * @param attachments - descriptors to release.
+   * Release a set of browser-owned draft attachments.
+   * @param attachments - attachments owned by this controller.
    */
-  releaseDraftImages(attachments: readonly ComposerAttachment[]): void {
-    for (const attachment of attachments) this.releaseDraftImage(attachment.id)
+  releaseDraftAttachments(attachments: readonly ComposerAttachment[]): void {
+    for (const attachment of attachments) this.releaseDraftAttachment(attachment.id)
   }
 
   /**
@@ -231,15 +279,22 @@ export class ConversationController extends Service implements IConversation {
    * @param attachment - durable image reference.
    * @returns browser URL valid until its rendered session is released.
    */
-  resolveImage(sessionId: SessionId, attachment: ImageAttachmentRef): Promise<string> {
-    if (this.disposed) return Promise.reject(new Error('conversation.resolveImage: service is disposed'))
+  resolveAttachment(
+    sessionId: SessionId,
+    attachment: ImageAttachmentRef | FileAttachmentRef,
+  ): Promise<string> {
+    if (this.disposed) return Promise.reject(new Error('conversation.resolveAttachment: service is disposed'))
+    if (!('width' in attachment)) {
+      const transfer = (this.ctx.get('connection') as ConnectionHandle | undefined)?.fileTransfer
+      if (transfer !== undefined) return Promise.resolve(transfer.downloadUrl(sessionId, attachment))
+    }
     const key = `${sessionId}:${attachment.attachmentId}`
     const cached = this.imageUrls.get(key)
     if (cached !== undefined) return cached.pending
     const generation = this.imageGenerations.get(sessionId) ?? 0
     const session = this.requireSessions().binding(sessionId)?.session
     if (session === undefined) {
-      return Promise.reject(new Error(`conversation.resolveImage: unknown session "${sessionId}"`))
+      return Promise.reject(new Error(`conversation.resolveAttachment: unknown session "${sessionId}"`))
     }
     const pending = session.readAttachment(attachment.attachmentId)
       .then((result) => {
@@ -252,7 +307,10 @@ export class ConversationController extends Service implements IConversation {
           return `data:${result.value.attachment.mediaType};base64,${bytesToBase64(result.value.data)}`
         }
         const bytes = Uint8Array.from(result.value.data)
-        const url = URL.createObjectURL(new Blob([bytes.buffer], { type: result.value.attachment.mediaType }))
+        const mediaType = result.value.type === 'image'
+          ? result.value.attachment.mediaType
+          : 'application/octet-stream'
+        const url = URL.createObjectURL(new Blob([bytes.buffer], { type: mediaType }))
         this.createdImageUrls.add(url)
         return url
       })
@@ -265,7 +323,17 @@ export class ConversationController extends Service implements IConversation {
   }
 
   /**
-   * Release every historical image URL owned by one rendered session.
+   * Image-only compatibility face over the generic authorized loader.
+   * @param sessionId - owning session authorization scope.
+   * @param attachment - durable image reference.
+   * @returns browser URL valid until its rendered session is released.
+   */
+  resolveImage(sessionId: SessionId, attachment: ImageAttachmentRef): Promise<string> {
+    return this.resolveAttachment(sessionId, attachment)
+  }
+
+  /**
+   * Release every historical attachment URL owned by one rendered session.
    * @param sessionId - rendered session scope.
    */
   releaseSessionImages(sessionId: SessionId): void {
@@ -332,22 +400,44 @@ export class ConversationController extends Service implements IConversation {
     return sessions
   }
 
-  /** Convert browser files to canonical base64 prompt parts. */
-  private serializeImages(images: readonly File[]): Promise<Parameters<SessionFace['prompt']>[0]> {
-    return Promise.all(images.map(async file => ({ type: 'image' as const, ...await this.encodeImage(file) })))
-  }
-
-  /** Canonical base64 wire form of one browser image file. */
-  private async encodeImage(file: File): Promise<SubmitImageAttachment> {
-    return {
-      mediaType: imageMediaType(file.type),
-      data: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
-      ...(file.name === '' ? {} : { name: file.name }),
+  /** Serialize one browser-owned attachment through the active carrier. */
+  private async encodeAttachment(
+    sessionId: SessionId,
+    attachment: ComposerAttachment,
+    signal?: AbortSignal,
+  ): Promise<SubmitAttachment> {
+    const name = attachment.file.name === '' ? {} : { name: attachment.file.name }
+    if (attachment.kind === 'image') {
+      const mediaType = imageMediaType(attachment.file.type)
+      if (mediaType === undefined) throw new UnsupportedImageMediaTypeError(attachment.file.type)
+      const data = bytesToBase64(new Uint8Array(await attachment.file.arrayBuffer()))
+      return { type: 'image', mediaType, data, ...name }
     }
+    const transfer = (this.ctx.get('connection') as ConnectionHandle | undefined)?.fileTransfer
+    if (transfer === undefined) {
+      const data = bytesToBase64(new Uint8Array(await attachment.file.arrayBuffer()))
+      return {
+        type: 'file',
+        mediaType: attachment.file.type === '' ? 'application/octet-stream' : attachment.file.type,
+        data,
+        ...name,
+      }
+    }
+    const key = `${sessionId}:${attachment.id}`
+    let pending = this.fileUploads.get(key)
+    if (pending === undefined) {
+      pending = transfer.upload(sessionId, attachment.file, signal).catch((error: unknown) => {
+        if (this.fileUploads.get(key) === pending) this.fileUploads.delete(key)
+        throw error
+      })
+      this.fileUploads.set(key, pending)
+    }
+    const receipt = await pending
+    return { type: 'file', ...receipt }
   }
 }
 
-function imageMediaType(value: string): ImageMediaType {
+function imageMediaType(value: string): ImageMediaType | undefined {
   switch (value) {
     case 'image/png':
     case 'image/jpeg':
@@ -355,7 +445,7 @@ function imageMediaType(value: string): ImageMediaType {
     case 'image/gif':
       return value
     default:
-      throw new UnsupportedImageMediaTypeError(value)
+      return undefined
   }
 }
 

@@ -216,6 +216,116 @@
   flex: none;
 }
 
+.dotUnread {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.dotUnread::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.18;
+}
+
+.dotUnread::after {
+  content: '';
+  position: absolute;
+  inset: 20%;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.dotFinalized {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  color: #8b5cf6;
+}
+
+.dotFinalized::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.18;
+}
+
+.dotFinalized::after {
+  content: '';
+  position: absolute;
+  inset: 20%;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.dotLater {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  color: #f97316;
+}
+
+.dotLater::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.18;
+}
+
+.dotLater::after {
+  content: '';
+  position: absolute;
+  inset: 20%;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.workspaceBadge {
+  flex: none;
+  max-width: 90px;
+  padding: 0 4px;
+  margin-right: 4px;
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-module-platform);
+  border: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentSessionRow {
+  height: 32px;
+}
+
+.hoverWorkspace {
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-tertiary);
+  background: var(--dsw-alias-bg-module-platform);
+  padding: 2px 6px;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+
 /* Trailing action buttons surface on hover only (figma 27:4668 / 27:4656):
    bare 16px glyphs, gap 12, tertiary grey. */
 .rowActions {

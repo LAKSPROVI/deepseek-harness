@@ -26,7 +26,13 @@ export const zh = {
   'warning.groupLoad': '{name} 加载失败：{message}',
   'empty.models': '没有可用的模型。',
   'blocked.composer': '当前模型不可用，请先选择模型',
+  'blocked.images': '当前模型不支持图片输入。请选择支持图片的模型，或移除图片后重试。',
   'empty.efforts': '当前模型未提供推理等级。',
+  'search.placeholder': '搜索模型…',
+  'search.clear': '清除搜索',
+  'group.frequent': '常用模型',
+  'empty.search': '未找到匹配的模型。',
+  'pane.back': '返回',
 } satisfies Record<string, string>
 
 /** The model namespace key union. */
@@ -50,5 +56,11 @@ export const en = {
   'warning.groupLoad': '{name} failed to load: {message}',
   'empty.models': 'No models available.',
   'blocked.composer': 'This model is unavailable — select one to continue',
+  'blocked.images': 'This model does not support image input. Select an image-capable model or remove the image and try again.',
   'empty.efforts': 'This model provides no reasoning effort levels.',
+  'search.placeholder': 'Search models…',
+  'search.clear': 'Clear search',
+  'group.frequent': 'Frequently used',
+  'empty.search': 'No matching models.',
+  'pane.back': 'Back',
 } satisfies Record<ModelKey, string>

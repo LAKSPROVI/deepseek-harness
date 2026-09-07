@@ -13,6 +13,7 @@
  */
 
 import * as vm from 'node:vm'
+import { textOnlyFileText } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { assertObjectJsonSchema, JsonSchemaError } from '@deepseek-ai/dsh-tools'
@@ -40,11 +41,14 @@ const SUPPORTED_AGENT_OPTIONS = new Set(['label', 'phase', 'schema', 'provider',
 /** Deferred Claude Code options we name explicitly in the rejection message. */
 const DEFERRED_AGENT_OPTIONS = new Set(['effort', 'isolation', 'agentType'])
 
-/** Flatten a child's final output blocks to text (the non-schema `agent()` result). */
+/** Flatten a child's final output blocks to deterministic text (the non-schema `agent()` result). */
 function outputText(blocks: ContentBlock[]): string {
   return blocks
-    .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
-    .map(block => block.text)
+    .flatMap(block => block.type === 'text'
+      ? [block.text]
+      : block.type === 'file'
+        ? [textOnlyFileText(block.attachment)]
+        : [])
     .join('')
 }
 

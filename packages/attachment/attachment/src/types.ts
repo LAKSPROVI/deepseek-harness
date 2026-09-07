@@ -4,6 +4,91 @@ import type { AttachmentId, ImageVariantId } from './brand.ts'
 
 export type { AttachmentId } from './brand.ts'
 
+/** Durable, serializable reference to one immutable opaque file. */
+export interface FileAttachmentRef {
+  /** Opaque content-addressed identifier; never a filesystem path or bearer URL. */
+  attachmentId: AttachmentId
+  /** Normalized declared media type, or `application/octet-stream`. */
+  mediaType: string
+  /** Exact stored byte length. */
+  bytes: number
+  /** Optional sanitized display name; storage never interprets it as a path. */
+  name?: string
+}
+
+/** Deployment-resolved limits for generic-file admission. */
+export interface FileAttachmentLimits {
+  /** Maximum exact bytes accepted for one file. */
+  maxFileBytes: number
+  /** Maximum generic-file count accepted in one message. */
+  maxFilesPerMessage: number
+  /** Maximum aggregate generic-file bytes accepted in one message. */
+  maxMessageFileBytes: number
+}
+
+/** Base64-encoded generic-file upload accompanying one wire request. */
+export interface EncodedFileAttachment {
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Canonical base64 encoding of the exact file bytes. */
+  data: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+
+/** Session-scoped proof that a raw upload produced one immutable file. */
+export interface UploadedFileAttachment {
+  /** Opaque integrity proof over the scope and complete attachment reference. */
+  uploadId: string
+  /** Exact reference authenticated by `uploadId`; callers cannot replace its metadata. */
+  attachment: FileAttachmentRef
+}
+
+/** One image or generic file submitted through a browser wire request. */
+export type EncodedAttachment =
+  | ({ readonly type: 'image' } & EncodedImageAttachment)
+  | ({ readonly type: 'file' } & (EncodedFileAttachment | UploadedFileAttachment))
+
+/** One durable image or file block after attachment-store admission. */
+export type AdmittedAttachmentBlock =
+  | { readonly type: 'image'; readonly attachment: ImageAttachmentRef }
+  | { readonly type: 'file'; readonly attachment: FileAttachmentRef }
+
+/** Request to validate and durably commit one opaque file. */
+export interface SaveFileAttachment {
+  /** Exact file bytes; providers must not execute, decode, or extract them. */
+  data: Uint8Array
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+
+/** Streaming request to validate and durably commit one opaque file. */
+export interface SaveFileAttachmentStream {
+  /** Exact file bytes in producer order; Node.js `Readable` satisfies this interface. */
+  data: AsyncIterable<Uint8Array>
+  /** Optional exact byte count checked before publication. */
+  expectedBytes?: number
+  /** Declared media type; absent or malformed values use the binary fallback. */
+  mediaType?: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
+}
+
+/** Stored opaque bytes returned after reference and digest verification. */
+export interface StoredFileAttachment {
+  ref: FileAttachmentRef
+  data: Uint8Array
+}
+
+/** Single-use verified stream over one stored opaque file. */
+export interface StoredFileAttachmentStream {
+  ref: FileAttachmentRef
+  /** Bytes are integrity-verified incrementally; corruption rejects iteration before successful completion. */
+  data: AsyncIterable<Uint8Array>
+}
+
 /** Raster image formats accepted by the version-one attachment path. */
 export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
 

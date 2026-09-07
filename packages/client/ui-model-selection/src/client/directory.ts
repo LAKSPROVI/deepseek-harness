@@ -10,11 +10,14 @@ import type {
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { recordModelUsage } from './usage.ts'
 
 /** Directory snapshot both entries render from. */
 export interface ModelDirectoryState {
   /** Model selection the host reports for the next assembled step; null before the first load. */
   current: ModelSelection | null
+  /** Exact metadata for the current route; null means unavailable or not loaded. */
+  currentModel: SessionModels['currentModel'] | null
   /**
    * Whether an adapter serves the current selection's provider, as the host reports
    * it — null before the first load, which is NOT the same as blocked. Read
@@ -37,7 +40,7 @@ export interface ModelDirectoryState {
 export class ModelDirectory {
   /** The shared snapshot both entries render from (uSES-safe store). */
   readonly store: SnapshotStore<ModelDirectoryState> = createSnapshotStore<ModelDirectoryState>({
-    current: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
+    current: null, currentModel: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
   })
 
   /** Latest operation wins; an older response never overwrites a newer one. */
@@ -73,9 +76,10 @@ export class ModelDirectory {
       this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
       throw new Error(`session.models failed: ${result.error.code}: ${result.error.message}`)
     }
-    const { current, routable, groups, failures } = result.value
+    const { current, currentModel, routable, groups, failures } = result.value
     this.store.update((s) => {
       s.current = current
+      s.currentModel = currentModel ?? null
       s.routable = routable
       s.groups = groups
       s.failures = failures
@@ -115,10 +119,12 @@ export class ModelDirectory {
     // landed is by construction one it can serve.
     this.store.update((s) => {
       s.current = result.value.selected
+      s.currentModel = result.value.currentModel
       s.routable = true
       s.status = 'ready'
       s.error = null
     })
+    recordModelUsage(result.value.selected.provider, result.value.selected.model)
   }
 
   /**
@@ -131,6 +137,7 @@ export class ModelDirectory {
     ++this.generation
     this.store.update((s) => {
       s.current = null
+      s.currentModel = null
       s.routable = null
       s.groups = []
       s.failures = []

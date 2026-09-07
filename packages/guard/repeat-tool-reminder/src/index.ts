@@ -104,6 +104,27 @@ function canonicalize(argumentsValue: unknown): string {
   return JSON.stringify(sortJsonValue(argumentsValue))
 }
 
+/**
+ * Chain identity for a tool name: its segments, lowercased, separator style
+ * discarded, and consecutive repeats collapsed (`run_code_ide_ide` and
+ * `runCodeIde` both key as `run.code.ide`).
+ *
+ * A model that keeps getting a name wrong tends to MUTATE it rather than repeat
+ * it verbatim — a denial naming `run_code_ide` produced `run_code_ide_ide` on
+ * the next attempt — and a key on the raw name reads each mutation as a fresh
+ * call, resetting the counter that exists to catch exactly that loop. Only the
+ * key is normalized: `include`/`exclude` still match the registered name, and
+ * the detailed reminder still quotes the name the model actually wrote.
+ */
+function chainToolName(toolName: string): string {
+  const segments = toolName
+    .replaceAll(/([a-z0-9])([A-Z])/gu, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/u)
+    .filter(segment => segment.length > 0)
+  return segments.filter((segment, index) => segment !== segments[index - 1]).join('.')
+}
+
 /** Compile one `*`-wildcard pattern to an anchored RegExp (every other regex metacharacter is matched literally). */
 function wildcardToRegExp(pattern: string): RegExp {
   const escaped = pattern.replace(/[|\\{}()[\]^$+?.]/g, String.raw`\$&`)
@@ -192,7 +213,7 @@ export function apply(ctx: Context, config: Config): void {
     if (!exec.agent) return undefined
     if (!tracked(exec.name)) return undefined
     const canonical = canonicalize(exec.arguments)
-    const key = JSON.stringify([exec.name, canonical])
+    const key = JSON.stringify([chainToolName(exec.name), canonical])
     const chain = chains.get(exec.agent)
     const count = chain !== undefined && chain.key === key ? chain.count + 1 : 1
     chains.set(exec.agent, { key, count })

@@ -5,9 +5,8 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
-import type { EncodedImageAttachment } from '@deepseek-ai/dsh-attachment/types'
-import type { ImageBlock } from '@deepseek-ai/dsh-llm'
+import { admitEncodedAttachments, AttachmentError } from '@deepseek-ai/dsh-attachment'
+import type { FileBlock, ImageBlock } from '@deepseek-ai/dsh-llm'
 import { NamedEntries, ScopedLayers } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer } from '@deepseek-ai/dsh-scope'
 import type { Session, SessionEvent, SessionEventMap } from '@deepseek-ai/dsh-session'
@@ -18,6 +17,7 @@ import type {
   CommandExecution,
   CommandInputDescriptor,
   CommandResult,
+  EncodedCommandAttachment,
 } from './types.ts'
 
 export { CommandId } from './brand.ts'
@@ -27,8 +27,11 @@ export const name = 'commands'
 
 const COMMAND_NAME = /^[a-z][a-z0-9_-]*$/u
 
-/** Shared frozen attachments value for image-free invocations. */
-const NO_ATTACHMENTS: readonly ImageBlock[] = Object.freeze([])
+/** One durable attachment block admitted for a command handler. */
+export type CommandAttachmentBlock = ImageBlock | FileBlock
+
+/** Shared frozen attachments value for attachment-free invocations. */
+const NO_ATTACHMENTS: readonly CommandAttachmentBlock[] = Object.freeze([])
 
 /** Invocation passed to one registered command handler. */
 export interface CommandInvocation {
@@ -39,13 +42,12 @@ export interface CommandInvocation {
   /** Exact text following the registered command name, including separator whitespace. */
   readonly rawInput: string
   /**
-   * Durably admitted image blocks accompanying this invocation, in submission
-   * order; empty unless the definition declares `input.images`. The handler
-   * owns their model-visible use — the registry never schedules them itself —
-   * and a handler whose grammar cannot use them in this invocation returns an
-   * error so the dispatching composer retains the originals.
+   * Durably admitted image and file blocks in submission order; empty unless
+   * the definition declares `input.attachments`. The handler owns their
+   * model-visible use and returns an error when its grammar cannot use them so
+   * the dispatching composer retains the originals.
    */
-  readonly attachments: readonly ImageBlock[]
+  readonly attachments: readonly CommandAttachmentBlock[]
   /** Cancellation signal owned by the dispatching UI request. */
   readonly signal: AbortSignal
 }
@@ -190,12 +192,12 @@ function normalizeDefinition(definition: CommandDefinition): RegisteredCommand {
     if (rawInput.hint.trim().length === 0) {
       throw new TypeError(`command "${definition.name}" input hint must not be empty`)
     }
-    if ('images' in rawInput && rawInput.images !== undefined && typeof rawInput.images !== 'boolean') {
-      throw new TypeError(`command "${definition.name}" input images flag must be a boolean`)
+    if ('attachments' in rawInput && rawInput.attachments !== undefined && typeof rawInput.attachments !== 'boolean') {
+      throw new TypeError(`command "${definition.name}" input attachments flag must be a boolean`)
     }
     input = Object.freeze({
       hint: rawInput.hint,
-      ...('images' in rawInput && rawInput.images === true) ? { images: true } : {},
+      ...('attachments' in rawInput && rawInput.attachments === true) ? { attachments: true } : {},
     })
   }
   const normalized = Object.freeze({
@@ -312,15 +314,16 @@ export class CommandRuntime extends TypertRemoteService {
    * handler-failure path is contained so the handler's own error stays the
    * reported failure.
    *
-   * Image admission is enforced here, not in the composer: images sent to a
-   * command that does not declare `input.images`, an absent attachment store,
-   * and an exceeded attachment limit each settle as an error result before
-   * the handler runs, and a rejected batch publishes no durable object.
+   * Attachment admission is enforced here, not in the composer: attachments
+   * sent to a command that does not declare `input.attachments`, an absent
+   * attachment store, and a refused image or file group each settle as an
+   * error result before the handler runs. The handler observes either the
+   * complete frozen mixed-order vector or no attachments.
    *
    * @param agent - exact receiving agent.
    * @param line - complete slash-command line.
-   * @param images - base64-encoded composer images accompanying the line, in
-   *   submission order; empty for a plain invocation.
+   * @param encodedAttachments - base64-encoded composer attachments in display
+   *   order; empty for a plain invocation.
    * @param signal - cancellation signal owned by the UI request.
    * @returns the settled execution (result + lifecycle pairing id), or
    *   `undefined` when syntax or name does not resolve.
@@ -329,7 +332,7 @@ export class CommandRuntime extends TypertRemoteService {
   async execute(
     agent: Agent,
     line: string,
-    images: readonly EncodedImageAttachment[],
+    encodedAttachments: readonly EncodedCommandAttachment[],
     signal: AbortSignal,
   ): Promise<CommandExecution | undefined> {
     const parsed = parseCommand(line)
@@ -354,18 +357,17 @@ export class CommandRuntime extends TypertRemoteService {
       })
       return Object.freeze({ commandId, result: Object.freeze(result) })
     }
-    let attachments: readonly ImageBlock[] = NO_ATTACHMENTS
-    if (images.length > 0) {
-      if (command.definition.input?.images !== true) {
-        return settle({ kind: 'error', text: `/${parsed.name} does not accept image attachments` })
+    let attachments: readonly CommandAttachmentBlock[] = NO_ATTACHMENTS
+    if (encodedAttachments.length > 0) {
+      if (command.definition.input?.attachments !== true) {
+        return settle({ kind: 'error', text: `/${parsed.name} does not accept attachments` })
       }
       const store = this.ctx.get('attachments')
       if (store === undefined) {
-        return settle({ kind: 'error', text: `/${parsed.name}: image attachments are unavailable because no attachment store is composed` })
+        return settle({ kind: 'error', text: `/${parsed.name}: attachments are unavailable because no attachment store is composed` })
       }
       try {
-        const refs = await admitEncodedImages(store, images)
-        attachments = Object.freeze(refs.map(ref => Object.freeze({ type: 'image' as const, attachment: ref })))
+        attachments = await admitEncodedAttachments(store, String(agent.session.id), encodedAttachments)
       } catch (error: unknown) {
         if (error instanceof AttachmentError) {
           return settle({ kind: 'error', text: error.message })
@@ -373,10 +375,7 @@ export class CommandRuntime extends TypertRemoteService {
         this.settleThrown(agent.session, parsed.name, commandId, error)
         throw error
       }
-      // Cancellation must be honored BEFORE the handler runs: admission may
-      // await slow storage, and a handler entered after the caller cancelled
-      // would mutate state the retrying caller then duplicates. (The committed
-      // image objects stay unreferenced and are deferred-GC territory.)
+      // Admission may await storage; never enter a mutating handler after its caller cancelled.
       const cancelledDuringAdmission = cancellationOf(signal)
       if (cancelledDuringAdmission !== undefined) {
         this.settleThrown(agent.session, parsed.name, commandId, cancelledDuringAdmission)

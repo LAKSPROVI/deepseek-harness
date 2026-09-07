@@ -316,10 +316,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'its root, Team identity, role, and model-facing name.',
       },
       {
-        signature: 'listMembers(agent: Agent): TeamMemberView[]',
+        signature: '@Remote(\'members\') listMembers(agent: Agent): TeamMemberView[]',
         description: 'List the runtime-enriched roster visible to one Team member.',
         parameters: [{ name: 'agent', description: 'exact live Team member.' }],
         returns: 'Lead and teammate rows in creation order.',
+      },
+      {
+        signature: '@Remote(\'spawn\') async remoteSpawn( agent: Agent, request: SpawnTeamMemberRemoteRequest, signal: AbortSignal, ): Promise<SpawnTeammateResult>',
+        description: 'Create one teammate from browser-safe text fields.',
+        parameters: [{ name: 'agent', description: 'exact live Lead Agent resolved by the Remote gateway.' }, { name: 'request', description: 'identity, initial prompt, context, and optional LLM route.' }, { name: 'signal', description: 'caller cancellation before the durable creation edge.' }],
+        returns: 'the active roster row.',
       },
       {
         signature: 'async spawnTeammate(caller: Agent, request: SpawnTeammateRequest): Promise<SpawnTeammateResult>',
@@ -332,6 +338,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Queue one durable peer message, then attempt immediate delivery.',
         parameters: [{ name: 'caller', description: 'exact live sending Team member.' }, { name: 'request', description: 'target name, content, scheduling mode, and pre-queue cancellation.' }],
         returns: 'durable message identity and immediate-delivery observation.',
+      },
+      {
+        signature: '@Remote(\'guide\') async remoteGuide( agent: Agent, request: GuideTeamMemberRemoteRequest, signal: AbortSignal, ): Promise<SendTeamMessageResult>',
+        description: 'Send browser-authored guidance through the durable Team mailbox.',
+        parameters: [{ name: 'agent', description: 'exact live Team member resolved by the Remote gateway.' }, { name: 'request', description: 'target, plain text, and quiet-or-wakeup delivery.' }, { name: 'signal', description: 'caller cancellation before the durable queue edge.' }],
+        returns: 'durable message identity and immediate delivery observation.',
       },
       {
         signature: 'async createTask(caller: Agent, request: CreateTeamTaskRequest): Promise<TeamTaskView>',
@@ -358,15 +370,33 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the committed next task revision.',
       },
       {
+        signature: 'getDebate(caller: Agent): TeamDebateSnapshot | undefined',
+        description: 'Return the current structured debate visible to one Team member.',
+        parameters: [{ name: 'caller', description: 'exact live Team member reading the debate.' }],
+        returns: 'the current debate, or undefined before one starts.',
+      },
+      {
+        signature: '@Remote(\'debateStart\') async startDebate(agent: Agent, request: StartTeamDebateRequest): Promise<TeamDebateSnapshot>',
+        description: 'Create one active structured debate.',
+        parameters: [{ name: 'agent', description: 'exact live Lead Agent authorizing creation.' }, { name: 'request', description: 'topic, participants, and round limit.' }],
+        returns: 'the committed initial debate snapshot.',
+      },
+      {
+        signature: '@Remote(\'debateUpdate\') async updateDebate(agent: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateSnapshot>',
+        description: 'Apply one Lead-authorized compare-and-set debate transition.',
+        parameters: [{ name: 'agent', description: 'exact live Lead Agent authorizing the transition.' }, { name: 'request', description: 'debate identity, expected revision, action, and optional note.' }],
+        returns: 'the committed next debate snapshot.',
+      },
+      {
         signature: 'async waitForChange(caller: Agent, timeoutMs: number, signal: AbortSignal): Promise<TeamWaitResult>',
         description: 'Wait for the next Team-domain or member-status change.',
         parameters: [{ name: 'caller', description: 'exact live Team member waiting for activity.' }, { name: 'timeoutMs', description: 'bounded wait duration from ten seconds through one hour.' }, { name: 'signal', description: 'caller cancellation for the wait only.' }],
         returns: 'one observed change or a timeout result.',
       },
       {
-        signature: 'interrupt(caller: Agent, targetName: string): { previousStatus: \'running\' | \'idle\' | \'inactive\' }',
+        signature: '@Remote(\'interrupt\') interrupt(agent: Agent, targetName: string): { previousStatus: \'running\' | \'idle\' | \'inactive\' }',
         description: 'Interrupt one live teammate turn without clearing its pending inbox.',
-        parameters: [{ name: 'caller', description: 'exact live Lead Agent.' }, { name: 'targetName', description: 'durable teammate name.' }],
+        parameters: [{ name: 'agent', description: 'exact live Lead Agent.' }, { name: 'targetName', description: 'durable teammate name.' }],
         returns: 'the target status sampled before cancellation.',
       },
       {
@@ -429,6 +459,70 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'abstract readonly imageLimits: ImageAttachmentLimits',
         description: 'Deployment-resolved image policy used by authoritative and fast-path validation.',
         parameters: [],
+      },
+      {
+        signature: 'readonly fileLimits: FileAttachmentLimits | undefined = undefined',
+        description: 'Deployment-resolved generic-file policy, absent when the provider only supports images.',
+        parameters: [],
+      },
+      {
+        signature: 'validateFile(input: SaveFileAttachment): Promise<void>',
+        description: 'Validate one opaque file without persisting it.',
+        parameters: [{ name: 'input', description: 'exact bytes and untrusted display metadata.' }],
+        returns: 'completion after the complete file admission policy succeeds.',
+      },
+      {
+        signature: 'validateFileReferences(refs: readonly FileAttachmentRef[]): void',
+        description: 'Validate count, individual bytes, and aggregate bytes for durable file references.',
+        parameters: [{ name: 'refs', description: 'complete ordered file-reference batch.' }],
+      },
+      {
+        signature: 'async validateFiles(inputs: readonly SaveFileAttachment[]): Promise<void>',
+        description: 'Validate one ordered file batch without persisting any member.',
+        parameters: [{ name: 'inputs', description: 'opaque files in owning-message order.' }],
+        returns: 'completion after batch and per-file validation succeeds.',
+      },
+      {
+        signature: 'async saveFiles(inputs: readonly SaveFileAttachment[]): Promise<readonly FileAttachmentRef[]>',
+        description: 'Validate the complete ordered file batch before committing any member.',
+        parameters: [{ name: 'inputs', description: 'opaque files in owning-message order.' }],
+        returns: 'durable references in the same order after every member succeeds.',
+      },
+      {
+        signature: 'saveFile(input: SaveFileAttachment): Promise<FileAttachmentRef>',
+        description: 'Validate and durably commit one opaque file without interpreting its bytes.',
+        parameters: [{ name: 'input', description: 'exact bytes and untrusted display metadata.' }],
+        returns: 'the immutable content-addressed file reference.',
+      },
+      {
+        signature: 'readFile(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachment>',
+        description: 'Read one opaque file and verify its digest and exact byte length.',
+        parameters: [{ name: 'ref', description: 'durable reference from trusted session state.' }, { name: 'signal', description: 'optional cancellation for backend read and verification work.' }],
+        returns: 'exact verified bytes and the supplied reference.',
+      },
+      {
+        signature: 'saveFileStream( scope: string, input: SaveFileAttachmentStream, signal?: AbortSignal, ): Promise<UploadedFileAttachment>',
+        description: 'Stream one opaque file into durable storage and bind its receipt to an owning scope.',
+        parameters: [{ name: 'scope', description: 'opaque owner identity that must accompany later admission.' }, { name: 'input', description: 'ordered byte source and untrusted display metadata.' }, { name: 'signal', description: 'optional cancellation for source consumption, staging, and publication.' }],
+        returns: 'a scoped proof and immutable reference after complete publication.',
+      },
+      {
+        signature: 'authorizeUploadedFile(scope: string, upload: UploadedFileAttachment): Promise<FileAttachmentRef>',
+        description: 'Verify a raw-upload receipt for its exact owner and immutable metadata.',
+        parameters: [{ name: 'scope', description: 'opaque owner identity supplied when the upload was created.' }, { name: 'upload', description: 'proof and reference returned by `saveFileStream`.' }],
+        returns: 'the authenticated immutable reference.',
+      },
+      {
+        signature: 'async authorizeUploadedFiles( scope: string, uploads: readonly UploadedFileAttachment[], ): Promise<readonly FileAttachmentRef[]>',
+        description: 'Verify an ordered receipt batch and enforce complete message limits.',
+        parameters: [{ name: 'scope', description: 'opaque owner identity shared by every receipt.' }, { name: 'uploads', description: 'ordered raw-upload receipts.' }],
+        returns: 'authenticated references in the same order.',
+      },
+      {
+        signature: 'readFileStream(ref: FileAttachmentRef, signal?: AbortSignal): Promise<StoredFileAttachmentStream>',
+        description: 'Open a single-use verified byte stream without materializing the complete file.',
+        parameters: [{ name: 'ref', description: 'durable reference from trusted session state.' }, { name: 'signal', description: 'optional cancellation observed during iteration.' }],
+        returns: 'the reference and byte source; integrity failures reject iteration.',
       },
       {
         signature: 'abstract validateImage(input: SaveImageAttachment): Promise<void>',
@@ -585,9 +679,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the scoped shadow or global definition.',
       },
       {
-        signature: '@Remote async execute( agent: Agent, line: string, images: readonly EncodedImageAttachment[], signal: AbortSignal, ): Promise<CommandExecution | undefined>',
-        description: 'Parse and execute a known command without sending it to the model.\n\nA resolved command\'s lifecycle is logged: `command/run` is appended before the handler is invoked and `command/done` after settlement (a thrown or aborted handler settles as `kind: \'error\'`). Both are direct log-only appends — no turn wraps them, and persistence drains them at ordinary checkpoints. Admission misses (syntax or unknown name) log nothing — they never entered a handler. A `command/run` append failure fails the execution loud; a `command/done` append failure on the handler-failure path is contained so the handler\'s own error stays the reported failure.\n\nImage admission is enforced here, not in the composer: images sent to a command that does not declare `input.images`, an absent attachment store, and an exceeded attachment limit each settle as an error result before the handler runs, and a rejected batch publishes no durable object.',
-        parameters: [{ name: 'agent', description: 'exact receiving agent.' }, { name: 'line', description: 'complete slash-command line.' }, { name: 'images', description: 'base64-encoded composer images accompanying the line, in submission order; empty for a plain invocation.' }, { name: 'signal', description: 'cancellation signal owned by the UI request.' }],
+        signature: '@Remote async execute( agent: Agent, line: string, encodedAttachments: readonly EncodedCommandAttachment[], signal: AbortSignal, ): Promise<CommandExecution | undefined>',
+        description: 'Parse and execute a known command without sending it to the model.\n\nA resolved command\'s lifecycle is logged: `command/run` is appended before the handler is invoked and `command/done` after settlement (a thrown or aborted handler settles as `kind: \'error\'`). Both are direct log-only appends — no turn wraps them, and persistence drains them at ordinary checkpoints. Admission misses (syntax or unknown name) log nothing — they never entered a handler. A `command/run` append failure fails the execution loud; a `command/done` append failure on the handler-failure path is contained so the handler\'s own error stays the reported failure.\n\nAttachment admission is enforced here, not in the composer: attachments sent to a command that does not declare `input.attachments`, an absent attachment store, and a refused image or file group each settle as an error result before the handler runs. The handler observes either the complete frozen mixed-order vector or no attachments.',
+        parameters: [{ name: 'agent', description: 'exact receiving agent.' }, { name: 'line', description: 'complete slash-command line.' }, { name: 'encodedAttachments', description: 'base64-encoded composer attachments in display order; empty for a plain invocation.' }, { name: 'signal', description: 'cancellation signal owned by the UI request.' }],
         returns: 'the settled execution (result + lifecycle pairing id), or `undefined` when syntax or name does not resolve.',
       },
     ],
@@ -3094,6 +3188,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface CollectedOutput {\n    text: string;\n    truncated: boolean;\n    spillPath?: string;\n}',
   },
   {
+    name: 'CommandAttachmentBlock',
+    declaration: 'export type CommandAttachmentBlock = ImageBlock | FileBlock;',
+  },
+  {
     name: 'CommandDefinition',
     declaration: 'export interface CommandDefinition {\n    readonly name: string;\n    readonly description: string;\n    readonly input?: CommandInputDescriptor;\n    readonly recordInput?: boolean;\n    readonly handler: (invocation: CommandInvocation) => CommandResult | Promise<CommandResult>;\n}',
   },
@@ -3111,11 +3209,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CommandInputDescriptor',
-    declaration: 'export interface CommandInputDescriptor {\n    readonly hint: string;\n    readonly images?: boolean;\n}',
+    declaration: 'export interface CommandInputDescriptor {\n    readonly hint: string;\n    readonly attachments?: boolean;\n}',
   },
   {
     name: 'CommandInvocation',
-    declaration: 'export interface CommandInvocation {\n    readonly commandId: CommandId;\n    readonly agent: Agent;\n    readonly rawInput: string;\n    readonly attachments: readonly ImageBlock[];\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface CommandInvocation {\n    readonly commandId: CommandId;\n    readonly agent: Agent;\n    readonly rawInput: string;\n    readonly attachments: readonly CommandAttachmentBlock[];\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'CommandResult',
@@ -3147,7 +3245,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ContentBlockMap',
-    declaration: 'export interface ContentBlockMap {\n    \'text\': TextBlock;\n    \'reasoning\': ReasoningBlock;\n    \'image\': ImageBlock;\n    \'tool-call\': ToolCallBlock;\n    \'tool-result\': ToolResultBlock;\n}',
+    declaration: 'export interface ContentBlockMap {\n    \'text\': TextBlock;\n    \'reasoning\': ReasoningBlock;\n    \'image\': ImageBlock;\n    \'file\': FileBlock;\n    \'tool-call\': ToolCallBlock;\n    \'tool-result\': ToolResultBlock;\n}',
   },
   {
     name: 'ContentBlockType',
@@ -3331,7 +3429,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'DownloadsApi',
-    declaration: 'export interface DownloadsApi {\n    sessionLog(request: {\n        sessionId: SessionId;\n        includeDescendants?: boolean;\n    }, signal: AbortSignal): Promise<Response>;\n}',
+    declaration: 'export interface DownloadsApi {\n    fileUpload(request: {\n        sessionId: SessionId;\n        body: AsyncIterable<Uint8Array>;\n        expectedBytes: number;\n        mediaType?: string;\n        name?: string;\n    }, signal: AbortSignal): Promise<Response>;\n    fileDownload(request: {\n        sessionId: SessionId;\n        attachmentId: string;\n    }, signal: AbortSignal): Promise<Response>;\n    sessionLog(request: {\n        sessionId: SessionId;\n        includeDescendants?: boolean;\n    }, signal: AbortSignal): Promise<Response>;\n}',
   },
   {
     name: 'DshEnvironment',
@@ -3362,12 +3460,32 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface EditGoalRequest {\n    readonly objective?: string;\n    readonly maxGoalRounds?: number;\n}',
   },
   {
+    name: 'EncodedCommandAttachment',
+    declaration: 'export type EncodedCommandAttachment = ({\n    readonly type: \'image\';\n} & EncodedImageAttachment) | ({\n    readonly type: \'file\';\n} & (EncodedFileAttachment | UploadedFileAttachment));',
+  },
+  {
+    name: 'EncodedFileAttachment',
+    declaration: 'export interface EncodedFileAttachment {\n    mediaType?: string;\n    data: string;\n    name?: string;\n}',
+  },
+  {
     name: 'EncodedImageAttachment',
     declaration: 'export interface EncodedImageAttachment {\n    mediaType: ImageMediaType;\n    data: string;\n    name?: string;\n}',
   },
   {
     name: 'EpochHeader',
     declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    system?: string;\n    tools?: ToolSchema[];\n}',
+  },
+  {
+    name: 'FileAttachmentLimits',
+    declaration: 'export interface FileAttachmentLimits {\n    maxFileBytes: number;\n    maxFilesPerMessage: number;\n    maxMessageFileBytes: number;\n}',
+  },
+  {
+    name: 'FileAttachmentRef',
+    declaration: 'export interface FileAttachmentRef {\n    attachmentId: AttachmentId;\n    mediaType: string;\n    bytes: number;\n    name?: string;\n}',
+  },
+  {
+    name: 'FileBlock',
+    declaration: 'export interface FileBlock {\n    type: \'file\';\n    attachment: FileAttachmentRef;\n}',
   },
   {
     name: 'FileDiff',
@@ -3476,6 +3594,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GrantRecord',
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
+  },
+  {
+    name: 'GuideTeamMemberRemoteRequest',
+    declaration: 'export interface GuideTeamMemberRemoteRequest {\n    readonly target: string;\n    readonly content: string;\n    readonly delivery: \'quiet\' | \'wakeup\';\n}',
   },
   {
     name: 'ImageAttachmentLimits',
@@ -3643,7 +3765,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmDiscoveredModel',
-    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n}',
+    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n    inputModalities?: readonly ModelModality[];\n}',
   },
   {
     name: 'LlmFailure',
@@ -3827,7 +3949,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ModelModalityMap',
-    declaration: 'export interface ModelModalityMap {\n    text: \'text\';\n    image: \'image\';\n}',
+    declaration: 'export interface ModelModalityMap {\n    text: \'text\';\n    image: \'image\';\n    file: \'file\';\n}',
   },
   {
     name: 'ObjectJsonSchema',
@@ -4048,6 +4170,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SandboxPolicyRequest',
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
+  },
+  {
+    name: 'SaveFileAttachment',
+    declaration: 'export interface SaveFileAttachment {\n    data: Uint8Array;\n    mediaType?: string;\n    name?: string;\n}',
+  },
+  {
+    name: 'SaveFileAttachmentStream',
+    declaration: 'export interface SaveFileAttachmentStream {\n    data: AsyncIterable<Uint8Array>;\n    expectedBytes?: number;\n    mediaType?: string;\n    name?: string;\n}',
   },
   {
     name: 'SaveImageAttachment',
@@ -4455,11 +4585,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SpawnTeammateRequest',
-    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly llmProvider?: string;\n    readonly model?: string;\n    readonly persona?: string;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SpawnTeammateResult',
     declaration: 'export interface SpawnTeammateResult {\n    readonly member: TeamMemberView;\n}',
+  },
+  {
+    name: 'SpawnTeamMemberRemoteRequest',
+    declaration: 'export interface SpawnTeamMemberRemoteRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: string;\n    readonly context: \'fresh\' | \'fork\';\n    readonly llmProvider?: string;\n    readonly model?: string;\n    readonly persona?: string;\n}',
   },
   {
     name: 'SpillLocator',
@@ -4478,12 +4612,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SpillSource {\n    toolName: string;\n    callId: CallId;\n    label: string;\n}',
   },
   {
+    name: 'StartTeamDebateRequest',
+    declaration: 'export interface StartTeamDebateRequest {\n    readonly topic: string;\n    readonly participants: readonly string[];\n    readonly maxRounds?: number;\n}',
+  },
+  {
     name: 'StorageBackend',
     declaration: 'export interface StorageBackend {\n    readonly kv?: KvFacet;\n    close(): Promise<void>;\n}',
   },
   {
     name: 'StorageForms',
     declaration: 'export interface StorageForms {\n}',
+  },
+  {
+    name: 'StoredFileAttachment',
+    declaration: 'export interface StoredFileAttachment {\n    ref: FileAttachmentRef;\n    data: Uint8Array;\n}',
+  },
+  {
+    name: 'StoredFileAttachmentStream',
+    declaration: 'export interface StoredFileAttachmentStream {\n    ref: FileAttachmentRef;\n    data: AsyncIterable<Uint8Array>;\n}',
   },
   {
     name: 'StoredImageAttachment',
@@ -4642,6 +4788,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
   },
   {
+    name: 'TeamDebateAction',
+    declaration: 'export type TeamDebateAction = \'pause\' | \'resume\' | \'advance\' | \'complete\';',
+  },
+  {
+    name: 'TeamDebateId',
+    declaration: 'export type TeamDebateId = Branded<\'TeamDebateId\'>;',
+  },
+  {
+    name: 'TeamDebatePhase',
+    declaration: 'export type TeamDebatePhase = \'positions\' | \'critique\' | \'rebuttal\' | \'verification\' | \'synthesis\';',
+  },
+  {
+    name: 'TeamDebateSnapshot',
+    declaration: 'export interface TeamDebateSnapshot {\n    readonly id: TeamDebateId;\n    readonly revision: number;\n    readonly topic: string;\n    readonly status: TeamDebateStatus;\n    readonly phase: TeamDebatePhase;\n    readonly round: number;\n    readonly maxRounds: number;\n    readonly participants: string[];\n    readonly history: TeamDebateTransition[];\n}',
+  },
+  {
+    name: 'TeamDebateStatus',
+    declaration: 'export type TeamDebateStatus = \'active\' | \'paused\' | \'completed\';',
+  },
+  {
+    name: 'TeamDebateTransition',
+    declaration: 'export interface TeamDebateTransition {\n    readonly revision: number;\n    readonly round: number;\n    readonly phase: TeamDebatePhase;\n    readonly status: TeamDebateStatus;\n    readonly actor: string;\n    readonly note?: string;\n}',
+  },
+  {
     name: 'TeamId',
     declaration: 'export type TeamId = Branded<\'TeamId\'>;',
   },
@@ -4651,7 +4821,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TeamMemberView',
-    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly model?: string;\n    readonly diagnostics: string[];\n}',
+    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly llmProvider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly model?: string;\n    readonly persona?: string;\n    readonly diagnostics: string[];\n}',
   },
   {
     name: 'TeamMessageId',
@@ -4974,8 +5144,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TypertTypeModel {\n    readonly name: string;\n    readonly declaration: string;\n}',
   },
   {
+    name: 'UpdateTeamDebateRequest',
+    declaration: 'export interface UpdateTeamDebateRequest {\n    readonly debateId: TeamDebateId;\n    readonly expectedRevision: number;\n    readonly action: TeamDebateAction;\n    readonly note?: string;\n}',
+  },
+  {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
+  },
+  {
+    name: 'UploadedFileAttachment',
+    declaration: 'export interface UploadedFileAttachment {\n    uploadId: string;\n    attachment: FileAttachmentRef;\n}',
   },
   {
     name: 'UserMessage',

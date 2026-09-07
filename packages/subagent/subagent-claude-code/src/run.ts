@@ -15,7 +15,7 @@ import {
   type SDKResultMessage,
   type SpawnOptions,
 } from '@anthropic-ai/claude-agent-sdk'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   settleRunResult,
@@ -181,14 +181,17 @@ function isAborted(signal: AbortSignal): boolean {
  */
 export function textTask(prompt: readonly ContentBlock[]): string {
   if (prompt.length === 0) {
-    throw new Error('subagent-claude-code: the one-shot task must contain only text blocks')
+    throw new Error('subagent-claude-code: the one-shot task must contain only text or file blocks')
   }
   const texts: string[] = []
   for (const block of prompt) {
-    if (block.type !== 'text') {
-      throw new Error('subagent-claude-code: the one-shot task must contain only text blocks')
+    if (block.type === 'text') {
+      texts.push(block.text)
+    } else if (block.type === 'file') {
+      texts.push(textOnlyFileText(block.attachment))
+    } else {
+      throw new Error('subagent-claude-code: the one-shot task must contain only text or file blocks')
     }
-    texts.push(block.text)
   }
   if (texts.every(text => text.trim().length === 0)) {
     throw new Error('subagent-claude-code: the one-shot task must not be empty')

@@ -23,8 +23,10 @@ const DEFAULT_CAPABILITIES: SubagentCapabilities = {
 export interface Config {
   /** Registry name to register under. */
   name: string
-  /** Final text returned by the scripted child. */
+  /** Final text returned by the scripted child when `output` is omitted. */
   reply?: string
+  /** Exact final blocks returned by the scripted child. */
+  output?: ContentBlock[]
   /** Terminal result reason. */
   stopReason?: SubagentStopReason
   /** Safe non-assistant detail for a non-completed result. */
@@ -55,7 +57,7 @@ class ScriptedSubagentProvider implements SubagentProvider {
   async start(request: SubagentStartRequest): Promise<SubagentRun> {
     if (request.signal.aborted) throw new Error('scripted subagent start aborted before publication')
     const reply = this.config.reply ?? 'scripted subagent reply'
-    const output: ContentBlock[] = [{ type: 'text', text: reply }]
+    const output: ContentBlock[] = this.config.output ?? [{ type: 'text', text: reply }]
     const wantsStructured = request.outputSchema !== undefined && this.capabilities.outputSchema
     const stopReason = this.config.stopReason ?? 'completed'
     const state = { cancelled: false }

@@ -3,6 +3,13 @@
   min-width: 0;
 }
 
+.triggerContainer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 /* Figma 313:14108 ToggleButton: 13/20 medium secondary label, 4px gap,
    12px caption chevron; 28px chip height matches the sibling Plan /
    Read-only selects in the same tool row. */
@@ -135,6 +142,62 @@
   cursor: pointer;
 }
 
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 2px 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-caption);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.searchBox:focus-within {
+  border-color: var(--dsw-alias-border-l3);
+  box-shadow: 0 0 0 1px var(--dsw-alias-border-l3);
+}
+
+.searchIcon {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
+}
+
+.searchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.searchInput::placeholder {
+  color: var(--dsw-alias-label-caption);
+}
+
+.searchClear {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  cursor: pointer;
+}
+
+.searchClear:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .groups {
   min-height: 0;
   overflow-y: auto;
@@ -154,6 +217,17 @@
   font-size: 12px;
   line-height: 18px;
   font-weight: 500;
+}
+
+.frequentTitle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.frequentIcon {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .option {

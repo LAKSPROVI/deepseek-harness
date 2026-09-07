@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * ui-model-selection browser half on a real cordis Context with fake command/slots/
  * connection faces and real session scopes: the plugin mounts ModelDirectoryResolver
@@ -6,15 +7,16 @@
  * directory through the service — a selection submitted through the seat's
  * inject face is the current the popup's next options pass marks active
  * (and the reverse), the one-shared-state contract of the dual entry.
- * Scope disposal drops the directory (HMR safety).
+ * Session or plugin disposal drops the directory and composer policy (HMR safety).
  */
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
-import { createScope } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { createScope, createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ComposerAttachment, DraftAttachmentId } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { CommandContribution, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
 import type { ModelSelectInjected } from '../src/client/slots.ts'
 import { apply, inject } from '../src/client/index.ts'
@@ -22,13 +24,39 @@ import { zh } from '../src/client/locales.ts'
 
 const sid = (k: string): SessionId => k as SessionId
 
-const GROUPS = [{
+interface FakeInputState {
+  readonly draft: string
+  readonly attachmentIds: readonly DraftAttachmentId[]
+  readonly draftRev: number
+  readonly phase: 'plain'
+  readonly occurrences: readonly never[]
+  readonly queue: readonly never[]
+}
+
+interface FakeModel {
+  readonly id: string
+  readonly name: string
+  readonly inputModalities?: ('text' | 'image')[]
+  readonly reasoning?: {
+    readonly efforts: { readonly id: string; readonly name: string }[]
+    readonly defaultEffort?: string
+  }
+}
+
+interface FakeProviderGroup {
+  readonly id: string
+  readonly name: string
+  readonly models: FakeModel[]
+}
+
+const GROUPS: FakeProviderGroup[] = [{
   id: 'deepseek-official',
   name: 'DeepSeek',
   models: [
     {
       id: 'deepseek-v4-flash',
       name: 'DeepSeek-V4-Flash',
+      inputModalities: ['text', 'image'],
       reasoning: {
         efforts: [
           { id: 'off', name: 'Off' },
@@ -41,6 +69,7 @@ const GROUPS = [{
     {
       id: 'deepseek-v4-pro',
       name: 'DeepSeek-V4-Pro',
+      inputModalities: ['text'],
       reasoning: {
         efforts: [
           { id: 'off', name: 'Off' },
@@ -57,12 +86,21 @@ const GROUPS = [{
 async function bench() {
   const ctx = new Context()
   let current: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
+  let currentModel: FakeModel | undefined = GROUPS[0]?.models[0]
   const calls = { models: 0, select: 0 }
+  const modelFor = (selection: ModelSelection): FakeModel => {
+    const model = GROUPS.find(group => group.id === selection.provider)?.models
+      .find(entry => entry.id === selection.model)
+    return model ?? { id: selection.model, name: selection.model }
+  }
   ctx.provide('connection', { api: { sessions: {
     models: () => {
       calls.models += 1
       return Promise.resolve({
-        result: { ok: true as const, value: { current, routable, groups: GROUPS, failures: [] } },
+        result: {
+          ok: true as const,
+          value: { current, ...currentModel === undefined ? {} : { currentModel }, routable, groups: GROUPS, failures: [] },
+        },
       })
     },
     selectModel: (payload: { provider: string; model: string; reasoningEffort?: string }) => {
@@ -74,16 +112,46 @@ async function bench() {
           ? {}
           : { reasoningEffort: payload.reasoningEffort },
       }
-      return Promise.resolve({ result: { ok: true as const, value: { selected: current } } })
+      currentModel = modelFor(current)
+      return Promise.resolve({ result: { ok: true as const, value: { selected: current, currentModel } } })
     },
   } } })
   // Whether the Host reports an adapter for the current route; the composer
   // block follows this, never catalog membership.
   let routable = true
+  const scopes = new Map<SessionId, Context>()
   const blocks = new Map<SessionId, { reason: string } | undefined>()
+  const admissions = new Map<SessionId, (attachments: readonly ComposerAttachment[]) => string | undefined>()
+  const attachments = new Map<DraftAttachmentId, ComposerAttachment>()
+  const inputStores = new Map<SessionId, SnapshotStore<FakeInputState>>()
+  const inputStore = (id: SessionId): SnapshotStore<FakeInputState> => {
+    const existing = inputStores.get(id)
+    if (existing !== undefined) return existing
+    const created = createSnapshotStore<FakeInputState>({
+      draft: '', attachmentIds: [], draftRev: 0,
+      phase: 'plain', occurrences: [], queue: [],
+    })
+    inputStores.set(id, created)
+    return created
+  }
   ctx.provide('conversation', {
+    input: {
+      for: (actx: Context) => {
+        const entry = [...scopes].find(([, scope]) => scope === actx)
+        if (entry === undefined) throw new Error('fake conversation: unknown scope')
+        return { state: inputStore(entry[0]) }
+      },
+    },
     blocks: {
       set: (id: SessionId, block: { reason: string } | undefined) => { blocks.set(id, block) },
+    },
+    draftAttachments: (ids: readonly DraftAttachmentId[]) => ids.flatMap((id) => {
+      const attachment = attachments.get(id)
+      return attachment === undefined ? [] : [attachment]
+    }),
+    registerPromptAdmission: (id: SessionId, check: (attachments: readonly ComposerAttachment[]) => string | undefined) => {
+      admissions.set(id, check)
+      return () => { admissions.delete(id) }
     },
   })
   let contribution: CommandContribution | undefined
@@ -110,7 +178,6 @@ async function bench() {
   // from FALLBACK_LOCALE (en): state the asserted locale explicitly.
   localeRuntime.setLocale('zh')
   ctx.provide('locale', localeRuntime)
-  const scopes = new Map<SessionId, Context>()
   const addressed = new Set<SessionId>()
   ctx.provide('sessions', {
     scope: (id: SessionId) => scopes.get(id),
@@ -132,16 +199,29 @@ async function bench() {
     contribution: () => contribution!,
     seat: () => seats.get('conversation.input.model')!,
     hostCurrent: () => current,
-    setHostCurrent: (selection: ModelSelection) => { current = selection },
+    setHostCurrent: (selection: ModelSelection, model?: FakeModel) => {
+      current = selection
+      currentModel = model
+    },
     address: (id: SessionId) => { addressed.add(id) },
     setRoutable: (next: boolean) => { routable = next },
+    setAttachments: (key: string, next: readonly ComposerAttachment[]) => {
+      for (const attachment of next) attachments.set(attachment.id, attachment)
+      const store = inputStore(sid(key))
+      store.set({ ...store.getSnapshot(), attachmentIds: next.map(attachment => attachment.id) })
+    },
     blockOf: (key: string) => blocks.get(sid(key)),
+    admissionOf: (key: string) => admissions.get(sid(key)),
   }
 }
 
 const projection = (id: string) => ({ sessionId: sid(id) })
 
 describe('ui-model-selection dual entry', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
   it('registers the /model contribution and the composer model seat', async () => {
     const b = await bench()
     expect(b.contribution().name).toBe('model')
@@ -197,6 +277,20 @@ describe('ui-model-selection dual entry', () => {
       model: 'deepseek-v4-pro',
       reasoningEffort: 'high',
     })
+  })
+
+  it('popup options list frequent models at the top when usage history exists', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const seatFace = b.seat().inject!(sid('s1'))
+    await seatFace.select({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-pro',
+      reasoningEffort: 'max',
+    })
+    const options = await b.contribution().ui.options(projection('s1'), new AbortController().signal)
+    expect(options[0]?.label).toBe('DeepSeek-V4-Pro')
+    expect(options[0]?.detail).toContain('常用模型')
   })
 
   it('both entries share one directory instance per session, isolated across sessions', async () => {
@@ -281,6 +375,50 @@ describe('ui-model-selection dual entry', () => {
     expect(b.blockOf('s1')).toBeUndefined()
   })
 
+  it('blocks only known-incompatible image drafts and clears on removal, selection, or disposal', async () => {
+    const b = await bench()
+    const scope = b.mint('s1')
+    const face = b.seat().inject!(sid('s1'))
+    const image: ComposerAttachment = {
+      kind: 'image',
+      id: 'image-1' as DraftAttachmentId,
+      file: new File([Uint8Array.of(1)], 'image.png', { type: 'image/png' }),
+      previewUrl: 'blob:image-1',
+    }
+
+    await b.ctx.modelDirectories.directoryFor(sid('s1')).load()
+    b.setAttachments('s1', [image])
+    expect(b.blockOf('s1')).toBeUndefined()
+    expect(b.admissionOf('s1')?.([image])).toBeUndefined()
+
+    await face.select({ provider: 'deepseek-official', model: 'deepseek-v4-pro' })
+    expect(face.directory.getSnapshot().currentModel?.inputModalities).toEqual(['text'])
+    expect(b.blockOf('s1')?.reason).toBe(zh['blocked.images'])
+    expect(b.admissionOf('s1')?.([image])).toBe(zh['blocked.images'])
+    expect(b.admissionOf('s1')?.([])).toBeUndefined()
+
+    b.setAttachments('s1', [])
+    expect(b.blockOf('s1')).toBeUndefined()
+
+    b.setAttachments('s1', [image])
+    expect(b.blockOf('s1')?.reason).toBe(zh['blocked.images'])
+    await face.select({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
+    expect(face.directory.getSnapshot().currentModel?.inputModalities).toEqual(['text', 'image'])
+    expect(b.blockOf('s1')).toBeUndefined()
+
+    b.setHostCurrent({ provider: 'deepseek-official', model: 'private' })
+    await b.ctx.modelDirectories.directoryFor(sid('s1')).load()
+    expect(face.directory.getSnapshot().groups.flatMap(group => group.models.map(model => model.id)))
+      .not.toContain('private')
+    expect(face.directory.getSnapshot().currentModel?.inputModalities).toBeUndefined()
+    expect(b.blockOf('s1')).toBeUndefined()
+    expect(b.admissionOf('s1')?.([image])).toBeUndefined()
+
+    await scope.fiber.dispose()
+    expect(b.blockOf('s1')).toBeUndefined()
+    expect(b.admissionOf('s1')).toBeUndefined()
+  })
+
   it('clears its block when the session scope goes', async () => {
     const b = await bench()
     const scope = b.mint('s1')
@@ -293,6 +431,34 @@ describe('ui-model-selection dual entry', () => {
 
     await scope.fiber.dispose()
     expect(b.blockOf('s1')).toBeUndefined()
+  })
+
+  it('drops stale policy and directory across plugin HMR while the session stays alive', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const first = b.seat().inject!(sid('s1'))
+    await first.select({ provider: 'deepseek-official', model: 'deepseek-v4-pro' })
+    const image: ComposerAttachment = {
+      kind: 'image',
+      id: 'hmr-image' as DraftAttachmentId,
+      file: new File([Uint8Array.of(1)], 'hmr.png', { type: 'image/png' }),
+      previewUrl: 'blob:hmr-image',
+    }
+    b.setAttachments('s1', [image])
+    expect(b.admissionOf('s1')?.([image])).toBe(zh['blocked.images'])
+
+    await b.fiber.dispose()
+    expect(b.admissionOf('s1')).toBeUndefined()
+    expect(b.blockOf('s1')).toBeUndefined()
+
+    const reloaded = b.ctx.plugin({ inject: [...inject], apply })
+    await reloaded.await()
+    await b.ctx.plugin(function reloadProbe() {}).await()
+    const second = b.seat().inject!(sid('s1'))
+    expect(second.directory).not.toBe(first.directory)
+    await b.ctx.modelDirectories.directoryFor(sid('s1')).load()
+    expect(b.admissionOf('s1')?.([image])).toBe(zh['blocked.images'])
+    await reloaded.dispose()
   })
 
   it('an unknown session fails loud at the seat inject', async () => {

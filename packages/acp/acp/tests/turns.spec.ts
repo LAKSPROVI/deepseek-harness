@@ -1,6 +1,7 @@
-import { createUserMessage, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, textOnlyFileText, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   errorResponse,
@@ -63,6 +64,28 @@ describe('ACP prompt lifecycle', () => {
       sessionUpdate: 'agent_message_chunk',
       content: { type: 'image', data: 'AQ==', mimeType: 'image/png' },
     })
+  })
+
+  it('projects a committed assistant file as deterministic ACP text', async () => {
+    const ref = {
+      attachmentId: AttachmentId(`sha256:${'f'.repeat(64)}`),
+      mediaType: 'application/pdf',
+      bytes: 42,
+      name: 'report.pdf',
+    }
+    harness = await makeBridgeHarness({ script: [[
+      { type: 'block-start', index: 0, blockType: 'file' },
+      { type: 'block-end', index: 0, block: { type: 'file', attachment: ref } },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ]] })
+    const sessionId = await newSession(harness)
+
+    await harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'show it' }] })
+
+    expect(harness.updates).toEqual([{
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: textOnlyFileText(ref) },
+    }])
   })
 
   it('preserves committed text/image/text order on the ACP wire', async () => {

@@ -1,6 +1,6 @@
 /** Conversation slot declarations and their composed component props. */
 import type { ReactNode, RefObject } from 'react'
-import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type {
   InjectFace, MaybeSnapshotSelectorHook, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
   SlotHookFactory, SnapshotSelectorHook,
@@ -22,40 +22,57 @@ import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submissi
 import type { ChatNode, ChatNodeKind } from './chat-nodes.ts'
 import type { CallId, SelectionTarget, ViewTab } from './views.ts'
 
-/** Browser-owned image that has not crossed the durable host boundary. */
-export interface ComposerAttachment {
-  kind: 'image'
-  id: DraftAttachmentId
-  file: File
-  previewUrl: string
-}
+/** Browser-owned attachment that has not crossed the durable Host boundary. */
+export type ComposerAttachment =
+  | {
+    readonly kind: 'image'
+    readonly id: DraftAttachmentId
+    readonly file: File
+    readonly previewUrl: string
+  }
+  | {
+    readonly kind: 'file'
+    readonly id: DraftAttachmentId
+    readonly file: File
+  }
 
 /** Input state handed to the optional attachment presentation plugin. */
 export interface ComposerAttachmentsOwnerProps {
-  /** Browser-owned draft images in input order. */
+  /** Browser-owned draft attachments in intake order. */
   attachments: readonly ComposerAttachment[]
-  /** Whether a document-level file drop may add images now. */
+  /** Whether a document-level file drop may add attachments now. */
   canAcceptDrop: boolean
-  /** Add one dropped batch through the composer's validation path. */
-  onAddImages: (files: readonly File[]) => void
-  /** Remove one draft image through the conversation service. */
-  onRemoveImage: (id: DraftAttachmentId) => void
+  /** Add one picker, paste, or drop batch through the composer's atomic intake path. */
+  intakeAttachments: (files: readonly File[]) => void
+  /** Remove one draft attachment through the conversation service. */
+  onRemoveAttachment: (id: DraftAttachmentId) => void
   /** Display-ready limits for the drop invitation. */
-  dropLimits?: { readonly count: number; readonly size: string } | undefined
+  dropLimits?: {
+    readonly images?: { readonly count: number; readonly size: string } | undefined
+    readonly files?: { readonly count: number; readonly size: string } | undefined
+    readonly combined?: number | undefined
+  } | undefined
 }
 
-/** Historical image group handed to the optional attachment presentation plugin. */
-export interface MessageImagesOwnerProps {
-  /** Consecutive image blocks rendered as one gallery. */
-  images: readonly { readonly attachment: ImageAttachmentRef }[]
-  /** Session-authorized durable image loader. */
-  loadImage: (attachment: ImageAttachmentRef) => Promise<string>
+/** One durable message attachment in original content order. */
+export type MessageAttachment =
+  | { readonly kind: 'image'; readonly attachment: ImageAttachmentRef }
+  | { readonly kind: 'file'; readonly attachment: FileAttachmentRef }
+
+/** Historical attachment group handed to the optional presentation plugin. */
+export interface MessageAttachmentsOwnerProps {
+  /** Consecutive attachment blocks rendered in source order. */
+  attachments: readonly MessageAttachment[]
+  /** Session-authorized durable attachment loader. */
+  loadAttachment: (attachment: ImageAttachmentRef | FileAttachmentRef) => Promise<string>
   /** Message-side alignment. */
   align: 'start' | 'end'
 }
 
 /** Slot-backed renderer used by chat nodes without importing an attachment implementation. */
-export type RenderMessageImages = (owner: Omit<MessageImagesOwnerProps, 'loadImage'>) => ReactNode
+export type RenderMessageAttachments = (
+  owner: Omit<MessageAttachmentsOwnerProps, 'loadAttachment'>,
+) => ReactNode
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -120,8 +137,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       hookContext: string
       inject: ChatNodeTurnDataInjected
     }
-    /** Optional renderer for one consecutive group of durable message images. */
-    'conversation.message.images': { kind: 'single'; scope: 'session'; owner: MessageImagesOwnerProps }
+    /** Optional renderer for one consecutive group of durable message attachments. */
+    'conversation.message.attachments': { kind: 'single'; scope: 'session'; owner: MessageAttachmentsOwnerProps }
     /**
      * The chat view's per-command row hole: keyed dispatch on the command
      * name (`command/run.name`; a run-less cross-window node has none and
@@ -421,8 +438,8 @@ export interface ChatNodeOwnerProps {
   openFile: (path: string) => void
   inspectCall: (callId: CallId) => void
   forkAt: (seq: number) => void
-  /** Render a historical image group through the attachment slot. */
-  renderMessageImages: RenderMessageImages
+  /** Render a historical attachment group through the attachment slot. */
+  renderMessageAttachments: RenderMessageAttachments
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
 }
 
@@ -522,9 +539,9 @@ export interface ComposerBarOwnerProps {
   /**
    * A block another plugin raised for this session: the bar refuses input and
    * shows the blocker's reason as the placeholder, but — unlike `disabled` —
-   * keeps the model seat live. Every block this contract has is one the user
-   * clears by choosing a model, so locking that seat too would leave the
-   * composer telling them to do the one thing it prevents.
+   * keeps the model seat live. Model incompatibility can therefore be cleared
+   * by changing models, while the attachment rail remains available to remove
+   * an incompatible draft attachment.
    */
   blocked?: { readonly reason: string }
   /**
@@ -553,12 +570,12 @@ export interface ComposerBarOwnerProps {
 export interface ComposerBarInjected {
   /** The InputBar-exclusive keyboard/DOM command face (private plane); absent with the session. */
   keyboard: ComposerKeyboard | undefined
-  /** Create previews and append image ids to the session input. */
-  addImages: ((files: readonly File[]) => string | null) | undefined
-  /** Release one preview and remove its id from session input. */
-  removeImage: ((id: DraftAttachmentId) => void) | undefined
-  /** Resolve ordered input ids to browser-owned draft images. */
-  draftImages: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
+  /** Classify a batch, create image previews, and append attachment ids atomically. */
+  addAttachments: ((files: readonly File[]) => string | null) | undefined
+  /** Release one browser-owned attachment and remove its id from session input. */
+  removeAttachment: ((id: DraftAttachmentId) => void) | undefined
+  /** Resolve ordered input ids to browser-owned draft attachments. */
+  draftAttachments: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
   /** Resolve one keyboard submission gesture against the current running state and persisted preference. */
   resolveSubmitMode: (
     running: boolean,
@@ -758,8 +775,8 @@ export interface ChatViewInjected {
    */
   openFile: (path: string) => Promise<void>
   loadOlder: () => void
-  /** Resolve a session-authorized historical image for inline display. */
-  loadImage: (attachment: ImageAttachmentRef) => Promise<string>
+  /** Resolve a session-authorized historical attachment to a browser URL. */
+  loadAttachment: (attachment: ImageAttachmentRef | FileAttachmentRef) => Promise<string>
   /** Hand a call off to the trajectory view: write the one-shot inspect target and switch tabs. */
   inspectCall: (callId: CallId) => void
   /**
@@ -787,15 +804,15 @@ export interface ChatViewInjected {
 /** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */
 export type ChatViewSlotProps =
   PropsRuntime<'conversation.view'>
-  & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images'>
+  & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.attachments'>
   & PropsStore<ChatStore> & ChatViewInjected & PropsLocale<'conversation'>
 
 /** Full props of the attachment plugin's composer entry. */
 export type ComposerAttachmentsProps =
   PropsRuntime<'conversation.input.attachments'> & PropsLocale<'conversation'>
 
-/** Full props of the attachment plugin's message-gallery entry. */
-export type MessageImagesProps = PropsRuntime<'conversation.message.images'> & PropsLocale<'conversation'>
+/** Full props of the attachment plugin's historical attachment entry. */
+export type MessageAttachmentsProps = PropsRuntime<'conversation.message.attachments'> & PropsLocale<'conversation'>
 
 /**
  * Injected share of the details slot: the panel is otherwise a pure reader of

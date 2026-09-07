@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { CallId, textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH } from '@deepseek-ai/dsh-tools'
 import { assembleContextFor, type Agent } from '@deepseek-ai/dsh-agent'
@@ -23,6 +23,15 @@ import * as tool from '../src/index.ts'
 import { SessionId } from '@deepseek-ai/dsh-session'
 
 const testToolSignal = new AbortController().signal
+const fileBlock = {
+  type: 'file',
+  attachment: {
+    attachmentId: `sha256:${'f'.repeat(64)}`,
+    mediaType: 'text/plain',
+    bytes: 12,
+    name: 'notes.txt',
+  },
+} as unknown as Extract<ContentBlock, { type: 'file' }>
 
 /**
  * Drives the REAL plugin body: mounts `dsh-tool-subagent` on a real
@@ -98,6 +107,17 @@ describe('dsh-tool-subagent', () => {
       output: [{ type: 'text', text: 'child says hi' }],
     })
     expect(text(result)).toBe('child says hi')
+  })
+
+  it('projects file blocks in a foreground child result', async () => {
+    const ctx = await setup({ provider: 'mock' }, { output: [{ type: 'text', text: 'before ' }, fileBlock] })
+    const result = await callSubagent(ctx, {
+      description: 'return a file',
+      prompt: 'go',
+      run_in_background: false,
+    })
+    expect(result.isError).toBe(false)
+    expect(text(result)).toBe(`before ${textOnlyFileText(fileBlock.attachment)}`)
   })
 
   it('exposes description + prompt + run_in_background to the model (no provider/type parameter)', async () => {

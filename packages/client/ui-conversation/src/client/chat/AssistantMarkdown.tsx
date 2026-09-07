@@ -24,7 +24,7 @@ export interface AssistantMarkdownProps {
   /** Frozen partial of an aborted turn: rendered with a stopped marker. */
   interrupted?: boolean | undefined
   /** Render consecutive image blocks through the attachment slot. */
-  renderMessageImages: ChatNodeOwnerProps['renderMessageImages']
+  renderMessageAttachments: ChatNodeOwnerProps['renderMessageAttachments']
   /** Resolved prose file mentions for this Assistant's closing turn. */
   mentions?: MarkdownFileMentions | undefined
   /** The owning view's locale seat, passed down as a plain prop. */
@@ -33,7 +33,7 @@ export interface AssistantMarkdownProps {
 
 /** Reasoning block as the Think variant summary row (figma 39:28304). */
 export const AssistantMarkdown = memo(function AssistantMarkdown({
-  blocks, streaming, interrupted, renderMessageImages, mentions, t,
+  blocks, streaming, interrupted, renderMessageAttachments, mentions, t,
 }: AssistantMarkdownProps) {
   // Stable per locale revision (t identity changes on switch): a fresh object
   // per render would rebuild MarkdownText's component table every chunk.
@@ -65,24 +65,25 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
       case 'reasoning':
         rendered.push(<ReasoningRow key={i} text={block.text} running={streaming && i === last} t={t} />)
         break
-      case 'image': {
-        // Consecutive image blocks share one gallery so several images tile
-        // into rows instead of each opening a one-image group of its own.
-        // Keyed by the group's FIRST block index: a streaming append that
-        // extends the group then only grows `images` instead of remounting
-        // the gallery under a shifted key.
+      case 'image':
+      case 'file': {
+        // Consecutive attachment blocks share one surface while preserving
+        // their source order. The presentation plugin groups only adjacent
+        // images into a gallery and keeps opaque files as inert cards.
         const start = i
         const group = [block]
         while (i + 1 < blocks.length) {
           const next = blocks[i + 1]
-          if (next === undefined || next.kind !== 'image') break
+          if (next === undefined || (next.kind !== 'image' && next.kind !== 'file')) break
           group.push(next)
           i += 1
         }
         rendered.push(
           <Fragment key={start}>
-            {renderMessageImages({
-              images: group.map(({ attachment }) => ({ attachment })),
+            {renderMessageAttachments({
+              attachments: group.map(item => item.kind === 'image'
+                ? { kind: 'image', attachment: item.attachment }
+                : { kind: 'file', attachment: item.attachment }),
               align: 'start',
             })}
           </Fragment>,

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
 import { CompactionId, compactCheckpointSource } from '@deepseek-ai/dsh-compaction'
-import { createUserMessage, CallId , createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, CallId, createMessage, createToolResultMessage, textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import SessionReferenceResolver, {
@@ -47,6 +47,16 @@ function fakeAgent(session: Session): Agent {
 function expectCode(code: SessionReferenceErrorCode): Error {
   return expect.objectContaining({ code }) as Error
 }
+
+const fileBlock = {
+  type: 'file',
+  attachment: {
+    attachmentId: `sha256:${'f'.repeat(64)}`,
+    mediaType: 'text/plain',
+    bytes: 12,
+    name: 'notes.txt',
+  },
+} as unknown as Extract<ContentBlock, { type: 'file' }>
 
 function checkpointSource(id: string) {
   return compactCheckpointSource(CompactionId(id))
@@ -459,6 +469,27 @@ describe('session reference discovery and preparation', () => {
       { surfaceOp: 'append' },
     )
     expect(context.content[0].text).not.toContain('later source mutation')
+  })
+
+  it('projects deterministic file metadata into a referenced conversation', async () => {
+    const ctx = await harness()
+    const target = ctx.sessions.create(SessionId('target'))
+    const source = ctx.sessions.create(SessionId('source'))
+    source.append('user/message', createUserMessage({
+      content: [fileBlock],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+
+    const prepared = await ctx.sessionReferenceResolver.prepare(
+      fakeAgent(target),
+      [{ type: 'text', text: 'inspect source' }],
+      [{ sessionId: source.id }],
+    )
+    const context = prepared.additionalContext
+    if (context?.content[0]?.type !== 'text') throw new Error('expected text context')
+    expect(promptData(context.content[0].text)).toMatchObject([{
+      conversation: [{ role: 'user', text: textOnlyFileText(fileBlock.attachment) }],
+    }])
   })
 
   it('excludes injected context when projecting a referenced session', async () => {

@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { textOnlyFileText, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   settleRunResult,
@@ -161,14 +161,17 @@ function thrown(value: unknown): Error {
  */
 export function textTask(prompt: readonly ContentBlock[]): string[] {
   if (prompt.length === 0) {
-    throw new Error('subagent-codex: the one-shot task must contain only text blocks')
+    throw new Error('subagent-codex: the one-shot task must contain only text or file blocks')
   }
   const texts: string[] = []
   for (const block of prompt) {
-    if (block.type !== 'text') {
-      throw new Error('subagent-codex: the one-shot task must contain only text blocks')
+    if (block.type === 'text') {
+      texts.push(block.text)
+    } else if (block.type === 'file') {
+      texts.push(textOnlyFileText(block.attachment))
+    } else {
+      throw new Error('subagent-codex: the one-shot task must contain only text or file blocks')
     }
-    texts.push(block.text)
   }
   if (texts.every(text => text.trim().length === 0)) {
     throw new Error('subagent-codex: the one-shot task must not be empty')

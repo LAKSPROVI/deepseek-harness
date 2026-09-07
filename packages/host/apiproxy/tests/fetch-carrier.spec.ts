@@ -63,6 +63,7 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
             ok: true,
             value: {
               current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+              currentModel: { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', inputModalities: ['text', 'image'] },
               routable: true,
               groups: [],
               failures: [],
@@ -83,6 +84,11 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
                   ? {}
                   : { reasoningEffort: request.payload.reasoningEffort },
               },
+              currentModel: {
+                id: request.payload.model,
+                name: request.payload.model,
+                inputModalities: ['text', 'image'],
+              },
             },
           },
         }
@@ -99,7 +105,7 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async attachment(request) {
         return {
           rpcId: request.rpcId,
-          result: { ok: true, value: { attachment: { attachmentId: 'a' as never, mediaType: 'image/png' as const, bytes: 1, width: 1, height: 1 }, data: 'AA==' } },
+          result: { ok: true, value: { type: 'image' as const, attachment: { attachmentId: 'a' as never, mediaType: 'image/png' as const, bytes: 1, width: 1, height: 1 }, data: 'AA==' } },
         }
       },
       async updateQueue(request) {
@@ -290,6 +296,12 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       return message.rpcId === 'known' ? { accepted: true } : { accepted: false, reason: 'not-pending' }
     },
     downloads: {
+      async fileUpload() {
+        return new Response('stub', { status: 404 })
+      },
+      async fileDownload() {
+        return new Response('stub', { status: 404 })
+      },
       async sessionLog() {
         return new Response('stub', { status: 404 })
       },
@@ -351,6 +363,11 @@ describe('unary round trip (handler ⇄ client, no network)', () => {
           provider: 'deepseek-official',
           model: 'deepseek-v4-flash',
           reasoningEffort: 'max',
+        },
+        currentModel: {
+          id: 'deepseek-v4-flash',
+          name: 'deepseek-v4-flash',
+          inputModalities: ['text', 'image'],
         },
       },
     })

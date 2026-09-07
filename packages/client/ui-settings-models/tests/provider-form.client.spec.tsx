@@ -33,6 +33,8 @@ const PiAiConfig = Schema.object({
       name: Schema.string(),
       contextWindow: Schema.number(),
       maxTokens: Schema.number(),
+      input: Schema.array(Schema.union(['text', 'image'])),
+      reasoningEfforts: Schema.dict(Schema.string()),
     })),
     reasoning: Schema.union(['off', 'high']),
   })),
@@ -215,6 +217,28 @@ describe('model list editing', () => {
       expectedRevision: 3,
       ops: [{ op: 'set', path: ['providers', 'openai', 'models'], value: [{ id: 'acme-large', contextWindow: 65_536 }] }],
     })
+  })
+
+  it('preserves configured modality and other hidden model fields while editing', async () => {
+    const { mutate } = await mountSection({
+      providers: {
+        openai: {
+          baseURL: 'https://proxy.example/v1',
+          models: [{
+            id: 'vision', input: ['text', 'image'], reasoningEfforts: { high: 'high' },
+          }],
+        },
+      },
+    })
+    openEditor('openai')
+
+    fireEvent.change(screen.getByLabelText(`${en.modelName} 1`), { target: { value: 'Vision' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([{
+      id: 'vision', name: 'Vision', input: ['text', 'image'], reasoningEfforts: { high: 'high' },
+    }])
   })
 
   it('names a duplicate model id in the edit flow too', async () => {
@@ -489,6 +513,34 @@ describe('endpoint interrogation', () => {
     expect(firstMutate(mutate).ops[0]?.value).toEqual([
       { id: 'kept', contextWindow: 111 },
       { id: 'fresh', contextWindow: 4096, name: 'Fresh' },
+    ])
+  })
+
+  it('adopts known input modalities without inventing them when unknown', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok({
+      models: [
+        { id: 'vision', inputModalities: ['text', 'image'] },
+        { id: 'text-only', inputModalities: ['text'] },
+        { id: 'explicit-none', inputModalities: [] },
+        { id: 'file-capable', inputModalities: ['text', 'file'] },
+        { id: 'unknown' },
+      ],
+    })))
+    const { mutate } = await mountSection({ discover })
+    openEditor('openai')
+
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await screen.findByText(en.fetchTitle)
+    fireEvent.click(screen.getByText(en.fetchAdopt))
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([
+      { id: 'vision', input: ['text', 'image'] },
+      { id: 'text-only', input: ['text'] },
+      { id: 'explicit-none', input: [] },
+      { id: 'file-capable' },
+      { id: 'unknown' },
     ])
   })
 

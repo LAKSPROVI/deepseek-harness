@@ -12,6 +12,9 @@
       "path": "../../../vendor/cordis"
     },
     {
+      "path": "../connection/tsconfig.client.json"
+    },
+    {
       "path": "../locale"
     },
     {
@@ -24,6 +27,9 @@
       "path": "../ui-primitives"
     },
     {
+      "path": "../ui-settings"
+    },
+    {
       "path": "../ui-slots"
     },
     {
@@ -31,6 +37,18 @@
     },
     {
       "path": "../../subagent/subagent"
+    },
+    {
+      "path": "../../subagent/agent-team/tsconfig.client.json"
+    },
+    {
+      "path": "../../api/remotes/tsconfig.client.json"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../../vendor/schemastery"
     },
     {
       "path": "../../runtime-diagnostics/invariants"

@@ -988,16 +988,16 @@ describe('tool execution edge cases', () => {
     })
   })
 
-  it('handles unknown content types', async () => {
+  it.each(['video', 'file'])('keeps unknown %s content visible as unsupported text', async (type) => {
     const client = createMockClient(
       [{ name: 'unknown_tool', inputSchema: { type: 'object' } }],
-      { content: [{ type: 'video' }] },
+      { content: [{ type }] },
     )
 
     await syncTools(client as never, ctx, defaultOpts, new Map())
     const result = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c1'), name: 'mcp__srv__unknown_tool', arguments: {} })
 
-    expect(result.content[0]).toEqual({ type: 'text', text: '[unsupported MCP content type: video]' })
+    expect(result.content[0]).toEqual({ type: 'text', text: `[unsupported MCP content type: ${type}]` })
   })
 
   it('handles image with missing mimeType (buggy server)', async () => {

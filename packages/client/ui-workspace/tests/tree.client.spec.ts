@@ -3,7 +3,7 @@ import type {
   SessionId, SessionListState, SessionSummary, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, workspaceLabel, relativeTime,
+  deriveFlat, deriveGroups, deriveRecentAndInProgress, deriveSearchResults, workspaceLabel, relativeTime,
   UNGROUPED_KEY, UNGROUPED_LABEL,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
@@ -391,7 +391,114 @@ describe('deriveSearchResults', () => {
   })
 })
 
+describe('deriveRecentAndInProgress', () => {
+  it('prioritizes active and unread sessions and excludes completed sessions', () => {
+    const running = { ...summary('running', 10), running: true }
+    const unread = summary('unread', 20)
+    const completed = summary('completed', 30)
+    const customWarn = summary('custom-warn', 15)
+    const sessions = list(running, unread, completed, customWarn)
+
+    const result = deriveRecentAndInProgress(
+      sessions,
+      noArchive,
+      { [sid('completed')]: true },
+      { [sid('unread')]: true },
+      { [sid('custom-warn')]: 'warning' },
+      {},
+      5,
+    )
+
+    // Running & warning have score 30, unread has score 20; completed is filtered out
+    expect(result.map(s => s.id)).toEqual([sid('custom-warn'), sid('running'), sid('unread')])
+    expect(result.find(s => s.id === sid('running'))).toMatchObject({ id: sid('running'), running: true })
+    expect(result.find(s => s.id === sid('unread'))).toMatchObject({ id: sid('unread'), unread: true })
+    expect(result.find(s => s.id === sid('custom-warn'))).toMatchObject({ id: sid('custom-warn'), pendingInteraction: 'question' })
+  })
+
+  it('excludes archived sessions and blank unselected sessions', () => {
+    const running = { ...summary('running', 10), running: true }
+    const archivedRunning = { ...summary('archived-run', 20), running: true }
+    const blank = { ...summary('blank', 30), blank: true }
+    const sessions = list(running, archivedRunning, blank)
+
+    const result = deriveRecentAndInProgress(
+      sessions,
+      archived('archived-run'),
+      {},
+      {},
+      {},
+      {},
+      5,
+    )
+
+    expect(result.map(s => s.id)).toEqual([sid('running')])
+  })
+
+  it('pins later status in recent section and excludes user-triaged finalized sessions', () => {
+    const sLater = summary('later-task', 10)
+    const sFinalized = summary('finalized-task', 20)
+    const sessions = list(sLater, sFinalized)
+
+    const result = deriveRecentAndInProgress(
+      sessions,
+      noArchive,
+      { [sid('finalized-task')]: true },
+      {},
+      { [sid('later-task')]: 'later', [sid('finalized-task')]: 'finalized' },
+      { [sid('finalized-task')]: true },
+      5,
+    )
+
+    // later is pinned with custom status 'later'; finalized is triaged and omitted from top
+    expect(result.map(s => s.id)).toEqual([sid('later-task')])
+    expect(result[0]?.customStatus).toBe('later')
+  })
+})
+
 describe('createWorkspaceViewStore', () => {
+  it('handles completedSessions and unreadSessions toggles and setters', () => {
+    const store = createWorkspaceViewStore().create()
+    expect(store.getSnapshot().completedSessions).toEqual({})
+    expect(store.getSnapshot().unreadSessions).toEqual({})
+
+    store.actions.toggleCompletedSession('s1')
+    expect(store.getSnapshot().completedSessions).toEqual({ s1: true })
+    store.actions.toggleCompletedSession('s1')
+    expect(store.getSnapshot().completedSessions).toEqual({ s1: false })
+
+    store.actions.setSessionCompleted('s2', true)
+    expect(store.getSnapshot().completedSessions).toEqual({ s1: false, s2: true })
+    store.actions.setSessionCompleted('s2', false)
+    expect(store.getSnapshot().completedSessions).toEqual({ s1: false, s2: false })
+
+    store.actions.toggleUnreadSession('s1')
+    expect(store.getSnapshot().unreadSessions).toEqual({ s1: true, s2: false })
+    expect(store.getSnapshot().completedSessions).toEqual({ s1: false, s2: false })
+    store.actions.toggleUnreadSession('s1')
+    expect(store.getSnapshot().unreadSessions).toEqual({ s1: false, s2: false })
+
+    store.actions.setSessionUnread('s3', true)
+    expect(store.getSnapshot().unreadSessions).toEqual({ s1: false, s2: false, s3: true })
+    store.actions.setSessionUnread('s3', false)
+    expect(store.getSnapshot().unreadSessions).toEqual({ s1: false, s2: false, s3: false })
+
+    store.actions.setSessionStatus('s4', 'ongoing')
+    expect(store.getSnapshot().customSessionStatuses?.s4).toBe('ongoing')
+    store.actions.setSessionStatus('s4', 'warning')
+    expect(store.getSnapshot().customSessionStatuses?.s4).toBe('warning')
+    store.actions.setSessionStatus('s4', 'completed')
+    expect(store.getSnapshot().completedSessions.s4).toBe(true)
+    store.actions.setSessionStatus('s4', 'later')
+    expect(store.getSnapshot().customSessionStatuses?.s4).toBe('later')
+    expect(store.getSnapshot().completedSessions.s4).toBe(false)
+    store.actions.setSessionStatus('s4', 'finalized')
+    expect(store.getSnapshot().customSessionStatuses?.s4).toBe('finalized')
+    expect(store.getSnapshot().completedSessions.s4).toBe(true)
+    store.actions.setSessionStatus('s4', 'idle')
+    expect(store.getSnapshot().customSessionStatuses?.s4).toBeUndefined()
+    expect(store.getSnapshot().completedSessions.s4).toBe(false)
+  })
   it('stores grouping, ordering, Workspace expansion, and recent-session view order', () => {
     const store = createWorkspaceViewStore().create()
     expect(store.getSnapshot().groupBy).toBe('workspace')

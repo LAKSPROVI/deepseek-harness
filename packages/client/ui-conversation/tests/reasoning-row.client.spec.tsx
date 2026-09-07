@@ -37,7 +37,7 @@ afterEach(() => {
 })
 
 const t = makeTranslate(zh, commonZh)
-const renderMessageImages: AssistantMarkdownProps['renderMessageImages'] = () => null
+const renderMessageAttachments: AssistantMarkdownProps['renderMessageAttachments'] = () => null
 
 describe('ReasoningRow', () => {
   it('follows the latest streaming line, scrolls to its end, then restores the settled first line', () => {
@@ -46,7 +46,7 @@ describe('ReasoningRow', () => {
         t={t}
         blocks={[{ kind: 'reasoning', text: 'Inspect the session\nNewest reasoning tokens' }]}
         streaming
-        renderMessageImages={renderMessageImages}
+        renderMessageAttachments={renderMessageAttachments}
       />,
     )
     expect(view.getByText('运行中')).toBeTruthy()
@@ -61,7 +61,7 @@ describe('ReasoningRow', () => {
         t={t}
         blocks={[{ kind: 'reasoning', text: 'Inspect the session\nNewest reasoning tokens keep arriving' }]}
         streaming
-        renderMessageImages={renderMessageImages}
+        renderMessageAttachments={renderMessageAttachments}
       />,
     )
     expect(summary.scrollLeft).toBe(0)
@@ -76,7 +76,7 @@ describe('ReasoningRow', () => {
         t={t}
         blocks={[{ kind: 'reasoning', text: 'Inspect the session\nNewest reasoning tokens keep arriving\n' }]}
         streaming={false}
-        renderMessageImages={renderMessageImages}
+        renderMessageAttachments={renderMessageAttachments}
       />,
     )
     flushAnimationFrames(3)
@@ -92,7 +92,7 @@ describe('ReasoningRow', () => {
         t={t}
         blocks={[{ kind: 'reasoning', text: 'Inspect the session\nCheck persistence' }]}
         streaming={false}
-        renderMessageImages={renderMessageImages}
+        renderMessageAttachments={renderMessageAttachments}
       />,
     )
     const row = view.getByRole('button')
@@ -111,7 +111,7 @@ describe('ReasoningRow', () => {
         t={t}
         blocks={[{ kind: 'reasoning', text: 'Inspect the session\nCheck persistence' }]}
         streaming={false}
-        renderMessageImages={renderMessageImages}
+        renderMessageAttachments={renderMessageAttachments}
       />,
     )
     fireEvent.click(view.getByText('Think'))

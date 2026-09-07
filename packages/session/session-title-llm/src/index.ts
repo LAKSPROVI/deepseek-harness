@@ -185,7 +185,7 @@ function resolveRoute(
 /** Stable language-aware system instruction shared by both provider plugins. */
 function systemPrompt(config: ResolvedSessionTitleLlmConfig): string {
   return [
-    'Create a concise title for an AI coding-assistant session from the supplied human messages.',
+    'Create a concise title for an AI coding-assistant session from the supplied human messages, capturing the central topic, task, or main intent of the conversation rather than introductory greetings.',
     'Return only the title on one line, **in plain text of natural language**, with no quotes, prefix, explanation, Markdown, XML, or terminal control codes. No code is allowed.',
     'Use the language of the messages.',
     `Aim for about ${config.targetWords} words in non-CJK languages or ${config.targetCjkCharacters} CJK characters.`,

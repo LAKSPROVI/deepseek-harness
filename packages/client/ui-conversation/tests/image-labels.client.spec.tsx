@@ -7,7 +7,7 @@ import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { AssistantMarkdown } from '../src/client/chat/AssistantMarkdown.tsx'
-import type { RenderMessageImages } from '../src/client/contract/slots.ts'
+import type { RenderMessageAttachments } from '../src/client/contract/slots.ts'
 import { attachmentErrorText, imageSizeText } from '../src/client/image-labels.ts'
 import { en, zh } from '../src/client/locales.ts'
 
@@ -25,14 +25,14 @@ const attachment = {
   name: 'history.png',
 }
 
-type MessageImagesRenderOwner = Parameters<RenderMessageImages>[0]
+type MessageImagesRenderOwner = Parameters<RenderMessageAttachments>[0]
 
-function imageRenderer(calls: MessageImagesRenderOwner[]): RenderMessageImages {
+function imageRenderer(calls: MessageImagesRenderOwner[]): RenderMessageAttachments {
   return (owner) => {
     calls.push(owner)
     return (
-      <div data-testid="message-images" data-align={owner.align} data-count={owner.images.length}>
-        {owner.images.map(({ attachment: image }, index) => (
+      <div data-testid="message-images" data-align={owner.align} data-count={owner.attachments.length}>
+        {owner.attachments.map(({ attachment: image }, index) => (
           <span key={`${image.attachmentId}:${String(index)}`}>{image.name}</span>
         ))}
       </div>
@@ -85,12 +85,12 @@ describe('assistant image slot handoff', () => {
         t={t}
         blocks={[{ kind: 'image', attachment }]}
         streaming={false}
-        renderMessageImages={imageRenderer(calls)}
+        renderMessageAttachments={imageRenderer(calls)}
       />,
     )
     expect(view.getByTestId('message-images').getAttribute('data-align')).toBe('start')
     expect(calls).toHaveLength(1)
-    expect(calls[0]?.images).toEqual([{ attachment }])
+    expect(calls[0]?.attachments).toEqual([{ kind: 'image', attachment }])
   })
 
   it('merges consecutive image blocks into one group and splits groups at text', () => {
@@ -105,13 +105,13 @@ describe('assistant image slot handoff', () => {
           { kind: 'image', attachment },
         ]}
         streaming={false}
-        renderMessageImages={imageRenderer(calls)}
+        renderMessageAttachments={imageRenderer(calls)}
       />,
     )
     const galleries = view.getAllByTestId('message-images')
     expect(galleries).toHaveLength(2)
     expect(galleries.map(gallery => gallery.getAttribute('data-count'))).toEqual(['2', '1'])
-    expect(calls.map(call => call.images.length)).toEqual([2, 1])
+    expect(calls.map(call => call.attachments.length)).toEqual([2, 1])
   })
 
   it('keeps the renderer output at the image block position between text blocks', () => {
@@ -125,7 +125,7 @@ describe('assistant image slot handoff', () => {
           { kind: 'text', text: 'after' },
         ]}
         streaming={false}
-        renderMessageImages={imageRenderer(calls)}
+        renderMessageAttachments={imageRenderer(calls)}
       />,
     )
     const image = view.getByTestId('message-images')

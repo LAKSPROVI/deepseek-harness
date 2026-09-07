@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { AttachmentError, AttachmentId } from '@deepseek-ai/dsh-attachment'
-import type { ImageAttachmentRef, SaveImageAttachment } from '@deepseek-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef, SaveImageAttachment } from '@deepseek-ai/dsh-attachment'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { textOnlyFileText } from '@deepseek-ai/dsh-llm'
 import {
   AcpContentError,
   admitAcpPrompt,
@@ -16,6 +17,13 @@ const REF: ImageAttachmentRef = {
   bytes: 1,
   width: 1,
   height: 1,
+}
+
+const FILE_REF: FileAttachmentRef = {
+  attachmentId: AttachmentId(`sha256:${'2'.repeat(64)}`),
+  mediaType: 'application/pdf',
+  bytes: 42,
+  name: 'report.pdf',
 }
 
 interface AdmissionFixture {
@@ -214,6 +222,9 @@ describe('ACP rich content codec', () => {
     await expect(assistantBlockToAcp(fixture.ctx, { type: 'text', text: '' })).resolves.toBeUndefined()
     await expect(assistantBlockToAcp(fixture.ctx, { type: 'text', text: 'hello' })).resolves.toEqual({
       type: 'text', text: 'hello',
+    })
+    await expect(assistantBlockToAcp(fixture.ctx, { type: 'file', attachment: FILE_REF })).resolves.toEqual({
+      type: 'text', text: textOnlyFileText(FILE_REF),
     })
     await expect(assistantBlockToAcp(fixture.ctx, { type: 'reasoning', text: 'private' })).resolves.toBeUndefined()
 
