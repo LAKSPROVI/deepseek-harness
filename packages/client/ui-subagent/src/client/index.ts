@@ -94,6 +94,7 @@ export function apply(ctx: ClientContext): void {
     spawn: async (request, signal) => await ctx.remote.agentTeams.spawn(sessionId, request, signal),
     guide: async (request, signal) => await ctx.remote.agentTeams.guide(sessionId, request, signal),
     interrupt: async targetName => await ctx.remote.agentTeams.interrupt(sessionId, targetName),
+    taskCreate: async request => await ctx.remote.agentTeams.taskCreate(sessionId, request),
     debateStart: async request => await ctx.remote.agentTeams.debateStart(sessionId, request),
     debateContribute: async request => await ctx.remote.agentTeams.debateContribute(sessionId, request),
     debateUpdate: async request => await ctx.remote.agentTeams.debateUpdate(sessionId, request),

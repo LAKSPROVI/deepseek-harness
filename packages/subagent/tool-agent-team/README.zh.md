@@ -18,7 +18,7 @@
 
 ## 工具与权限
 
-生成的[工具目录](../../../docs/tool-catalog.zh.md)负责精确 schema。该适配器注册 13 个工具：teammate 创建；quiet 与 waking peer 投递；roster 列表、等待和仅限 Lead 的 interrupt；结构化 debate 的 start／get／CAS update；以及任务 create／list／get／CAS update。
+生成的[工具目录](../../../docs/tool-catalog.zh.md)负责精确 schema。该适配器注册 22 个工具：teammate 创建；可复用 teammate 模板 save／list／delete；multi-agent squad preset save／list／delete 与批量 spawn；quiet 与 waking peer 投递；roster 列表、等待、仅限 Lead 的 interrupt 与批量 dismiss；结构化 debate 的 start／get／CAS update；以及任务 create／list／get／CAS update。
 
 每个工具都要求完全相同的调用 `Agent`。`spawn_teammate`、`interrupt_agent`、`team_debate_start` 与 `team_debate_update` 在 `ctx.agentTeams` 内部强制执行 Lead 权限，而不只依赖描述。`team_debate_update` 携带 debate id 与 expected revision，以 CAS 方式执行 pause、resume、advance 或 complete；暂停 protocol 不会中断正在运行的模型 turn。所有成员都可以与任意 peer 通讯、读取 debate 并使用任务板。任务变更保留领域层的 Owner／Lead 与 revision 校验。
 
@@ -34,11 +34,11 @@ Web UI 位于 `ui-subagent`，不属于该模型 adapter。其巴西葡萄牙语
 
 #### 模型看到的内容
 
-一段稳定策略会说明确切 Team role／name／id、显式 delegation 要求、共享 cwd 行为、文件 stale-version 恢复、Bash／formatter／codegen 风险、task／write-scope 协调、quiet 与 waking 投递区别、mailbox 不重试规则、debate protocol，以及 Lead 必须在回答前等待。13 个 Team schema 包括 `team_debate_start`、`team_debate_get` 与 `team_debate_update`，并且只出现在 Team member scope。
+一段稳定策略会说明确切 Team role／name／id、显式 delegation 要求、共享 cwd 行为、文件 stale-version 恢复、Bash／formatter／codegen 风险、task／write-scope 协调、quiet 与 waking 投递区别、mailbox 不重试规则、debate protocol，以及 Lead 必须在回答前等待。22 个 Team schema 包括 `team_debate_start`、`team_debate_get` 与 `team_debate_update`，并且只出现在 Team member scope。
 
 #### Token 影响
 
-每次 Team member 请求都有固定策略与 13 个 schema 的成本。工具调用会增加紧凑 JSON roster、task、debate、wait 或 receipt 结果。Peer 内容由 Team 领域保留在 target 历史中。
+每次 Team member 请求都有固定策略与 22 个 schema 的成本。工具调用会增加紧凑 JSON roster、task、debate、wait 或 receipt 结果。Peer 内容由 Team 领域保留在 target 历史中。
 
 #### KV Cache 影响
 
@@ -49,3 +49,4 @@ Team 插件 generation、配置、member role／name 与 schema 不变时，前�
 - **提示词策略只负责协调，不负责 confinement**：它无法阻止 Bash 或外部进程写入重叠文件。
 - **不会自主创建 Team**：除非用户明确要求 delegation，普通任务不会触发组队。
 - **没有 mailbox timeline**：Web UI 呈现 roster、task 与 debate 状态，但不公开 queued peer-message 内容。
+- **Squad preset 与批量 dismiss 尚无专属 Web UI**：`team_squad_save`、`team_squad_list`、`team_squad_delete`、`team_squad_spawn` 与 `team_roster_dismiss` 目前仅为模型可用的 tool。

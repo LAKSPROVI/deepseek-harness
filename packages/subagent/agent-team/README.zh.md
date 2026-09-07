@@ -24,6 +24,8 @@
 
 该服务要求 Agent、Session、Session persistence 与 continuable-subagent 服务。没有持久 Session 存储的组合不会激活它。
 
+本包还导出可复用 teammate 模板与 multi-agent squad preset 的类型及 settings-schema 校验（`SavedTeamTemplate`、`SavedTeamSquad`、`TeamTemplateSettingsSchema`、`validateTeamTemplateSettings`，以及上限分别为 50／20 的 `MAX_TEAM_TEMPLATE_COUNT`／`MAX_TEAM_SQUAD_COUNT`），供 `@deepseek-ai/dsh-tool-agent-team` 的持久化 tool 在 Host `settings` 服务下保存和加载；本包自身不读写 settings。
+
 ## Team 身份与 roster
 
 每个普通运行时 Root 都是一个隐式 Team 的 Lead，其 `TeamId` 等于 `SessionId`；因此，在写入第一条成员、消息、任务或 debate 记录前，创建 Team 不需要额外状态。teammate 是记录在 Root Session 中的具名 continuable 直接 child。名字采用小写 kebab-case，最长 64 个字符，在 Team 生命周期内不可变。Session id 始终是持久化与授权身份。

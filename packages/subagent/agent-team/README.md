@@ -24,6 +24,8 @@ Every numeric limit must be a positive safe integer. `maxMembers` defaults to an
 
 The service requires Agent, Session, Session persistence, and continuable-subagent services. A composition without durable Session storage does not activate it.
 
+This package also exports the reusable teammate template and multi-agent squad preset types and settings-schema validation (`SavedTeamTemplate`, `SavedTeamSquad`, `TeamTemplateSettingsSchema`, `validateTeamTemplateSettings`, and the `MAX_TEAM_TEMPLATE_COUNT`/`MAX_TEAM_SQUAD_COUNT` caps of 50/20) that `@deepseek-ai/dsh-tool-agent-team`'s persistence tools save and load under the Host `settings` service; this package neither reads nor writes settings itself.
+
 ## Team identity and roster
 
 Every ordinary runtime root is the implicit Lead of a Team whose `TeamId` equals its `SessionId`; creating a Team is therefore state-free until the first member, message, task, or debate record. A teammate is a named, continuable direct child recorded in that root's Session. Names are lowercase kebab-case, at most 64 characters, and immutable for the Team lifetime. Session ids remain the persistence and authorization identities.

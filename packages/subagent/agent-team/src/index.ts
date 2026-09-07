@@ -42,12 +42,13 @@ import type {
 
 export type * from './types.ts'
 export type { TeamMembership } from './roster.ts'
-export type { SavedTeamTemplate, TeamTemplateSettings } from './templates.ts'
+export type { SavedSquadMember, SavedTeamSquad, SavedTeamTemplate, TeamTemplateSettings } from './templates.ts'
 export { TeamDebateId, TeamId, TeamMessageId, TeamTaskId } from './types.ts'
 export { TeamError } from './error.ts'
 export { foldTeam } from './fold.ts'
 export { applyTeamProjection, teamProjectionSchema } from './projection.ts'
 export {
+  MAX_TEAM_SQUAD_COUNT,
   MAX_TEAM_TEMPLATE_COUNT,
   normalizeTeamMemberName,
   TEAM_TEMPLATE_SETTINGS_NAMESPACE,
@@ -261,12 +262,13 @@ export class TeamService extends TypertRemoteService {
 
   /**
    * Create one unowned pending task in the Team Lead log.
-   * @param caller - exact live Team member creating the task.
+   * @param agent - exact live Team member creating the task.
    * @param request - task text, blockers, and advisory write scopes.
    * @returns the revision-one task view.
    */
-  async createTask(caller: Agent, request: CreateTeamTaskRequest): Promise<TeamTaskView> {
-    return await this.tasks.create(this.roster.membership(caller), request)
+  @Remote('taskCreate')
+  async createTask(agent: Agent, request: CreateTeamTaskRequest): Promise<TeamTaskView> {
+    return await this.tasks.create(this.roster.membership(agent), request)
   }
 
   /**

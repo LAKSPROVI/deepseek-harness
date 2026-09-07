@@ -5,6 +5,7 @@ import type {
   TeamDebateSnapshot,
   TeamMemberView,
   TeamProjection,
+  TeamTaskId,
 } from '@deepseek-ai/dsh-agent-team/client'
 import type { SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
 import type {
@@ -175,6 +176,20 @@ function actions(over: Partial<AgentTeamActions> = {}): AgentTeamActions {
     interrupt: vi.fn<AgentTeamActions['interrupt']>(() => Promise.resolve({
       ok: true,
       value: { previousStatus: 'running' },
+    })),
+    taskCreate: vi.fn<AgentTeamActions['taskCreate']>(() => Promise.resolve({
+      ok: true,
+      value: {
+        id: '1' as TeamTaskId,
+        revision: 1,
+        subject: 'test task',
+        description: 'test description',
+        status: 'pending',
+        blockedBy: [],
+        writeScopes: [],
+        ready: true,
+        writeScopeWarnings: [],
+      },
     })),
     debateStart: vi.fn<AgentTeamActions['debateStart']>(() => Promise.resolve({ ok: true, value: debate() })),
     debateContribute: vi.fn<AgentTeamActions['debateContribute']>(() => Promise.resolve({ ok: true, value: debate() })),
@@ -538,5 +553,89 @@ describe('AgentTeamView', () => {
     fireEvent.click(spawnTab)
     expect(spawnTab.getAttribute('aria-selected')).toBe('true')
     expect(guideTab.getAttribute('aria-selected')).toBe('false')
+  })
+
+  it('triggers quick guide focus from member card', async () => {
+    render(<AgentTeamView {...viewProps(projection())} />)
+
+    const orientarButton = screen.getByRole('button', { name: '💬 Orientar' })
+    fireEvent.click(orientarButton)
+
+    const guideTab = screen.getByRole('tab', { name: /Orientar integrante/ })
+    expect(guideTab.getAttribute('aria-selected')).toBe('true')
+    const targetSelect = screen.getByLabelText('Destinatário') as HTMLSelectElement
+    expect(targetSelect.value).toBe('researcher')
+  })
+
+  it('creates tasks via the sidebar task tab', async () => {
+    const taskCreate = vi.fn<AgentTeamActions['taskCreate']>(() => Promise.resolve({
+      ok: true,
+      value: {
+        id: '1' as TeamTaskId,
+        revision: 1,
+        subject: 'Nova tarefa visual',
+        description: 'Detalhes da tarefa',
+        status: 'pending',
+        blockedBy: [],
+        writeScopes: ['src/app.ts'],
+        ready: true,
+        writeScopeWarnings: [],
+      },
+    }))
+
+    render(<AgentTeamView {...viewProps(projection(), actions({ taskCreate }))} />)
+
+    const taskTab = screen.getByRole('tab', { name: 'Nova tarefa' })
+    fireEvent.click(taskTab)
+    expect(taskTab.getAttribute('aria-selected')).toBe('true')
+
+    fireEvent.change(screen.getByLabelText('Assunto / Título'), { target: { value: 'Nova tarefa visual' } })
+    fireEvent.change(screen.getByLabelText('Descrição e detalhes'), { target: { value: 'Detalhes da tarefa' } })
+    fireEvent.change(screen.getByPlaceholderText(/Ex.: docs\/relatorio.md/i), { target: { value: 'src/app.ts' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Criar tarefa' }))
+
+    await waitFor(() => {
+      expect(taskCreate).toHaveBeenCalledWith({
+        subject: 'Nova tarefa visual',
+        description: 'Detalhes da tarefa',
+        writeScopes: ['src/app.ts'],
+      })
+    })
+  })
+
+  it('toggles task view between list and kanban', async () => {
+    render(<AgentTeamView {...viewProps(projection())} />)
+
+    const kanbanButton = screen.getByRole('button', { name: '☷ Kanban' })
+    fireEvent.click(kanbanButton)
+
+    expect(screen.getByRole('region', { name: 'Quadro Kanban de tarefas' })).toBeTruthy()
+    expect(screen.getByText('pendente')).toBeTruthy()
+    expect(screen.getByText('em andamento')).toBeTruthy()
+    expect(screen.getByText('concluída')).toBeTruthy()
+
+    const listButton = screen.getByRole('button', { name: '☰ Lista' })
+    fireEvent.click(listButton)
+    expect(screen.queryByRole('region', { name: 'Quadro Kanban de tarefas' })).toBeNull()
+  })
+
+  it('copies debate synthesis markdown to clipboard', async () => {
+    const writeText = vi.fn((_text: string) => Promise.resolve())
+    Object.assign(navigator, {
+      clipboard: { writeText },
+    })
+
+    render(<AgentTeamView {...viewProps(projection({ debate: debate() }))} />)
+
+    const copyButton = screen.getByTitle('Copiar síntese e histórico do debate em formato Markdown')
+    fireEvent.click(copyButton)
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalled()
+      const copiedText = writeText.mock.calls[0]![0]
+      expect(copiedText).toContain('# Debate da Equipe: Choose the release strategy')
+      expect(copiedText).toContain('## Transcrição de Contribuições')
+    })
   })
 })

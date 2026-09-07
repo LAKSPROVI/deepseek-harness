@@ -12,6 +12,7 @@ import type {
   TeamDebateSnapshot,
   TeamMemberView,
   TeamProjection,
+  TeamTaskView,
   UpdateTeamDebateRequest,
 } from '@deepseek-ai/dsh-agent-team/client'
 import type { SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
@@ -58,6 +59,10 @@ export interface AgentTeamActions {
   interrupt: (
     targetName: string,
   ) => Promise<RemoteResult<{ previousStatus: 'running' | 'idle' | 'inactive' }>>
+  /** Create one shared Team task. */
+  taskCreate: (
+    request: { subject: string; description: string; writeScopes?: readonly string[] },
+  ) => Promise<RemoteResult<TeamTaskView>>
   /** Start one structured Team debate. */
   debateStart: (
     request: StartTeamDebateRemoteRequest,
@@ -99,6 +104,7 @@ type PendingAction =
   | 'members'
   | 'spawn'
   | 'guide'
+  | 'task-create'
   | `interrupt:${string}`
   | 'debate-start'
   | 'debate-contribute'
@@ -122,6 +128,12 @@ interface GuideDraft {
   delivery: 'quiet' | 'wakeup'
 }
 
+interface TaskDraft {
+  subject: string
+  description: string
+  writeScopes: string
+}
+
 interface DebateDraft {
   topic: string
   participants: string[]
@@ -139,6 +151,7 @@ const EMPTY_SPAWN: SpawnDraft = {
 }
 
 const EMPTY_GUIDE: GuideDraft = { target: '', content: '', delivery: 'wakeup' }
+const EMPTY_TASK: TaskDraft = { subject: '', description: '', writeScopes: '' }
 const EMPTY_DEBATE: DebateDraft = { topic: '', participants: [], maxRounds: '3' }
 
 const DEBATE_PHASES: readonly TeamDebatePhase[] = [
@@ -323,6 +336,7 @@ export function AgentTeamView({
   spawn,
   guide,
   interrupt,
+  taskCreate,
   debateStart,
   debateContribute,
   debateUpdate,
@@ -345,7 +359,10 @@ export function AgentTeamView({
   const [contributionAttachments, setContributionAttachments] = useState<TeamDraftAttachment[]>([])
   const [contributionText, setContributionText] = useState('')
   const [templateTitle, setTemplateTitle] = useState('')
-  const [sideTab, setSideTab] = useState<'spawn' | 'guide'>('spawn')
+  const [taskDraft, setTaskDraft] = useState<TaskDraft>(EMPTY_TASK)
+  const [taskViewMode, setTaskViewMode] = useState<'list' | 'kanban'>('list')
+  const [copiedDebate, setCopiedDebate] = useState(false)
+  const [sideTab, setSideTab] = useState<'spawn' | 'guide' | 'task'>('spawn')
   const [sideOpen, setSideOpen] = useState(true)
   const [viewFilter, setViewFilter] = useState<'all' | 'roster' | 'tasks' | 'debate'>('all')
   const [openPanels, setOpenPanels] = useState({ roster: true, tasks: true, debate: true })
@@ -561,9 +578,65 @@ export function AgentTeamView({
     }
   }
 
+  const focusMemberGuide = (targetName: string) => {
+    setSideOpen(true)
+    setSideTab('guide')
+    setGuideDraft(current => ({ ...current, target: targetName }))
+  }
+
   const handleInterrupt = async (targetName: string) => {
     const result = await runAction(`interrupt:${targetName}`, () => interrupt(targetName))
     if (result?.ok) await refreshMembers()
+  }
+
+  const handleTaskCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (taskDraft.subject.trim() === '') return
+    const writeScopes = taskDraft.writeScopes.trim() === ''
+      ? undefined
+      : taskDraft.writeScopes.split(',').map(s => s.trim()).filter(Boolean)
+    const result = await runAction('task-create', async () => {
+      return await taskCreate({
+        subject: taskDraft.subject.trim(),
+        description: taskDraft.description.trim(),
+        ...writeScopes === undefined ? {} : { writeScopes },
+      })
+    })
+    if (result?.ok) {
+      setTaskDraft(EMPTY_TASK)
+    }
+  }
+
+  const handleExportDebateMarkdown = (currentDebate: TeamDebateSnapshot) => {
+    const lines: string[] = [
+      `# Debate da Equipe: ${currentDebate.topic}`,
+      `**Status:** ${DEBATE_STATUS_LABELS[currentDebate.status]} | **Rodada:** ${currentDebate.round}/${currentDebate.maxRounds} | **Fase:** ${DEBATE_PHASE_LABELS[currentDebate.phase]}`,
+      `**Participantes:** ${currentDebate.participants.join(', ')}`,
+      '',
+      '## Transcrição de Contribuições',
+      '',
+    ]
+    for (const item of currentDebate.contributions) {
+      lines.push(`### [R${item.round} · ${DEBATE_PHASE_LABELS[item.phase]}] ${item.author} (${new Date(item.createdAt).toLocaleString('pt-BR')})`)
+      for (const block of item.content) {
+        if (block.type === 'text') lines.push(block.text)
+        else lines.push(`*[Anexo: ${block.type}]*`)
+      }
+      lines.push('')
+    }
+    if (currentDebate.history.length > 0) {
+      lines.push('## Histórico de Transições')
+      lines.push('')
+      for (const hist of currentDebate.history) {
+        lines.push(`- **R${hist.round} · ${DEBATE_PHASE_LABELS[hist.phase]}** por *${hist.actor}* (${DEBATE_STATUS_LABELS[hist.status]})${hist.note ? `: ${hist.note}` : ''}`)
+      }
+      lines.push('')
+    }
+    const markdownText = lines.join('\n')
+    void navigator.clipboard.writeText(markdownText).then(() => {
+      setCopiedDebate(true)
+      setTimeout(() => { setCopiedDebate(false) }, 2000)
+    })
   }
 
   const handleDebateStart = async (event: FormEvent<HTMLFormElement>) => {
@@ -859,6 +932,15 @@ export function AgentTeamView({
                         <div className={css.memberActions}>
                           <button
                             type="button"
+                            className={css.quickGuideButton}
+                            disabled={formsDisabled}
+                            onClick={() => { focusMemberGuide(member.name) }}
+                            title={`Abrir orientações para ${member.name}`}
+                          >
+                            💬 Orientar
+                          </button>
+                          <button
+                            type="button"
                             className={css.dangerButton}
                             disabled={formsDisabled || member.status !== 'running'}
                             onClick={() => { void handleInterrupt(member.name) }}
@@ -896,12 +978,44 @@ export function AgentTeamView({
                     <h3 id={fieldId(sessionId, 'tasks-title')}>Tarefas</h3>
                   </div>
                 </div>
-                <span className={css.countBadge}>{tasks.length}</span>
+                <div
+                  className={css.sectionHeaderActions}
+                  onClick={(e) => { e.stopPropagation() }}
+                  onKeyDown={(e) => { e.stopPropagation() }}
+                >
+                  <div className={css.viewModeToggle} role="group" aria-label="Modo de visualização das tarefas">
+                    <button
+                      type="button"
+                      className={`${css.viewModeButton} ${taskViewMode === 'list' ? css.viewModeActive : ''}`}
+                      onClick={() => { setTaskViewMode('list') }}
+                    >
+                      ☰ Lista
+                    </button>
+                    <button
+                      type="button"
+                      className={`${css.viewModeButton} ${taskViewMode === 'kanban' ? css.viewModeActive : ''}`}
+                      onClick={() => { setTaskViewMode('kanban') }}
+                    >
+                      ☷ Kanban
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className={css.secondaryButton}
+                    onClick={() => {
+                      setSideOpen(true)
+                      setSideTab('task')
+                    }}
+                  >
+                    ➕ Nova tarefa
+                  </button>
+                  <span className={css.countBadge}>{tasks.length}</span>
+                </div>
               </div>
               {openPanels.tasks && (
                 tasks.length === 0 ? (
                   <p className={css.emptyCopy}>Nenhuma tarefa da equipe foi registrada.</p>
-                ) : (
+                ) : taskViewMode === 'list' ? (
                   <div className={css.taskList}>
                     {tasks.map(task => (
                       <article className={css.taskCard} key={task.id}>
@@ -922,6 +1036,43 @@ export function AgentTeamView({
                         )}
                       </article>
                     ))}
+                  </div>
+                ) : (
+                  <div className={css.kanbanBoard} role="region" aria-label="Quadro Kanban de tarefas">
+                    {(['pending', 'in_progress', 'completed'] as const).map((status) => {
+                      const colTasks = tasks.filter(t => t.status === status)
+                      return (
+                        <div className={css.kanbanColumn} key={status}>
+                          <div className={css.kanbanColumnHeader}>
+                            <span className={css.kanbanColumnTitle}>{TASK_STATUS_LABELS[status]}</span>
+                            <span className={css.kanbanColumnBadge}>{colTasks.length}</span>
+                          </div>
+                          {colTasks.length === 0 ? (
+                            <div className={css.kanbanEmpty}>Vazio</div>
+                          ) : (
+                            <div className={css.kanbanCardList}>
+                              {colTasks.map(task => (
+                                <article className={css.taskCard} key={task.id}>
+                                  <div className={css.taskHeader}>
+                                    <strong>{task.subject}</strong>
+                                  </div>
+                                  {task.description !== '' && <p>{task.description}</p>}
+                                  <dl className={css.taskFacts}>
+                                    <div><dt>Resp.</dt><dd>{task.ownerId === undefined ? 'Nenhum' : memberNameById.get(task.ownerId) ?? task.ownerId}</dd></div>
+                                    <div><dt>Rev.</dt><dd>{task.revision}</dd></div>
+                                  </dl>
+                                  {task.writeScopes.length > 0 && (
+                                    <div className={css.scopeList}>
+                                      {task.writeScopes.map(scope => <code key={scope}>{scope}</code>)}
+                                    </div>
+                                  )}
+                                </article>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )
               )}
@@ -949,7 +1100,23 @@ export function AgentTeamView({
                     <h3 id={fieldId(sessionId, 'debate-title')}>Debate</h3>
                   </div>
                 </div>
-                {debate !== null && <span className={css.countBadge}>Rodada {debate.round}/{debate.maxRounds}</span>}
+                <div
+                  className={css.sectionHeaderActions}
+                  onClick={(e) => { e.stopPropagation() }}
+                  onKeyDown={(e) => { e.stopPropagation() }}
+                >
+                  {debate !== null && (
+                    <button
+                      type="button"
+                      className={`${css.exportButton} ${copiedDebate ? css.exportButtonSuccess : ''}`}
+                      onClick={() => { handleExportDebateMarkdown(debate) }}
+                      title="Copiar síntese e histórico do debate em formato Markdown"
+                    >
+                      {copiedDebate ? '✓ Síntese copiada!' : '📄 Copiar Markdown'}
+                    </button>
+                  )}
+                  {debate !== null && <span className={css.countBadge}>Rodada {debate.round}/{debate.maxRounds}</span>}
+                </div>
               </div>
 
               {openPanels.debate && (
@@ -1161,6 +1328,15 @@ export function AgentTeamView({
               >
                 <span>Orientar integrante</span>
                 {teammateNames.length > 0 && <span className={css.tabBadge}>{teammateNames.length}</span>}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sideTab === 'task'}
+                className={`${css.sideTab} ${sideTab === 'task' ? css.sideTabActive : ''}`}
+                onClick={() => { setSideTab('task') }}
+              >
+                <span>Nova tarefa</span>
               </button>
             </div>
 
@@ -1399,6 +1575,56 @@ export function AgentTeamView({
                 <div className={css.formActions}>
                   <button type="submit" className={css.primaryButton} disabled={formsDisabled || guideDraft.target === '' || (guideDraft.content.trim() === '' && guideAttachments.length === 0)}>
                     {pending === 'guide' ? 'Enviando…' : 'Enviar orientação'}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section
+              className={`${css.panel} ${sideTab !== 'task' ? css.sidePanelHidden : ''}`}
+              aria-labelledby={fieldId(sessionId, 'task-create-title')}
+            >
+              <div className={css.sectionHeader}>
+                <div>
+                  <p className={css.sectionKicker}>Quadro de trabalho</p>
+                  <h3 id={fieldId(sessionId, 'task-create-title')}>Criar tarefa</h3>
+                </div>
+              </div>
+              <form className={css.form} onSubmit={(event) => { void handleTaskCreate(event) }}>
+                <label className={css.fieldWide}>
+                  <span>Assunto / Título</span>
+                  <input
+                    value={taskDraft.subject}
+                    onChange={(event) => { setTaskDraft(current => ({ ...current, subject: event.target.value })) }}
+                    required
+                    placeholder="Ex.: Pesquisar jurisprudência sobre prazos"
+                  />
+                </label>
+                <label className={css.fieldWide}>
+                  <span>Descrição e detalhes</span>
+                  <textarea
+                    value={taskDraft.description}
+                    onChange={(event) => { setTaskDraft(current => ({ ...current, description: event.target.value })) }}
+                    rows={4}
+                    placeholder="Critérios de aceitação, passos e instruções."
+                  />
+                </label>
+                <label className={css.fieldWide}>
+                  <span>Escopos de escrita recomendados <em>opcional</em></span>
+                  <input
+                    value={taskDraft.writeScopes}
+                    onChange={(event) => { setTaskDraft(current => ({ ...current, writeScopes: event.target.value })) }}
+                    placeholder="Ex.: docs/relatorio.md, src/worker.ts"
+                  />
+                  <small className={css.fieldHint}>Separe múltiplos caminhos por vírgula.</small>
+                </label>
+                <div className={css.formActions}>
+                  <button
+                    type="submit"
+                    className={css.primaryButton}
+                    disabled={formsDisabled || taskDraft.subject.trim() === ''}
+                  >
+                    {pending === 'task-create' ? 'Criando…' : 'Criar tarefa'}
                   </button>
                 </div>
               </form>

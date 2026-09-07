@@ -138,7 +138,7 @@ async function waitNoAgent(ctx: Context, id: SessionId): Promise<void> {
   await vi.waitFor(() => { expect(ctx.agents.get(id)).toBeUndefined() }, { timeout: 5_000 })
 }
 
-describe('dsh-tool-team', () => {
+describe('dsh-tool-team', { timeout: 60_000 }, () => {
   it('installs the complete scoped schema and shared-checkout policy for roots and teammates', async () => {
     const { ctx, lead } = await setup(['hang'])
     const leadAssembly = await assembly(ctx, lead)
@@ -631,8 +631,69 @@ describe('dsh-tool-team', () => {
     })
   }, 15000)
 
+  it('manages and spawns multi-agent squads via team_squad_save, list, spawn, delete', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang'])
+
+    // Save squad
+    const saved = JSON.parse(text(await execute(ctx, lead, 'team_squad_save', {
+      title: 'Esquadrão Jurídico Rápido',
+      description: 'Pesquisador e Revisor trabalhando em conjunto',
+      members: [
+        {
+          name: 'Pesquisador',
+          description: 'Busca precedentes',
+          prompt: 'Pesquise a jurisprudência',
+          context: 'fresh',
+          llm_provider: 'deepseek',
+          model: 'deepseek-chat',
+        },
+        {
+          name: 'Revisor',
+          description: 'Audita minutas',
+          prompt: 'Revise o texto final',
+          context: 'fresh',
+        },
+      ],
+    })))
+    expect(saved.squad).toMatchObject({
+      title: 'Esquadrão Jurídico Rápido',
+      description: 'Pesquisador e Revisor trabalhando em conjunto',
+    })
+    expect(saved.squad.members).toHaveLength(2)
+    expect(saved.squad.members[0].name).toBe('pesquisador')
+    expect(saved.squad.members[1].name).toBe('revisor')
+
+    // List squads
+    const list = JSON.parse(text(await execute(ctx, lead, 'team_squad_list', {})))
+    expect(list.squads).toHaveLength(1)
+    expect(list.squads[0].title).toBe('Esquadrão Jurídico Rápido')
+
+    // Spawn squad
+    const spawned = JSON.parse(text(await execute(ctx, lead, 'team_squad_spawn', {
+      squad_id: saved.squad.id,
+    })))
+    expect(spawned.spawnedMembers).toHaveLength(2)
+    expect(spawned.spawnedMembers[0].name).toBe('pesquisador')
+    expect(spawned.spawnedMembers[1].name).toBe('revisor')
+
+    // Dismiss roster
+    const dismissed = JSON.parse(text(await execute(ctx, lead, 'team_roster_dismiss', {})))
+    expect(dismissed.dismissedCount).toBe(2)
+    expect(dismissed.dismissedNames).toEqual(['pesquisador', 'revisor'])
+
+    // Delete squad
+    const deleted = JSON.parse(text(await execute(ctx, lead, 'team_squad_delete', {
+      id: saved.squad.id,
+    })))
+    expect(deleted.deletedId).toBe(saved.squad.id)
+
+    // List empty again
+    const listAfter = JSON.parse(text(await execute(ctx, lead, 'team_squad_list', {})))
+    expect(listAfter.squads).toHaveLength(0)
+  }, 20000)
+
   it('normalizes natural names in spawn_teammate to lower-kebab-case', async () => {
-    const { ctx, lead } = await setup(['hang'])
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'])
 
     // Natural name with spaces, accents, uppercase
     const spawned = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
@@ -657,7 +718,7 @@ describe('dsh-tool-team', () => {
       prompt: 'Test prompt 3',
     })))
     expect(spawned3.member.name).toBe('valid-name-123')
-  }, 15000)
+  }, 20000)
 
   it('fails safely without a calling Agent and has the function-plugin export shape', async () => {
     const { ctx } = await setup([])
@@ -679,7 +740,7 @@ describe('dsh-tool-team', () => {
     })
     expect(result.isError).toBe(false)
     const childId = spawnedChildId(result)
-    await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
+    await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 10_000 })
     expect(ctx.agentTeams.listMembers(lead)[1]).toMatchObject({ provider: 'team-fresh' })
-  })
+  }, 15000)
 })

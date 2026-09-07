@@ -18,7 +18,7 @@ Scoped model-facing adapter for [`ctx.agentTeams`](../agent-team/README.md). It 
 
 ## Tools and authority
 
-The generated [tool catalog](../../../docs/tool-catalog.md) owns exact schemas. The adapter registers 14 tools: teammate creation; quiet and waking peer delivery; roster listing, waiting, and Lead-only interruption; structured-debate start, speech contribution, get, and compare-and-set update; and task create/list/get/compare-and-set update.
+The generated [tool catalog](../../../docs/tool-catalog.md) owns exact schemas. The adapter registers 22 tools: teammate creation; reusable teammate template save/list/delete; multi-agent squad preset save/list/delete and batch spawn; quiet and waking peer delivery; roster listing, waiting, Lead-only interruption, and batch dismissal; structured-debate start, speech contribution, get, and compare-and-set update; and task create/list/get/compare-and-set update.
 
 Every tool requires the exact calling `Agent`. `spawn_teammate`, `interrupt_agent`, `team_debate_start`, and `team_debate_update` enforce Lead authority inside `ctx.agentTeams`, not only in their descriptions. `team_debate_contribute` allows any assigned debate participant to submit speech content containing text, image, and file blocks with compare-and-set revision checks. `team_debate_update` carries the debate id and expected revision for compare-and-set pause, resume, advance, or complete transitions; pausing the protocol does not interrupt active model turns, while advancing or completing requires all current-phase participants to have spoken. All members can communicate with any peer, read the debate, and use the task board. Task mutations retain the domain's owner/Lead and revision checks.
 
@@ -34,11 +34,11 @@ The Web UI lives in `ui-subagent`, not this model adapter. Its Brazilian Portugu
 
 #### What the model sees
 
-One stable policy section states the exact Team role/name/id, explicit-delegation requirement, shared-cwd behavior, filesystem stale-version recovery, Bash/formatter/codegen risk, task/write-scope coordination, quiet versus waking delivery, no-retry mailbox rule, debate protocol, speech contribution requirements, and the Lead's duty to wait before answering. The 14 Team schemas, including `team_debate_start`, `team_debate_contribute`, `team_debate_get`, and `team_debate_update`, appear only in Team member scopes.
+One stable policy section states the exact Team role/name/id, explicit-delegation requirement, shared-cwd behavior, filesystem stale-version recovery, Bash/formatter/codegen risk, task/write-scope coordination, quiet versus waking delivery, no-retry mailbox rule, debate protocol, speech contribution requirements, and the Lead's duty to wait before answering. The 22 Team schemas, including `team_debate_start`, `team_debate_contribute`, `team_debate_get`, and `team_debate_update`, appear only in Team member scopes.
 
 #### Token effect
 
-Fixed policy and 14-schema cost on every Team member request. Tool calls add compact JSON roster, task, debate, wait, or receipt results. Peer content is retained by the Team domain in the target's history.
+Fixed policy and 22-schema cost on every Team member request. Tool calls add compact JSON roster, task, debate, wait, or receipt results. Peer content is retained by the Team domain in the target's history.
 
 #### KV Cache effect
 
@@ -49,3 +49,4 @@ Prefix-stable while the Team plugin generation, configuration, member role/name,
 - **Prompt policy is coordination, not confinement** — it cannot stop Bash or external processes from writing overlapping files.
 - **No autonomous team creation** — ordinary tasks do not trigger delegation unless the user explicitly requests it.
 - **No mailbox timeline** — the Web UI presents roster, tasks, and debate state but does not expose queued peer-message content.
+- **Squad presets and batch dismissal have no dedicated Web UI** — `team_squad_save`, `team_squad_list`, `team_squad_delete`, `team_squad_spawn`, and `team_roster_dismiss` are model-only tools today.
