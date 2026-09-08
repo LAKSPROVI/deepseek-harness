@@ -27,7 +27,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-export { AgentTeamView } from './AgentTeamView.tsx'
 export type { AgentTeamActions, AgentTeamViewInjected, AgentTeamViewProps } from './AgentTeamView.tsx'
 export type {
   SubagentCatalogInjected, SubagentHeaderLineageProps,

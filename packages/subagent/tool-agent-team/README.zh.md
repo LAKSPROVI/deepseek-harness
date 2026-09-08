@@ -20,7 +20,7 @@
 
 生成的[工具目录](../../../docs/tool-catalog.zh.md)负责精确 schema。该适配器注册 22 个工具：teammate 创建；可复用 teammate 模板 save／list／delete；multi-agent squad preset save／list／delete 与批量 spawn；quiet 与 waking peer 投递；roster 列表、等待、仅限 Lead 的 interrupt 与批量 dismiss；结构化 debate 的 start／get／CAS update；以及任务 create／list／get／CAS update。
 
-每个工具都要求完全相同的调用 `Agent`。`spawn_teammate`、`interrupt_agent`、`team_debate_start` 与 `team_debate_update` 在 `ctx.agentTeams` 内部强制执行 Lead 权限，而不只依赖描述。`team_debate_update` 携带 debate id 与 expected revision，以 CAS 方式执行 pause、resume、advance 或 complete；暂停 protocol 不会中断正在运行的模型 turn。所有成员都可以与任意 peer 通讯、读取 debate 并使用任务板。任务变更保留领域层的 Owner／Lead 与 revision 校验。
+每个工具都要求完全相同的调用 `Agent`。`spawn_teammate`、`interrupt_agent`、`team_roster_dismiss`、`team_debate_start` 与 `team_debate_update` 在 `ctx.agentTeams` 内部强制执行 Lead 权限，而不只依赖描述。`team_roster_dismiss` 遇到第一个中断失败即报错而不继续，因此 teammate 调用方、未知名字以及部分完成的 dismiss 都保持可见。`team_squad_save` 在已存在 `MAX_TEAM_SQUAD_COUNT` 个 preset 时拒绝新建，而不会返回一个实际未保存的值。`team_debate_update` 携带 debate id 与 expected revision，以 CAS 方式执行 pause、resume、advance 或 complete；暂停 protocol 不会中断正在运行的模型 turn。所有成员都可以与任意 peer 通讯、读取 debate 并使用任务板。任务变更保留领域层的 Owner／Lead 与 revision 校验。
 
 `send_message` 在 mail 持久化后即成功，并且绝不会唤醒 inactive target。`followup_task` 还会让该消息成为 target 的下一个 turn，并可冷恢复 target。`queued` 结果表示持久工作已经接受，不能重试。任务 ready 不会启动 owner。`wait_agent` 在注册 10,000 到 3,600,000 毫秒的边等待前，会检查是否有另一个 running 或 provisioning member；如果没有，它会立即返回 `noProgress`，提示重新 list 并使用 `followup_task`。否则它会等待调用后发生的一条 Team 边，默认 30,000 毫秒；由于不会回放更早的变化，调用方需要在唤醒或超时后重新 list。
 

@@ -359,6 +359,10 @@ describe('dsh-tool-team', { timeout: 60_000 }, () => {
     await expect(wait).resolves.toMatchObject({ isError: false })
     expect((await completedCall).isError).toBe(false)
 
+    const childDismiss = await execute(ctx, child, 'team_roster_dismiss', {})
+    expect(childDismiss.isError).toBe(true)
+    expect(text(childDismiss)).toContain('only the Team Lead can interrupt teammates')
+
     const childInterrupt = await execute(ctx, child, 'interrupt_agent', { target: 'json-worker' })
     expect(childInterrupt.isError).toBe(true)
     await execute(ctx, lead, 'interrupt_agent', { target: 'json-worker' })
@@ -691,6 +695,43 @@ describe('dsh-tool-team', { timeout: 60_000 }, () => {
     const listAfter = JSON.parse(text(await execute(ctx, lead, 'team_squad_list', {})))
     expect(listAfter.squads).toHaveLength(0)
   }, 20000)
+
+
+  it('rejects invalid squad definitions and fails loudly at the preset limit', async () => {
+    const { ctx, lead } = await setup([])
+    const duplicateNames = await execute(ctx, lead, 'team_squad_save', {
+      title: 'Duplicate roles',
+      description: 'Invalid duplicate normalized teammate identities',
+      members: [
+        { name: 'Senior Reviewer', description: 'First', prompt: 'Review', context: 'fresh' },
+        { name: 'senior-reviewer', description: 'Second', prompt: 'Review again', context: 'fresh' },
+      ],
+    })
+    expect(duplicateNames.isError).toBe(true)
+    expect(text(duplicateNames)).toContain('duplicate squad member name')
+
+    await ctx.settings.update(settingsNamespace(TEAM_TEMPLATE_SETTINGS_NAMESPACE), {
+      templates: [],
+      squads: Array.from({ length: 20 }, (_, index) => ({
+        id: 'squad-' + index,
+        title: 'Squad ' + index,
+        description: 'Bounded preset',
+        members: [{ name: 'member-' + index, description: 'Role', prompt: 'Work', context: 'fresh' as const }],
+      })),
+    })
+    const overflow = await execute(ctx, lead, 'team_squad_save', {
+      id: 'squad-overflow',
+      title: 'Squad overflow',
+      description: 'Must not be reported as saved',
+      members: [{ name: 'overflow-member', description: 'Role', prompt: 'Work', context: 'fresh' }],
+    })
+    expect(overflow.isError).toBe(true)
+    expect(text(overflow)).toContain('Squad preset limit 20 reached')
+
+    const list = JSON.parse(text(await execute(ctx, lead, 'team_squad_list', {})))
+    expect(list.squads).toHaveLength(20)
+    expect(list.squads.some((squad: { id: string }) => squad.id === 'squad-overflow')).toBe(false)
+  })
 
   it('normalizes natural names in spawn_teammate to lower-kebab-case', async () => {
     const { ctx, lead } = await setup(['hang', 'hang', 'hang'])

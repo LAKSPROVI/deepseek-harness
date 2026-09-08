@@ -633,9 +633,15 @@ export function AgentTeamView({
       lines.push('')
     }
     const markdownText = lines.join('\n')
+    if (navigator.clipboard === undefined) {
+      setError('A área de transferência não está disponível neste navegador.')
+      return
+    }
     void navigator.clipboard.writeText(markdownText).then(() => {
       setCopiedDebate(true)
       setTimeout(() => { setCopiedDebate(false) }, 2000)
+    }).catch((cause: unknown) => {
+      setError(cause instanceof Error ? `Não foi possível copiar o Markdown: ${cause.message}` : 'Não foi possível copiar o Markdown do debate.')
     })
   }
 

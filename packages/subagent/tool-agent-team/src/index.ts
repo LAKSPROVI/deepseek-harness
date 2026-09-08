@@ -590,6 +590,9 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const currentTemplates = settingsVal?.templates ?? []
         const currentSquads = settingsVal?.squads ?? []
         const id = args.id || normalizeTeamMemberName(args.title) || `squad-${Date.now()}`
+        if (!currentSquads.some((item: SavedTeamSquad) => item.id === id) && currentSquads.length >= MAX_TEAM_SQUAD_COUNT) {
+          throw new Error(`Squad preset limit ${MAX_TEAM_SQUAD_COUNT} reached`)
+        }
         const squad: SavedTeamSquad = {
           id,
           title: args.title.trim(),
@@ -689,12 +692,8 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
 
         const dismissedNames: string[] = []
         for (const name of targetNames) {
-          try {
-            ctx.agentTeams.interrupt(agent, name)
-            dismissedNames.push(name)
-          } catch {
-            // Ignore teammates that are already inactive
-          }
+          ctx.agentTeams.interrupt(agent, name)
+          dismissedNames.push(name)
         }
         return {
           dismissedCount: dismissedNames.length,

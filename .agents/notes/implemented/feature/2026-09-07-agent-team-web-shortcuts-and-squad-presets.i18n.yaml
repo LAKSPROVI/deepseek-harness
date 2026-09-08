@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-07-agent-team-web-shortcuts-and-squad-presets.md
-2026-09-07-agent-team-web-shortcuts-and-squad-presets.md: b7bea45570ad85dedaaa41cc8a850a4fc13fb082
-2026-09-07-agent-team-web-shortcuts-and-squad-presets.zh.md: 104788f474713b02d2e90c11b99f2d60aeacba38
+2026-09-07-agent-team-web-shortcuts-and-squad-presets.md: 37f88f9e3e29d3605d7bc3aaf852d163770bbc2f
+2026-09-07-agent-team-web-shortcuts-and-squad-presets.zh.md: 193da8564bf1d7365d5698d375c6793284a8e435

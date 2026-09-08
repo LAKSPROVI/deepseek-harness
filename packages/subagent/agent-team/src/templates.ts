@@ -97,7 +97,12 @@ export function validateTeamTemplateSettings(value: TeamTemplateSettings): void 
     for (const squad of value.squads) {
       if (squadIds.has(squad.id)) throw new TypeError(`duplicate squad preset id: ${squad.id}`)
       squadIds.add(squad.id)
+      const memberNames = new Set<string>()
       for (const member of squad.members) {
+        if (memberNames.has(member.name)) {
+          throw new TypeError(`duplicate squad member name "${member.name}" in "${squad.id}"`)
+        }
+        memberNames.add(member.name)
         if ((member.llmProvider === undefined) !== (member.model === undefined)) {
           throw new TypeError(`squad member "${member.name}" in "${squad.id}" must define provider and model together`)
         }

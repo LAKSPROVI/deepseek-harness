@@ -620,6 +620,26 @@ describe('AgentTeamView', () => {
     expect(screen.queryByRole('region', { name: 'Quadro Kanban de tarefas' })).toBeNull()
   })
 
+
+  it('reports when the browser clipboard API is unavailable', async () => {
+    Object.assign(navigator, { clipboard: undefined })
+
+    render(<AgentTeamView {...viewProps(projection({ debate: debate() }))} />)
+    fireEvent.click(screen.getByTitle('Copiar síntese e histórico do debate em formato Markdown'))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('A área de transferência não está disponível neste navegador.')
+  })
+
+  it('reports clipboard rejection when debate Markdown cannot be copied', async () => {
+    const writeText = vi.fn((_text: string) => Promise.reject(new Error('clipboard denied')))
+    Object.assign(navigator, { clipboard: { writeText } })
+
+    render(<AgentTeamView {...viewProps(projection({ debate: debate() }))} />)
+    fireEvent.click(screen.getByTitle('Copiar síntese e histórico do debate em formato Markdown'))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Não foi possível copiar o Markdown: clipboard denied')
+  })
+
   it('copies debate synthesis markdown to clipboard', async () => {
     const writeText = vi.fn((_text: string) => Promise.resolve())
     Object.assign(navigator, {
