@@ -120,9 +120,10 @@ jobs:
     env:
       # Partitioning replaces the instrumented share; this budget gives the
       # exempt-heavy gate two workers on both hosted and failover runners.
-      DSH_COVERAGE_MAX_WORKERS: '6'
-      DSH_COVERAGE_PARTITIONS: '4'
-      DSH_GATE_CONCURRENCY: '3'
+      DSH_COVERAGE_MAX_WORKERS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '6' || '1' }}
+      DSH_COVERAGE_PARTITIONS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '4' || '2' }}
+      DSH_COVERAGE_TEST_TIMEOUT_MS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '60000' || '180000' }}
+      DSH_GATE_CONCURRENCY: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '3' || '1' }}
       # A gate failure aborts the sibling gate instead of waiting out its
       # multi-minute instrumented run.
       DSH_GATE_FAIL_FAST: '1'
@@ -242,17 +243,17 @@ jobs:
           || 'ubuntu-24.04' }}
     name: node 24 / snapshots and artifacts
     env:
-      DSH_GATE_CONCURRENCY: '10'
+      DSH_GATE_CONCURRENCY: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '10' || '1' }}
       DSH_NODE_COMPAT_SKIP_TYPECHECK: '1'
-      DSH_OXLINT_THREADS: '8'
-      DSH_PUBLINT_CONCURRENCY: '8'
-      DSH_WEB_SNAPSHOT_WORKERS: '6'
+      DSH_OXLINT_THREADS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '8' || '1' }}
+      DSH_PUBLINT_CONCURRENCY: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '8' || '1' }}
+      DSH_WEB_SNAPSHOT_WORKERS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '6' || '2' }}
       # A failing gate aborts its running siblings: a failing build stops the
       # independent Node compatibility smoke, and a failing reader (e.g.
       # publint) stops the remaining artifact consumers.
       DSH_GATE_FAIL_FAST: '1'
       # Failover halves snapshot concurrency for the shared 64-core VM.
-      DSH_SNAPSHOT_MAX_CONCURRENCY: ${{ github.repository == 'deepseek-ai/deepseek-harness' && vars.DSH_CI_FAILOVER_LINUX == 'selfhosted' && github.event.pull_request.user.login != 'dependabot[bot]' && '12' || '32' }}
+      DSH_SNAPSHOT_MAX_CONCURRENCY: ${{ github.repository == 'deepseek-ai/deepseek-harness' && vars.DSH_CI_FAILOVER_LINUX == 'selfhosted' && github.event.pull_request.user.login != 'dependabot[bot]' && '12' || github.repository == 'deepseek-ai/deepseek-harness' && '32' || '1' }}
     steps:
       # Runner cleanup owns tool caches and fixtures, including cancelled runs.
       - name: Use runner-owned temporary storage
@@ -518,10 +519,10 @@ jobs:
     name: windows node 24 / coverage
     timeout-minutes: 120
     env:
-      DSH_COVERAGE_MAX_WORKERS: '6'
-      DSH_COVERAGE_PARTITIONS: '4'
-      DSH_COVERAGE_TEST_TIMEOUT_MS: '90000'
-      DSH_GATE_CONCURRENCY: '3'
+      DSH_COVERAGE_MAX_WORKERS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '6' || '1' }}
+      DSH_COVERAGE_PARTITIONS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '4' || '2' }}
+      DSH_COVERAGE_TEST_TIMEOUT_MS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '90000' || '180000' }}
+      DSH_GATE_CONCURRENCY: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '3' || '1' }}
       # A gate failure aborts the sibling gate instead of waiting out its
       # multi-minute instrumented run.
       DSH_GATE_FAIL_FAST: '1'

@@ -12,9 +12,11 @@ The pull-request workflow selects organization-owned larger-runner labels by def
 
 The [pull-request CI workflow](../../../../.github/workflows/ci.yml) selects enterprise or self-hosted runner pools only when `github.repository` is `deepseek-ai/deepseek-harness`. Other repositories use `ubuntu-24.04` for the primary Linux jobs and `windows-2025` for the native Windows jobs. The Linux cache, browser-install, and concurrency branches use the same repository condition, so a fork cannot enter self-hosted behavior by defining a similarly named repository variable.
 
+Resource-heavy fork jobs limit their gate concurrency to one and their internal workers to the smallest valid pools. Fork coverage tests receive a 180-second per-test budget. The canonical repository retains its larger-runner concurrency and timing profiles.
+
 The [issue lifecycle](../../../../.github/workflows/issue-lifecycle.yml), [issue policy](../../../../.github/workflows/issue-policy.yml), and [Cloudflare preview](../../../../.github/workflows/build-preview-cloudflare.yml) jobs run only in the canonical repository. Forks report those organization-owned integrations as skipped without attempting to read unavailable credentials.
 
-[Workflow tests](../../../../scripts/ci-workflow.spec.ts) require every private runner selector to retain the canonical repository condition and public fallback. They also require canonical-only conditions on the credential-dependent jobs.
+[Workflow tests](../../../../scripts/ci-workflow.spec.ts) require every private runner selector to retain the canonical repository condition and public fallback. They also require bounded fork resource limits, the fork coverage timing budget, and canonical-only conditions on credential-dependent jobs.
 
 ## Alternatives considered
 
@@ -26,4 +28,4 @@ The [issue lifecycle](../../../../.github/workflows/issue-lifecycle.yml), [issue
 
 ## Consequences
 
-Fork pull requests can execute the same primary CI commands on standard GitHub-hosted runners, while the canonical repository retains its larger-runner defaults and operator-selected failover pools. Fork runs may take longer on the smaller public machines. Organization-owned issue automation and previews appear as explicit skipped jobs in forks rather than failed or indefinitely queued work.
+Fork pull requests can execute the same primary CI commands on standard GitHub-hosted runners without oversubscribing their CPUs, while the canonical repository retains its larger-runner defaults and operator-selected failover pools. Bounded fork runs may take longer on the smaller public machines. Organization-owned issue automation and previews appear as explicit skipped jobs in forks rather than failed or indefinitely queued work.

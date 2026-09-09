@@ -120,6 +120,35 @@ describe('CI workflow', () => {
     expect(aggregateRunsOn).toContain("|| 'ubuntu-latest'")
   })
 
+  it('serializes resource-heavy fork jobs on standard hosted runners', () => {
+    const workflow = loadWorkflow('.github/workflows/ci.yml')
+    const limits = [
+      ['node-24-coverage', [['DSH_COVERAGE_MAX_WORKERS', '1'], ['DSH_COVERAGE_PARTITIONS', '2'], ['DSH_GATE_CONCURRENCY', '1']]],
+      ['node-24-consumers', [['DSH_GATE_CONCURRENCY', '1'], ['DSH_OXLINT_THREADS', '1'], ['DSH_PUBLINT_CONCURRENCY', '1'], ['DSH_WEB_SNAPSHOT_WORKERS', '2'], ['DSH_SNAPSHOT_MAX_CONCURRENCY', '1']]],
+      ['windows-coverage', [['DSH_COVERAGE_MAX_WORKERS', '1'], ['DSH_COVERAGE_PARTITIONS', '2'], ['DSH_GATE_CONCURRENCY', '1']]],
+    ] as const
+
+    for (const [jobName, entries] of limits) {
+      const env = workflowJob(workflow, jobName).env
+      if (!isRecord(env)) throw new TypeError(`${jobName} must define environment limits`)
+      for (const [name, publicValue] of entries) {
+        expect(env[name], `${jobName}.${name} must distinguish the public fork runner`).toContain(canonicalRepository)
+        expect(env[name], `${jobName}.${name} must bound the public fork runner`).toContain(`|| '${publicValue}'`)
+      }
+    }
+  })
+
+  it('gives coverage tests a larger timing budget on public fork runners', () => {
+    const workflow = loadWorkflow('.github/workflows/ci.yml')
+
+    for (const jobName of ['node-24-coverage', 'windows-coverage']) {
+      const env = workflowJob(workflow, jobName).env
+      if (!isRecord(env)) throw new TypeError(`${jobName} must define environment limits`)
+      expect(env.DSH_COVERAGE_TEST_TIMEOUT_MS).toContain(canonicalRepository)
+      expect(env.DSH_COVERAGE_TEST_TIMEOUT_MS).toContain("|| '180000'")
+    }
+  })
+
   it('keeps split native Windows PR jobs with failover, plus a master-only standby', () => {
     const workflow = loadWorkflow('.github/workflows/ci.yml')
     const masterWorkflow = loadWorkflow('.github/workflows/ci-master.yml')
@@ -201,9 +230,10 @@ describe('CI workflow', () => {
       expect(install!.run).not.toContain('$cloneFlag')
     }
 
-    // windows-coverage uses the lower 4-partition profile.
+    // windows-coverage retains the lower 4-partition profile on the canonical
+    // larger runner while the public fork path uses the minimum valid pair.
     expect(windowsCoverage.name).toBe('windows node 24 / coverage')
-    expect(windowsCoverage.env).toMatchObject({ DSH_COVERAGE_PARTITIONS: '4' })
+    expect((windowsCoverage.env as Record<string, unknown>).DSH_COVERAGE_PARTITIONS).toContain("&& '4' || '2'")
     const coverageSteps = windowsCoverage.steps as unknown[]
     const coverageCommands = coverageSteps.filter((step): step is Record<string, unknown> & { run: string } => (
       isRecord(step) && typeof step.run === 'string'
