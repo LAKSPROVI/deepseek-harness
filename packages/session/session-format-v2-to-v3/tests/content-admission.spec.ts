@@ -80,6 +80,24 @@ function catalog(rows: readonly SessionFormatEvent[], version: 0 | 1 | 3, valida
 }
 
 describe('V2 content admission', () => {
+  it('preserves the legacy file media type in spliced agent inbox content', () => {
+    const legacyFile = { type: 'file', attachment: { attachmentId: 'file', name: 'legacy.txt', bytes: 987, mediaType: 'text/plain' } }
+    const carrier = messageCarriers.find(candidate => candidate.type === 'agent/inbox/spliced')!
+    const input = [...opening, ...carrier.rows([legacyFile]), ...closing]
+
+    const output = migrate(input)
+
+    expect(restoreReleasedV3Artifact(output, new Set())).toBe(output)
+    expect(output.events.find(row => row.type === 'agent/inbox/spliced')?.data).toEqual(input[3]!.data)
+  })
+
+  it('rejects a non-string legacy file media type', () => {
+    const legacyFile = { type: 'file', attachment: { attachmentId: 'file', name: 'legacy.txt', bytes: 987, mediaType: 7 } }
+    const carrier = messageCarriers.find(candidate => candidate.type === 'agent/inbox/spliced')!
+
+    expect(() => migrate([...opening, ...carrier.rows([legacyFile]), ...closing])).toThrow('mediaType must be a string')
+  })
+
   it('preserves opaque JSON, serialized arguments, compact runs and non-content counters exactly', () => {
     const opaque = { ...future, blockType: 'future-content', block: future, blocks: [future], summary: [future], message: { content: [future] } }
     const replayState = { response: opaque, blocks: [opaque, opaque] }

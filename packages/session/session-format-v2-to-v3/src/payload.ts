@@ -186,9 +186,12 @@ function assertContentBlock(value: SessionFormatJsonValue | undefined, label: st
   if (block['type'] === 'file') {
     keys(block, ['type', 'attachment'], [], label + ' kind "file"')
     const attachment = record(block['attachment'], label + ' kind "file" attachment')
-    keys(attachment, ['attachmentId', 'name', 'bytes'], [], label + ' kind "file" attachment')
+    keys(attachment, ['attachmentId', 'name', 'bytes'], ['mediaType'], label + ' kind "file" attachment')
     if (typeof attachment['attachmentId'] !== 'string' || attachment['attachmentId'].length === 0
       || typeof attachment['name'] !== 'string') throw new SessionFormatError(label + ' kind "file": file attachment requires attachmentId and name')
+    if (attachment['mediaType'] !== undefined && typeof attachment['mediaType'] !== 'string') {
+      throw new SessionFormatError(label + ' kind "file": file attachment mediaType must be a string')
+    }
     sessionFormatCount(attachment['bytes'], label + ' kind "file" attachment bytes')
     return
   }
