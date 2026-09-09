@@ -49,8 +49,11 @@ function projectionsBaseline(value: SessionProjectionBaseline): ProjectionsBasel
   }
 }
 
-/** Messages requested per history page. */
+/** Messages requested per history page after the opening snapshot. */
 export const PAGE_MESSAGES = 50
+
+/** Messages requested when an ordinary Session first opens. */
+export const FIRST_PAGE_MESSAGES = 8
 
 /** Messages requested per page while a turn jump loops backwards (fewer, larger round trips). */
 export const JUMP_PAGE_MESSAGES = 200
@@ -618,7 +621,9 @@ export class Session implements SessionFace {
     })
     this.events = events
     try {
-      await events.open({ maxMessages: PAGE_MESSAGES })
+      await events.open({
+        maxMessages: this.address === undefined ? FIRST_PAGE_MESSAGES : PAGE_MESSAGES,
+      })
       if (generation !== this.openGeneration || this.events !== events) return
       this.openState = 'open'
     } catch (error) {

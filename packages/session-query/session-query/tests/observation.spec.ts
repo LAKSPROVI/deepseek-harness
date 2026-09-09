@@ -284,6 +284,30 @@ describe('SessionObservationReader cold path', () => {
     await ctx.fiber.dispose()
   })
 
+  it('retains only the most recent unpinned cold observation by default', async () => {
+    const ctx = await readerContext()
+    const a = header('default-cache-a')
+    const b = header('default-cache-b')
+    const store = new Map([
+      [a.id, { header: a, events: [messageEvent(0, 'a')], revision: 'ra' }],
+      [b.id, { header: b, events: [messageEvent(0, 'b')], revision: 'rb' }],
+    ])
+    const counters = { stat: 0, open: 0, read: 0 }
+    ctx.provide('sessionPersistence', stubPersistence(store, counters))
+    const reader = new SessionObservationReader(ctx)
+    const readOnce = async (id: SessionIdType): Promise<void> => {
+      using observed = await reader.read(id, { projectionMode: 'none' })
+      void observed
+    }
+
+    await readOnce(a.id)
+    await readOnce(b.id)
+    await readOnce(a.id)
+
+    expect(counters.read).toBe(3)
+    await ctx.fiber.dispose()
+  })
+
   it('reloads when the durable revision changes', async () => {
     const ctx = await readerContext()
     const meta = header('cache-stale')

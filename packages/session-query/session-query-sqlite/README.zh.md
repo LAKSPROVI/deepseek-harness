@@ -50,7 +50,7 @@ kind: "package-reference"
 | `snippetChars` | `240` | 按 Unicode 码点计算的最大 snippet 长度 |
 | `readWindowMax` | `50` | 继承的 `readEvent()` 的 `before`/`after` 原始事件数上限 |
 | `persistedReadConcurrency` | `4` | 继承批量读取的并发持久化日志读取数 |
-| `preparedSessionCacheSize` | `5` | 继承的 `observeSession` 读取器为复用保留的冷 prepared-Session 观察数 |
+| `preparedSessionCacheSize` | `1` | 继承的 `observeSession` 读取器为复用保留的冷 prepared-Session 观察数；每个条目持有一个完整的已恢复日志 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-session-query-sqlite)是每个受支持字段及其 JSDoc 的穷尽式真源。
 

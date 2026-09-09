@@ -58,7 +58,7 @@ kind: "package-reference"
 |---|---|---|
 | `readWindowMax` | `50` | `readEvent` 接受的 `before`/`after` 原始事件数上限 |
 | `persistedReadConcurrency` | `4` | 一次批量标题读取中的并发持久化日志读取数 |
-| `preparedSessionCacheSize` | `5` | 为跨 `observeSession` 读取复用而保留的冷 prepared-Session 观察数 |
+| `preparedSessionCacheSize` | `1` | 为跨 `observeSession` 读取复用而保留的冷 prepared-Session 观察数；每个条目持有一个完整的已恢复日志 |
 
 ### 失败与恢复
 

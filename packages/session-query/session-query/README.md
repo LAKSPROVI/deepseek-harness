@@ -58,7 +58,7 @@ The inherited knobs are set through the mounted backend's config:
 |---|---|---|
 | `readWindowMax` | `50` | Maximum `before`/`after` raw events accepted by `readEvent` |
 | `persistedReadConcurrency` | `4` | Concurrent persisted-log reads in one batch title read |
-| `preparedSessionCacheSize` | `5` | Cold prepared-Session observations retained for reuse across `observeSession` reads |
+| `preparedSessionCacheSize` | `1` | Cold prepared-Session observations retained for reuse across `observeSession` reads; each entry owns one complete restored log |
 
 ### Failures and recovery
 

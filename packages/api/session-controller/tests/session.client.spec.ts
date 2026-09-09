@@ -68,6 +68,18 @@ describe('Session open', () => {
     expect(session.eventSource.getSnapshot().change).toMatchObject({ kind: 'replace' })
   })
 
+  it('bounds the opening snapshot for an ordinary session', async () => {
+    const { api, session } = makeSession()
+
+    await session.open()
+
+    expect(api.callsOf('session.follow')).toMatchObject([{
+      address: { kind: 'session', sessionId: SID },
+      assistantStream: true,
+      maxMessages: 8,
+    }])
+  })
+
   it('is idempotent: concurrent opens share one follow, reopening when open is a no-op', async () => {
     const { api, session } = makeSession()
     await Promise.all([session.open(), session.open()])

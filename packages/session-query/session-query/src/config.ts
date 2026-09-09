@@ -9,7 +9,7 @@ export const SESSION_QUERY_READ_WINDOW_MAX = 50
 export const SESSION_QUERY_DEFAULT_PERSISTED_INSPECT_CONCURRENCY = 4
 
 /** Default maximum number of cold prepared-Session observations retained for reuse. */
-export const SESSION_QUERY_DEFAULT_PREPARED_SESSION_CACHE_SIZE = 5
+export const SESSION_QUERY_DEFAULT_PREPARED_SESSION_CACHE_SIZE = 1
 
 /** Backend-independent configuration inherited by every session-query implementation. */
 export interface Config {
@@ -20,7 +20,8 @@ export interface Config {
   /**
    * Maximum cold prepared-Session observations retained for reuse, keyed by
    * durable revision. Entries pinned by active observation leases do not count
-   * against this bound until released. Defaults to 5.
+   * against this bound until released. Defaults to 1 because each entry retains
+   * one complete restored log.
    */
   preparedSessionCacheSize?: number
 }

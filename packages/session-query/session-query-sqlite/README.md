@@ -50,7 +50,7 @@ Choose it when you want full-text recall over prior sessions with ranking and pa
 | `snippetChars` | `240` | Maximum snippet length in Unicode code points |
 | `readWindowMax` | `50` | Maximum `before`/`after` raw events for the inherited `readEvent()` |
 | `persistedReadConcurrency` | `4` | Concurrent persisted-log reads for inherited batch reads |
-| `preparedSessionCacheSize` | `5` | Cold prepared-Session observations the inherited `observeSession` reader retains for reuse |
+| `preparedSessionCacheSize` | `1` | Cold prepared-Session observations the inherited `observeSession` reader retains for reuse; each entry owns one complete restored log |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-session-query-sqlite) is the exhaustive source for every accepted field and its JSDoc.
 
