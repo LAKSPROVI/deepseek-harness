@@ -4,6 +4,7 @@ import * as yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 
 const root = resolve(import.meta.dirname, '..')
+const canonicalRepository = "github.repository == 'deepseek-ai/deepseek-harness'"
 const runnerPrivatePnpmDestination = /^\$\{\{ runner\.temp \}\}\/setup-pnpm-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}$/
 const nativeWindowsPnpmDestination = '${{ runner.temp }}/setup-pnpm-js-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}'
 
@@ -92,6 +93,31 @@ describe('CI workflow', () => {
         with: { dest: nativeWindowsPnpmDestination },
       })
     }
+  })
+
+  it('uses public hosted runners outside the canonical repository', () => {
+    const workflow = loadWorkflow('.github/workflows/ci.yml')
+    const linuxJobs = ['node-24', 'node-24-coverage', 'node-24-consumers']
+    const windowsJobs = ['windows-build', 'windows-coverage', 'windows-native-tests', 'windows-observational']
+
+    for (const jobName of linuxJobs) {
+      const runsOn = workflowJob(workflow, jobName)['runs-on']
+      expect(typeof runsOn).toBe('string')
+      expect(runsOn, `${jobName} must reserve enterprise and self-hosted pools for the canonical repository`).toContain(canonicalRepository)
+      expect(runsOn, `${jobName} must use a public GitHub-hosted runner elsewhere`).toContain("|| 'ubuntu-24.04'")
+    }
+
+    for (const jobName of windowsJobs) {
+      const runsOn = workflowJob(workflow, jobName)['runs-on']
+      expect(typeof runsOn).toBe('string')
+      expect(runsOn, `${jobName} must reserve enterprise and self-hosted pools for the canonical repository`).toContain(canonicalRepository)
+      expect(runsOn, `${jobName} must use a public GitHub-hosted runner elsewhere`).toContain("|| 'windows-2025'")
+    }
+
+    const aggregateRunsOn = workflowJob(workflow, 'all-checks-passed')['runs-on']
+    expect(typeof aggregateRunsOn).toBe('string')
+    expect(aggregateRunsOn).toContain(canonicalRepository)
+    expect(aggregateRunsOn).toContain("|| 'ubuntu-latest'")
   })
 
   it('keeps split native Windows PR jobs with failover, plus a master-only standby', () => {
@@ -816,19 +842,19 @@ describe('Request review workflow', () => {
 })
 
 describe('Issue lifecycle workflow', () => {
-  it('runs the lifecycle job on every PR/review event but gates token and board steps', () => {
+  it('runs the lifecycle job only in the canonical repository and gates token and board steps', () => {
     const lifecycle = loadWorkflow('.github/workflows/issue-lifecycle.yml')
     const policy = loadWorkflow('.github/workflows/issue-policy.yml')
     const lifecycleJob = workflowJob(lifecycle, 'lifecycle')
     if (!Array.isArray(lifecycleJob.steps)) throw new TypeError('Issue lifecycle job must define steps')
 
-    // The job has no job-level `if`, so it is listed on every pull_request /
-    // pull_request_review event and reports success instead of a gray skip. The
-    // write-capable steps are gated at step level so approved/commented reviews
-    // never mint a Project/Issue App token nor touch the board.
+    // Forks cannot mint the organization-owned App token. In the canonical
+    // repository, the write-capable steps remain gated at step level so
+    // approved/commented reviews never mint a token nor touch the board.
     expect(lifecycle.on).toHaveProperty('pull_request')
     expect(lifecycle.on).toHaveProperty('pull_request_review')
-    expect(lifecycleJob.if).toBeUndefined()
+    expect(lifecycleJob.if).toBe(canonicalRepository)
+    expect(workflowJob(policy, 'policy').if).toBe(canonicalRepository)
     // Keep the subscription-type gates: issue-lifecycle does not re-subscribe
     // ready_for_review (issue-policy owns that) and only reacts to submitted
     // review events.
@@ -880,6 +906,14 @@ describe('Issue lifecycle workflow', () => {
         PROJECT_TOKEN: '${{ steps.app-token.outputs.token }}',
       },
     })
+  })
+})
+
+describe('Cloudflare preview workflow', () => {
+  it('deploys only from the canonical repository that owns the Cloudflare secrets', () => {
+    const preview = workflowJob(loadWorkflow('.github/workflows/build-preview-cloudflare.yml'), 'preview')
+
+    expect(preview.if).toBe(canonicalRepository)
   })
 })
 
