@@ -19,7 +19,6 @@ interface PtcStart {
   readonly parent: string
   readonly name: string
   readonly arguments: SessionFormatJsonValue
-  settled: boolean
 }
 
 interface ToolLifecycle {
@@ -203,16 +202,15 @@ export function assertReleasedArtifactRelationships(
             parent,
             name: data['name'] as string,
             arguments: data['arguments'] as SessionFormatJsonValue,
-            settled: false,
           })
         } else {
           const start = ptcStarts.get(child)
-          if (start === undefined || start.settled) throw new SessionFormatError('tool/code-dispatch has no unique start')
+          if (start === undefined) throw new SessionFormatError('tool/code-dispatch has no unique start')
           if (start.root !== root || start.parent !== parent || start.name !== data['name']
             || !deepEqualJson(start.arguments, data['arguments'])) {
             throw new SessionFormatError('tool/code-dispatch does not match its start')
           }
-          start.settled = true
+          ptcStarts.delete(child)
         }
         ptcRoots.set(child, root)
         break
