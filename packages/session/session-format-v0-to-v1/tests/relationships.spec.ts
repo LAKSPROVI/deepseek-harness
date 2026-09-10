@@ -596,6 +596,21 @@ describe('released v1 whole-artifact relationships', () => {
     expect(() => decode([turn, start(1), start(2)])).toThrow(/repeats subCallId/)
   })
 
+  it('permits a settled historical PTC subCallId to be reused under its original root', () => {
+    const turn = { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } }
+    const start = (seq: number, name: string, arguments_: object) => ({
+      type: 'tool/code-dispatch-start', seq, time: seq + 1,
+      data: { rootCallId: 'root', parentCallId: 'root', subCallId: 'reused', name, arguments: arguments_ },
+    })
+    const settle = (seq: number, name: string, arguments_: object) => ({
+      type: 'tool/code-dispatch', seq, time: seq + 1,
+      data: { rootCallId: 'root', parentCallId: 'root', subCallId: 'reused', name, arguments: arguments_, isError: false, content: [] },
+    })
+    const rows = [turn, start(1, 'read', { path: 'one' }), settle(2, 'read', { path: 'one' }), start(3, 'glob', { pattern: 'two' }), settle(4, 'glob', { pattern: 'two' })]
+
+    expect(decode(rows).events).toEqual(rows)
+  })
+
   it('rejects repeated retry starts and invalid retry chains', () => {
     const prefix = [
       { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },

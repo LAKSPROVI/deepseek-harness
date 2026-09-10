@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionFormatEvent } from '@deepseek-ai/dsh-session-format'
+import type { SessionFormatEvent, SessionFormatJsonObject } from '@deepseek-ai/dsh-session-format'
 import { sessionFormatCatalog } from '../src/index.ts'
 
 function deepFreeze<T>(value: T): T {
@@ -195,6 +195,39 @@ describe('first-party Session format catalog', () => {
     expect(reopened.finish()).toEqual(artifact)
     expect(JSON.stringify({ sourceHeader, rows })).toBe(before)
     expect(JSON.stringify({ currentHeader, currentRows })).toBe(encodedBefore)
+  })
+
+  it('migrates a settled V0 PTC identifier reused by a later dispatch', () => {
+    const header = deepFreeze({ type: 'session', version: 0, id: 'reused-ptc', createdAt: 1, seedLength: 0, delegationDepth: 0 })
+    const dispatch = (seq: number, type: 'tool/code-dispatch-start' | 'tool/code-dispatch', name: string, arguments_: SessionFormatJsonObject) => ({
+      type, seq, time: seq + 1,
+      data: {
+        rootCallId: 'run-code', parentCallId: 'run-code', subCallId: 'run-code:code:1', name, arguments: arguments_,
+        ...(type === 'tool/code-dispatch' ? { isError: false, content: [] } : {}),
+      },
+    })
+    const rows: SessionFormatEvent[] = deepFreeze([
+      { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+      { type: 'step/start', seq: 1, time: 2, data: { turn: 1, step: 1 } },
+      dispatch(2, 'tool/code-dispatch-start', 'read', { path: 'one' }),
+      dispatch(3, 'tool/code-dispatch', 'read', { path: 'one' }),
+      { type: 'step/end', seq: 4, time: 5, data: { turn: 1, step: 1 } },
+      { type: 'step/start', seq: 5, time: 6, data: { turn: 1, step: 2 } },
+      dispatch(6, 'tool/code-dispatch-start', 'glob', { pattern: 'two' }),
+      dispatch(7, 'tool/code-dispatch', 'glob', { pattern: 'two' }),
+      { type: 'step/end', seq: 8, time: 9, data: { turn: 1, step: 2 } },
+      { type: 'turn/end', seq: 9, time: 10, data: { turn: 1, reason: { kind: 'completed' } } },
+    ])
+    const restore = sessionFormatCatalog.createRestore(header, { recovery: 'strict', validation: 'current' })
+    for (const row of rows) restore.decodeRow(row)
+
+    const artifact = restore.finish()
+    const ptcEvents = artifact.events.filter(event => event.type === 'tool/ptc-dispatch-start' || event.type === 'tool/ptc-dispatch')
+
+    expect(ptcEvents).toHaveLength(4)
+    expect(ptcEvents.map(event => (event.data as { subCallId: string }).subCallId)).toEqual([
+      'run-code:code:1', 'run-code:code:1', 'run-code:code:1', 'run-code:code:1',
+    ])
   })
 
   it.each(['current', 'transformed'] as const)('rejects native v3 obsolete required tags with %s validation and retains ignorable tags', (validation) => {
