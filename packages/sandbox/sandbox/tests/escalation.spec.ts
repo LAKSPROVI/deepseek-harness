@@ -81,6 +81,18 @@ describe('approveEscalation', () => {
     expect(seen[0]?.reason).toBe('escalate sandbox to workspace-write: the user asked to write in the workspace')
   })
 
+  it.each(['workspace-write', 'danger-full-access'] as const)(
+    'treats a schema-valid request for the current %s mode as an idempotent no-op',
+    async (mode) => {
+      const seen: unknown[] = []
+      const granted = await approveEscalation(req({ requestedMode: mode, effectiveMode: mode }), ingredients({
+        approver: approver('allowed-once', request => seen.push(request)),
+      }))
+      expect(granted).toBe(mode)
+      expect(seen).toEqual([])
+    },
+  )
+
   it('a non-widening request fails closed with its own text and never asks', async () => {
     const seen: unknown[] = []
     const spy = ingredients({ approver: approver('allowed-once', r => seen.push(r)) })
