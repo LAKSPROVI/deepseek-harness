@@ -194,6 +194,8 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/web/web': { kind: 'indirect', reason: 'The provider registry delegates model rendering to dsh-tool-web.' },
   'packages/web/web-fetch-http': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
   'packages/web/web-search-exa': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
+  'packages/automation/automation': { kind: 'none', reason: 'The engine registers no tool, prompt, or session event; a deployment-registered action handler owns any model-facing run.' },
+  'packages/experimental/client-ui-automation': { kind: 'none', reason: 'Browser-side header panel over the automations Remote namespace; registers nothing model-facing.' },
   'packages/transcription/transcription': { kind: 'none', reason: 'The seam returns the transcript to its caller and registers no prompt, tool schema, or session event; audio stays transient.' },
   'packages/transcription/transcription-groq': { kind: 'none', reason: 'The provider answers through ctx.transcription over a separate HTTP request and registers no prompt, tool schema, or session event.' },
   'packages/transcription/voice-input': { kind: 'none', reason: 'The Remote surface answers its browser caller with a transcript; only the message the human sends becomes model-visible, through the ordinary user-message path.' },

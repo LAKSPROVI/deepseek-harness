@@ -1,8 +1,31 @@
+---
+description: "Host end of browser voice input: decode one base64 upload, transcribe it through the seam, and answer a transcript or a stable failure."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-voice-input
 
 English | [中文](README.zh.md)
 
+## Summary
+
 The **`VoiceInputService`** (`ctx.voiceInput`) is the Host end of one browser feature: it accepts one base64 audio upload, decodes it, transcribes it through the [transcription capability seam](../transcription/README.md), and answers a transcript or a stable business failure.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Remote API (`ctx.remote.voiceInput`)](#remote-api-ctx-remote-voiceinput)
+- [The upload](#the-upload)
+- [Failures](#failures)
+- [Policy ownership](#policy-ownership)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="overview"></a>
+## Overview
 
 This package owns the Consumer role of that capability:
 
@@ -14,6 +37,7 @@ This package owns the Consumer role of that capability:
 
 Audio is transient: the decoded bytes live for the duration of one call, reach no session event and no storage, and are not retained after the answer.
 
+<a id="remote-api-ctx-remote-voiceinput"></a>
 ## Remote API (`ctx.remote.voiceInput`)
 
 | Member | Semantics |
@@ -24,6 +48,7 @@ Audio is transient: the decoded bytes live for the duration of one call, reach n
 
 An expected failure is a value in the returned union; an infrastructure error is rethrown unchanged, so a bug in a provider surfaces as a rejection rather than as a business code the browser would render as a user-facing message.
 
+<a id="the-upload"></a>
 ## The upload
 
 | Field | Meaning |
@@ -36,6 +61,7 @@ An expected failure is a value in the returned union; an infrastructure error is
 
 The success value carries `text` and, when the provider reported one, `language`. Both come from the seam's `TranscriptionResult` unchanged; `text` is an empty string for silence. See [`src/types.ts`](src/types.ts) for the full request, value, and failure declarations.
 
+<a id="failures"></a>
 ## Failures
 
 | `error.code` | Meaning |
@@ -48,12 +74,14 @@ The success value carries `text` and, when the provider reported one, `language`
 | `provider-failed` | The provider was reached and refused or failed the transcription. `detail` forwards the provider's own message. Every `TranscriptionError` code this package does not recognize maps here, because the seam's codes are merge-extensible. |
 | `aborted` | The transcription was cancelled before a transcript existed, reported by the seam as `TRANSCRIPTION_ABORTED`. |
 
+<a id="policy-ownership"></a>
 ## Policy ownership
 
 This package holds no transcription policy: the payload ceiling, provider selection, and transcript trimming belong to `ctx.transcription`, so a headless deployment calling the seam directly enforces identical rules. `audio-too-large` is the seam's ceiling failure projected onto the wire, with the measured byte length added so a caller can report the size it actually sent.
 
 What this package does own: the base64 encoding check, the empty-hint normalization, the mapping from `TranscriptionError` codes to browser-facing codes, and the boundary between an expected failure and a rethrown one.
 
+<a id="model-experience"></a>
 ## Model Experience
 
 None, as the service answers its caller and registers no prompt, tool schema, or session event; only the transcript a human sends from the composer becomes model-visible, through the ordinary user-message path that already logs it.
@@ -64,8 +92,20 @@ Independent of every model request: no audio byte and no transcript token enters
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
 - **Audio travels base64-expanded** — the Remote wire is JSON, so one upload costs about 4/3 of the recorded byte length and is fully buffered in the request. There is no binary or multipart path, and no chunked upload.
 - **No streaming or partial transcript** — one complete utterance per call, matching the seam's single operation. A long recording produces no feedback until it finishes, and there is no progress or partial-text signal to render.
 - **The ceiling is enforced on decoded bytes** — a request whose base64 text is far larger than `maxAudioBytes` is decoded before the seam rejects it, so an oversized upload is transported and decoded in full before it fails.
 - **`detail` carries operator-facing text to the browser** — `provider-unavailable`, `provider-unconfigured`, and `provider-failed` forward the seam's or the provider's own message, including a credential reference name. A deployment exposes the Remote gateway only through its trusted or separately authenticated boundary.
 - **A call leaves no durable record** — this package appends no session event, so a failed, cancelled, or discarded transcription is not reconstructable from session data, and a consumer that makes a transcript model-visible owns logging it.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

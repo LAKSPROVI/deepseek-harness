@@ -2,9 +2,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionNotesPopover } from '../src/client/header/SessionNotesPopover.tsx'
+import type { SessionNotesPopoverProps } from '../src/client/header/SessionNotesPopover.tsx'
 import { zh } from '../src/client/locales.ts'
 
-const t = (key: keyof typeof zh) => zh[key] ?? key
+const t = ((key: keyof typeof zh) => zh[key] ?? key) as never
 
 describe('SessionNotesPopover', () => {
   const sessionId = 'test-session-123'
@@ -19,13 +20,13 @@ describe('SessionNotesPopover', () => {
   afterEach(cleanup)
 
   it('renders the trigger button with notes label', () => {
-    render(<SessionNotesPopover sessionId={sessionId as never} inputActions={inputActions} t={t} />)
+    render(<SessionNotesPopover {...({ sessionId, inputActions, t } as unknown as SessionNotesPopoverProps)} />)
     const trigger = screen.getByRole('button', { name: /备注/i })
     expect(trigger).toBeDefined()
   })
 
   it('opens dialog, allows typing notes and auto-saves to localStorage', () => {
-    render(<SessionNotesPopover sessionId={sessionId as never} inputActions={inputActions} t={t} />)
+    render(<SessionNotesPopover {...({ sessionId, inputActions, t } as unknown as SessionNotesPopoverProps)} />)
     const trigger = screen.getByRole('button', { name: /备注/i })
     fireEvent.click(trigger)
 
@@ -36,7 +37,7 @@ describe('SessionNotesPopover', () => {
   })
 
   it('switches to reminders tab and adds a new reminder', () => {
-    render(<SessionNotesPopover sessionId={sessionId as never} inputActions={inputActions} t={t} />)
+    render(<SessionNotesPopover {...({ sessionId, inputActions, t } as unknown as SessionNotesPopoverProps)} />)
     fireEvent.click(screen.getByRole('button', { name: /备注/i }))
 
     // Switch to reminders tab
@@ -66,7 +67,7 @@ describe('SessionNotesPopover', () => {
       reminders: [{ id: '1', text: 'Conferir guia de custas', completed: false, createdAt: Date.now() }],
     }))
 
-    render(<SessionNotesPopover sessionId={sessionId as never} inputActions={inputActions} t={t} />)
+    render(<SessionNotesPopover {...({ sessionId, inputActions, t } as unknown as SessionNotesPopoverProps)} />)
     fireEvent.click(screen.getByRole('button', { name: /备注/i }))
 
     const insertBtn = screen.getByRole('button', { name: /插入到输入框/i })

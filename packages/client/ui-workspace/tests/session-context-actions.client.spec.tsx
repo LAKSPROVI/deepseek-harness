@@ -2,9 +2,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionContextActions } from '../src/client/header/SessionContextActions.tsx'
+import type { SessionContextActionsProps } from '../src/client/header/SessionContextActions.tsx'
 import { zh } from '../src/client/locales.ts'
 
-const t = (key: keyof typeof zh) => zh[key] ?? key
+const t = ((key: keyof typeof zh) => zh[key] ?? key) as never
 
 describe('SessionContextActions', () => {
   const sessionId = 'test-session-123'
@@ -25,12 +26,7 @@ describe('SessionContextActions', () => {
   it('renders quick new session button with trigger', () => {
     render(
       <SessionContextActions
-        sessionId={sessionId as never}
-        useSessions={useSessions as never}
-        useWorkspaces={useWorkspaces as never}
-        startSession={startSession}
-        forkSession={forkSession}
-        t={t}
+        {...({ sessionId, useSessions, useWorkspaces, startSession, forkSession, t } as unknown as SessionContextActionsProps)}
       />,
     )
 
@@ -41,12 +37,7 @@ describe('SessionContextActions', () => {
   it('opens dropdown and executes start clean session in same workspace', () => {
     render(
       <SessionContextActions
-        sessionId={sessionId as never}
-        useSessions={useSessions as never}
-        useWorkspaces={useWorkspaces as never}
-        startSession={startSession}
-        forkSession={forkSession}
-        t={t}
+        {...({ sessionId, useSessions, useWorkspaces, startSession, forkSession, t } as unknown as SessionContextActionsProps)}
       />,
     )
 
@@ -61,12 +52,7 @@ describe('SessionContextActions', () => {
   it('triggers fork session from context menu', () => {
     render(
       <SessionContextActions
-        sessionId={sessionId as never}
-        useSessions={useSessions as never}
-        useWorkspaces={useWorkspaces as never}
-        startSession={startSession}
-        forkSession={forkSession}
-        t={t}
+        {...({ sessionId, useSessions, useWorkspaces, startSession, forkSession, t } as unknown as SessionContextActionsProps)}
       />,
     )
 

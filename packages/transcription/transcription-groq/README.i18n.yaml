@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/transcription/transcription-groq/README.md
-README.md: ea617b8bdc97d0aeab5f50f460a178f23b60b6f9
-README.zh.md: c5d9b50e53e0b5f50a681e9e3ddbd06db0d909eb
+README.md: 36a223214af48c3d037b984a57c1a75b07ea0709
+README.zh.md: fae1dc3fa79597183ca7ccf9b51e6ed5c08e2f1e

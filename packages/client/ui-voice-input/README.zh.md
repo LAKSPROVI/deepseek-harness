@@ -1,13 +1,35 @@
+---
+description: "Web 输入框的按住说话麦克风入口：上传一段话语并把文本追加到草稿。"
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-client-ui-voice-input
 
 [English](README.md) | 中文
 
+## 概述
+
 Web composer 的按住说话语音输入。插件向会话 composer 的 `conversation.input.left` 工具行贡献一个麦克风条目（id `voice-input`，order 20）：浏览器用 `MediaRecorder` 录下一段话，经生成的 `voiceInput` Remote 命名空间上传到 Host，再把返回的转写文本追加到会话草稿。
+
+## 目录
+
+- [概览](#overview)
+- [一段录音的旅程](#how-one-utterance-travels)
+- [表现层状态与文案](#presentation-state-and-copy)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
+
+-----
+
+<a id="overview"></a>
+## 概览
 
 这是一个**表现层**包。它不注册工具、不注册 prompt 片段、不产生 session 事件。转写本身归 [`@deepseek-ai/dsh-voice-input`](../../transcription/voice-input/README.zh.md) 及其背后的 transcription seam；本包只拥有录音手势、上传这一跳，以及失败文案。
 
 客户端插件先依赖稳定的服务面（`slots`、`remote` 和 `locale`）启动，仅在 `remote.voiceInput` 出现后安装 composer 条目。`api-remotes` 异步挂载生成的 Remote 命名空间；把 `remote.voiceInput` 当作静态插件注入会把合法的启动顺序误判成插件加载失败。HMR 撤回命名空间时，子注入作用域也会随之释放。
 
+<a id="how-one-utterance-travels"></a>
 ## 一段录音的旅程
 
 指针按下开始录音、松开发送；键盘激活改为切换语义——键盘无法表达「仍在按住」，因此 Enter 或 Space 开始录音，再按一次发送。两种手势落在同一对 start/stop 上，所以该控件完全可以不用指针操作。
@@ -24,12 +46,14 @@ RPC 层只走 JSON，因此录音字节以规范 base64 放在普通请求里。
 
 音频字节及其 base64 编码从不进入 console，任何录音在其调用结束后都不再保留。
 
+<a id="presentation-state-and-copy"></a>
 ## 表现层状态与文案
 
 录音、上传、失败状态都是组件本地状态——这里没有跨条目共享、也没有需要跨重挂载存活的事实，因此不声明 store。控件带有随阶段变化的可访问名称、录音时的 `aria-pressed`、上传时的 `aria-busy`，以及一个 polite live region 播报每次阶段变化与结果；失败文本另外可见地呈现给视力用户，并置于可访问性树之外，以免被播报两次。
 
 所有文案在 `voiceInput` 命名空间内本地化（zh 为键集事实来源，en 按其键集校验完整）。每个 Host 业务失败码都有自己的一行文案：`provider-unconfigured` 告诉用户本部署没有配置转写凭据，请去配置。文案不点名提供方——transcription seam 接受任何注册的提供方，Groq 只是随包默认的那一个。面向运维的 `detail` 字符串从不进入界面——它们是诊断信息而不是用户文案，而且长度不定的提供方消息放不进只有一行高的 composer 控件。
 
+<a id="model-experience"></a>
 ## Model Experience
 
 None, as 本包只是表现层，不注册工具、prompt 片段或 session 事件；转写文本作为普通用户文本落入 composer 草稿，只有人类随后发送的那条消息才成为模型可见内容，并且走的是既有的用户消息路径，该路径已负责记录。
@@ -40,7 +64,19 @@ None, as 本包只是表现层，不注册工具、prompt 片段或 session 事�
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
 - **不发送语言提示** — 请求中可选的 `language` 字段留空，由提供方自行检测语言。客户端插件的浏览器端收不到 cordis `config`（boot manifest 只携带 id、url、rev、inject、immediately 与 external），因此无法把部署选定的语言送到这里；而当前 UI 语言只是显示偏好，不能作为用户所说语言的证据。
 - **过长的录音只有在上传之后才被拒绝** — 音频字节上限归 transcription seam 所有，因此本消费方不自设上限，超限录音会先被编码上传，Host 再回以 `audio-too-large`。在客户端再设一份上限会让浏览器与 headless 部署产生分歧。
 - **一个条目、一段录音** — 录音或上传在途时，控件会拒绝第二次手势；没有待处理录音队列。
 - **整体接管 composer 时控件不可见** — 替换整个 InputBar 的待处理交互（提问或计划待审）会占用工具行，本条目随之消失，直到该交互结束。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者工作上下文——点击展开</summary>
+
+无。
+
+</details>

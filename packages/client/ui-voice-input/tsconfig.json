@@ -27,9 +27,6 @@
       "path": "../locale"
     },
     {
-      "path": "../runtime"
-    },
-    {
       "path": "../ui-conversation"
     },
     {

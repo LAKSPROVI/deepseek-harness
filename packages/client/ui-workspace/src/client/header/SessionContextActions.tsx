@@ -7,6 +7,7 @@
 
 import { useRef, useState, type KeyboardEvent } from 'react'
 import type { WorkspaceId, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   IconBranchOutline16, IconChevronDownOutline14, IconNewChatOutline16, IconRefreshOutline16,
@@ -39,12 +40,12 @@ export function SessionContextActions({
   // Find workspaceId for current session
   const currentWorkspaceId = useWorkspaces((state: WorkspaceSnapshot): WorkspaceId | undefined => {
     for (const ws of state.items) {
-      if (ws.sessionIds.includes(sessionId)) return ws.id
+      if (ws.sessionIds.includes(sessionId)) return ws.workspaceId
     }
     return undefined
   })
 
-  const sessionSummary = useSessions(state => state.byId[sessionId])
+  const sessionSummary = useSessions((state: SessionListState) => state.byId[sessionId])
 
   const handleStartClean = () => {
     setOpen(false)

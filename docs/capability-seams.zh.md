@@ -9,6 +9,15 @@
 
 ```mermaid
 flowchart LR
+  pkg_automation["automation"]
+  svc_automation["ctx.automation<br/>Persistent automation scheduler and Remote controller"]
+  pkg_client_ui_automation["client-ui-automation"]
+  pkg_transcription["transcription"]
+  svc_transcription["ctx.transcription<br/>Audio transcription provider registry"]
+  pkg_transcription_groq["transcription-groq"]
+  pkg_voice_input["voice-input"]
+  svc_voiceInput["ctx.voiceInput<br/>Browser voice-input Remote controller"]
+  pkg_client_ui_voice_input["client-ui-voice-input"]
   pkg_attachment["attachment"]
   svc_attachments["ctx.attachments<br/>Durable binary attachment storage"]
   pkg_attachment_local["attachment-local"]
@@ -240,6 +249,7 @@ flowchart LR
   pkg_attachment --> svc_attachments
   pkg_attachment_local --> svc_attachments
   pkg_authorization --> svc_authorization
+  pkg_automation --> svc_automation
   pkg_bash_local --> svc_shell
   pkg_bash_sandbox --> svc_shell
   pkg_client_file_upload --> svc_fileUploads
@@ -330,9 +340,12 @@ flowchart LR
   pkg_token_meter --> svc_tokenMeter
   pkg_tool_subagent --> svc_subagentModelSelection
   pkg_tools --> svc_tools
+  pkg_transcription --> svc_transcription
+  pkg_transcription_groq --> svc_transcription
   pkg_typert_registry --> svc_typert
   pkg_user_approval --> svc_approval
   pkg_user_questions --> svc_userQuestions
+  pkg_voice_input --> svc_voiceInput
   pkg_web --> svc_web
   pkg_web_fetch_http --> svc_web
   pkg_web_search_deepseek --> svc_web
@@ -359,6 +372,7 @@ flowchart LR
   svc_attachments --> pkg_llm_pi_ai
   svc_attachments --> pkg_tool_fs
   svc_authorization --> pkg_llm_pi_ai
+  svc_automation --> pkg_client_ui_automation
   svc_clientModules --> pkg_client_hmr
   svc_codeRuntime --> pkg_tools
   svc_compaction --> pkg_compaction_basic
@@ -456,9 +470,11 @@ flowchart LR
   svc_tools --> pkg_tool_terminal
   svc_tools --> pkg_tool_todo
   svc_tools --> pkg_tool_web
+  svc_transcription --> pkg_voice_input
   svc_typert --> pkg_api_gateway
   svc_typert --> pkg_typert_loader
   svc_userQuestions --> pkg_tool_ask_user
+  svc_voiceInput --> pkg_client_ui_voice_input
   svc_web --> pkg_tool_web
   svc_webServer --> pkg_client_connection
   svc_webServer --> pkg_client_hmr
@@ -473,6 +489,9 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.automation` | `core` | [`automation`](../packages/automation/automation) | - | `client-ui-automation` | - | 持有持久化任务状态、周期调度计算、执行分发以及浏览器安全的 Remote 操作。 |
+| `ctx.transcription` | `seam` | [`transcription`](../packages/transcription/transcription) | [`transcription-groq`](../packages/transcription/transcription-groq) | [`voice-input`](../packages/transcription/voice-input) | - | provider 注册音频转写实现；voice-input 服务为浏览器录音选择一个 provider。 |
+| `ctx.voiceInput` | `core` | [`voice-input`](../packages/transcription/voice-input) | - | [`client-ui-voice-input`](../packages/client/ui-voice-input) | - | 校验浏览器音频请求，并通过生成的 Remote 命名空间投影转写结果。 |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | [`api-session-controller`](../packages/api/session-controller), [`tool-fs`](../packages/fs/tool-fs), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-deepseek`](../packages/llm/llm-deepseek) | - | 宿主会在会话事件之前提交已接受的图片；提供方适配器将已授权的持久引用解析为提供方原生内容。 |
 | `ctx.fileUploads` | `core` | [`client-file-upload`](../packages/client/file-upload) | - | [`api-session-controller`](../packages/api/session-controller) | - | 负责流式接收、持久存储和暂存回执生命周期；Session Controller 将回执绑定到已接受的提交。 |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | 适配器注册提供方实现；agent loop（智能体循环）与压缩功能调用提供方无关的流服务。 |

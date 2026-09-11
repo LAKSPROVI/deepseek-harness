@@ -23,10 +23,10 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from '../tree.ts'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, owningGroupKey, UNGROUPED_KEY,
+  deriveFlat, deriveGroups, deriveRecentAndInProgress, deriveSearchResults, owningGroupKey, UNGROUPED_KEY,
 } from '../tree.ts'
-import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
-import { FLAT_SESSION_ORDER_KEY } from '../stores.ts'
+import { ProjectRowItem, RecentSessionNodeItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
+import { FLAT_SESSION_ORDER_KEY, type CustomSessionStatus } from '../stores.ts'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
 
@@ -270,6 +270,12 @@ type SessionTreeProps = Pick<
   revealSessionId?: SessionId | undefined
   /** Acknowledge that the chosen Session row has been revealed. */
   onSessionRevealed: (sessionId: SessionId) => void
+  completedSessions: Readonly<Record<string, boolean>>
+  unreadSessions: Readonly<Record<string, boolean>>
+  customSessionStatuses: Readonly<Record<string, CustomSessionStatus | undefined>>
+  onToggleUnread: (sessionId: SessionId) => void
+  onToggleCompleted: (sessionId: SessionId) => void
+  onSetStatus: (sessionId: SessionId, status: CustomSessionStatus) => void
 }
 
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
@@ -281,6 +287,7 @@ function SessionTree({
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
   revealSessionId, onSessionRevealed,
+  completedSessions, unreadSessions, customSessionStatuses, onToggleUnread, onToggleCompleted, onSetStatus,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const pendingInteractions = useSessionPendingInteraction(s => s)
@@ -353,6 +360,9 @@ function SessionTree({
   const groups = useMemo(
     () => deriveGroups(list, orderedWorkspaces, archivedSessionIds, pendingInteractions, {
       expandedGroups,
+      completedSessions,
+      unreadSessions,
+      customSessionStatuses,
       ...(sessionOrderByAccount[UNGROUPED_KEY] === undefined
         ? {}
         : { ungroupedOrder: sessionOrderByAccount[UNGROUPED_KEY] }),
@@ -587,6 +597,9 @@ function SessionTree({
                     onRename={onSessionRename}
                     onFork={forkSession}
                     onArchive={onSessionArchive}
+                    onToggleUnread={onToggleUnread}
+                    onToggleCompleted={onToggleCompleted}
+                    onSetStatus={onSetStatus}
                     onReveal={node.id === revealSessionId && group.key === revealGroup
                       ? () => { onSessionRevealed(node.id) }
                       : undefined}
@@ -621,7 +634,8 @@ function FlatList({
   useSessions, useSessionPendingInteraction, open, forkSession, onSessionRename, onSessionArchive,
   archivedSessionIds,
   orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
-  revealSessionId, onSessionRevealed, t,
+  revealSessionId, onSessionRevealed, completedSessions, unreadSessions, customSessionStatuses,
+  onToggleUnread, onToggleCompleted, onSetStatus, t,
 }: Pick<
   SessionTreeProps,
   | 'useSessions'
@@ -638,13 +652,19 @@ function FlatList({
   | 'setSessionOrder'
   | 'revealSessionId'
   | 'onSessionRevealed'
+  | 'completedSessions'
+  | 'unreadSessions'
+  | 'customSessionStatuses'
+  | 'onToggleUnread'
+  | 'onToggleCompleted'
+  | 'onSetStatus'
   | 't'
 >) {
   const list = useSessions(s => s)
   const pendingInteractions = useSessionPendingInteraction(s => s)
   const baseRows = useMemo(
-    () => deriveFlat(list, archivedSessionIds, pendingInteractions),
-    [list, archivedSessionIds, pendingInteractions],
+    () => deriveFlat(list, archivedSessionIds, pendingInteractions, { completedSessions, unreadSessions, customSessionStatuses }),
+    [list, archivedSessionIds, pendingInteractions, completedSessions, unreadSessions, customSessionStatuses],
   )
   const sessionIds = useMemo(() => baseRows.map(row => row.id), [baseRows])
   const previousOrderBy = useRef(orderBy)
@@ -712,6 +732,9 @@ function FlatList({
               onRename={onSessionRename}
               onFork={forkSession}
               onArchive={onSessionArchive}
+              onToggleUnread={onToggleUnread}
+              onToggleCompleted={onToggleCompleted}
+              onSetStatus={onSetStatus}
               onReveal={node.id === revealSessionId
                 ? () => { onSessionRevealed(node.id) }
                 : undefined}
@@ -869,6 +892,14 @@ export function WorkspaceBrowser({
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
   const sessionUpdatedAtByAccount = useStore(s => s.sessionUpdatedAtByAccount)
+  const completedSessions = useStore(s => s.completedSessions)
+  const unreadSessions = useStore(s => s.unreadSessions)
+  const customSessionStatuses = useStore(s => s.customSessionStatuses)
+  const recentList = useSessions(s => s)
+  const recentPendingInteractions = useSessionPendingInteraction(s => s)
+  const recentNodes = useMemo(() => deriveRecentAndInProgress(
+    recentList, archivedSessionIds, recentPendingInteractions, { completedSessions, unreadSessions, customSessionStatuses }, 6,
+  ), [recentList, archivedSessionIds, recentPendingInteractions, completedSessions, unreadSessions, customSessionStatuses])
   const currentBlankSessionId = useSessions((state) => {
     const current = state.current
     return current !== undefined && state.byId[current]?.blank === true ? current : undefined
@@ -1248,6 +1279,33 @@ export function WorkspaceBrowser({
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
       <div className={css.listArea}>
+        {wide && normalizedQuery === '' && recentNodes.length > 0 && (
+          <section className={css.recentSection} aria-label={t('section.recentAndInProgress')}>
+            <div className={css.recentSectionHeader}>
+              <span className={css.recentSectionLabel}>{t('section.recentAndInProgress')}</span>
+              <span className={css.recentCount}>{recentNodes.length}</span>
+            </div>
+            <div className={css.recentList} role="tree">
+              {recentNodes.map(node => (
+                <RecentSessionNodeItem
+                  key={`recent-${node.id}`}
+                  node={node}
+                  workspaceName={workspaces.find(workspace => workspace.sessionIds.includes(node.id))?.title ?? t('group.ungrouped')}
+                  currentId={recentList.current}
+                  now={Date.now()}
+                  onOpen={open}
+                  onRename={onSessionRename}
+                  onFork={forkSession}
+                  onArchive={onSessionArchive}
+                  onToggleUnread={(sessionId) => { actions.toggleUnreadSession(sessionId) }}
+                  onToggleCompleted={(sessionId) => { actions.toggleCompletedSession(sessionId) }}
+                  onSetStatus={(sessionId, status) => { actions.setSessionStatus(sessionId, status) }}
+                  t={t}
+                />
+              ))}
+            </div>
+          </section>
+        )}
         {wide && (normalizedQuery !== ''
           ? (
             <SearchResults
@@ -1276,6 +1334,12 @@ export function WorkspaceBrowser({
                 setSessionOrder={actions.setSessionOrder}
                 revealSessionId={revealSessionId}
                 onSessionRevealed={acknowledgeSessionReveal}
+                completedSessions={completedSessions}
+                unreadSessions={unreadSessions}
+                customSessionStatuses={customSessionStatuses}
+                onToggleUnread={(sessionId) => { actions.toggleUnreadSession(sessionId) }}
+                onToggleCompleted={(sessionId) => { actions.toggleCompletedSession(sessionId) }}
+                onSetStatus={(sessionId, status) => { actions.setSessionStatus(sessionId, status) }}
                 t={t}
               />
             )
@@ -1303,6 +1367,12 @@ export function WorkspaceBrowser({
                 revealSessionId={revealSessionId}
                 onSessionRevealed={acknowledgeSessionReveal}
                 home={home}
+                completedSessions={completedSessions}
+                unreadSessions={unreadSessions}
+                customSessionStatuses={customSessionStatuses}
+                onToggleUnread={(sessionId) => { actions.toggleUnreadSession(sessionId) }}
+                onToggleCompleted={(sessionId) => { actions.toggleCompletedSession(sessionId) }}
+                onSetStatus={(sessionId, status) => { actions.setSessionStatus(sessionId, status) }}
                 t={t}
                 onRenameRequest={(workspaceId, currentTitle) => {
                   setRenameTarget({ workspaceId, currentTitle })

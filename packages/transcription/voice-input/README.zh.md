@@ -1,8 +1,31 @@
+---
+description: "浏览器语音输入的 Host 端：解码一次 base64 上传，经接缝转写，并返回文本或稳定的失败。"
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-voice-input
 
 [English](README.md) | 中文
 
+## 概述
+
 **`VoiceInputService`**（`ctx.voiceInput`）是某个浏览器功能的 Host 一端：它接收一次 base64 音频上传，解码后交由 [transcription 能力 seam](../transcription/README.zh.md) 转写，并返回转写文本或一个稳定的业务失败。
+
+## 目录
+
+- [概览](#overview)
+- [Remote API（`ctx.remote.voiceInput`）](#remote-api-ctx-remote-voiceinput)
+- [上传内容](#the-upload)
+- [失败](#failures)
+- [策略归属](#policy-ownership)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
+
+-----
+
+<a id="overview"></a>
+## 概览
 
 本包承担该能力的 Consumer 角色：
 
@@ -14,6 +37,7 @@
 
 音频只是临时数据：解码后的字节仅存活于一次调用期间，不进入任何会话事件与存储，返回结果后也不保留。
 
+<a id="remote-api-ctx-remote-voiceinput"></a>
 ## Remote API（`ctx.remote.voiceInput`）
 
 | 成员 | 语义 |
@@ -24,6 +48,7 @@
 
 预期失败是返回联合中的一个值；基础设施错误则原样重新抛出，因此提供方内部的缺陷表现为 reject，而不是变成浏览器会当作用户可见提示渲染的业务 code。
 
+<a id="the-upload"></a>
 ## 上传内容
 
 | 字段 | 含义 |
@@ -36,6 +61,7 @@
 
 成功值携带 `text`，以及提供方报告了语言时的 `language`。两者都原样来自 seam 的 `TranscriptionResult`；静音时 `text` 为空字符串。完整的请求、值与失败声明见 [`src/types.ts`](src/types.ts)。
 
+<a id="failures"></a>
 ## 失败
 
 | `error.code` | 含义 |
@@ -48,12 +74,14 @@
 | `provider-failed` | 已联系到提供方，但它拒绝或未能完成转写。`detail` 转发提供方自己的消息。本包不识别的每个 `TranscriptionError` code 都归入此项，因为 seam 的 code 是可合并扩展的。 |
 | `aborted` | 转写在产生文本之前被取消，由 seam 报告为 `TRANSCRIPTION_ABORTED`。 |
 
+<a id="policy-ownership"></a>
 ## 策略归属
 
 本包不持有任何转写策略：载荷上限、提供方选择与转写文本的空白裁剪都归 `ctx.transcription`，因此直接调用该 seam 的 headless 部署执行完全相同的规则。`audio-too-large` 是 seam 的上限失败投射到 wire 上的结果，并补上测得的字节长度，使调用方能报告自己实际发送的大小。
 
 本包自己拥有的是：base64 编码校验、空提示的归一化、从 `TranscriptionError` code 到面向浏览器 code 的映射，以及「预期失败」与「重新抛出」之间的界限。
 
+<a id="model-experience"></a>
 ## 模型体验
 
 无，因为该服务只回应其调用方，不注册提示词、工具 schema 或会话事件；只有人类从输入框发送出去的转写文本才对模型可见，且经由本就会记录它的普通用户消息路径。
@@ -64,8 +92,20 @@
 
 ## 已知限制与暂缓事项
 
+<a id="known-limitations-and-deferred-work"></a>
+
 - **音频以 base64 膨胀后传输**：Remote wire 是 JSON，因此一次上传的体积约为录制字节长度的 4/3，并在请求中被完整缓冲。既没有二进制或 multipart 通路，也没有分块上传。
 - **没有流式或部分转写结果**：每次调用一段完整话语，与 seam 的单一操作一致。长录音在结束前不会产生任何反馈，也没有可渲染的进度或部分文本信号。
 - **上限按解码后的字节执行**：base64 文本远大于 `maxAudioBytes` 的请求仍会先被解码，再由 seam 拒绝，因此超限上传会被完整传输并完整解码后才失败。
 - **`detail` 把面向运维的文本带到浏览器**：`provider-unavailable`、`provider-unconfigured` 与 `provider-failed` 会转发 seam 或提供方自己的消息，其中包含凭据引用名称。部署方只应通过受信任或另行认证的边界暴露 Remote 网关。
 - **一次调用不留持久记录**：本包不追加会话事件，因此失败、被取消或被丢弃的转写无法从会话数据重建；让转写文本对模型可见的消费方自行负责记录。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者工作上下文——点击展开</summary>
+
+无。
+
+</details>

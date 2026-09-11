@@ -13,11 +13,13 @@
  */
 // Type-only: pulls the generated Remote API and ctx.remote merge through the Client assembly boundary.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type {} from '@deepseek-ai/dsh-voice-input/remote'
 // Type-only: pulls the ui-conversation SlotMap merge (the input.left entry).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { VoiceInputButton } from './VoiceInputButton.tsx'
 import type { VoiceInputInjected } from './slots.ts'
 import { en, zh } from './locales.ts'
@@ -40,7 +42,7 @@ export const inject = ['slots', 'remote', 'locale']
  * unconstrained and a bare register would race it.
  * @param ctx - client root context.
  */
-export function apply(ctx: ClientContext): void {
+export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-voice-input: dictionaries')
 
   // api-remotes mounts generated namespaces asynchronously. The desktop shell
@@ -49,7 +51,7 @@ export function apply(ctx: ClientContext): void {
   // fatal "failed to load plugins" screen. Install the slot contribution in a
   // child scope when the namespace appears; Cordis also disposes it if the
   // namespace is withdrawn during HMR.
-  ctx.inject(['remote.voiceInput'], (scope: ClientContext) => {
+  ctx.inject(['remote.voiceInput'], (scope: Context) => {
     scope.slots.inject('conversation.input.left', () => scope.slots.register({
       name: 'conversation.input.left',
       id: 'voice-input',

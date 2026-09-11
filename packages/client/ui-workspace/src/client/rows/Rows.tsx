@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   HoverCard, IconAlarmClockOutline16, IconArchiveOutline20, IconBranchOutline16,
-  IconEditOutline16, IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16,
+  IconCheckOutline16, IconChecklistOutline14, IconEditOutline16, IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16,
   IconPlusOutline16, IconTrashOutline16, IconTriangleRightFill14, Menu, relativeTime,
   StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -17,6 +17,7 @@ import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
+import type { CustomSessionStatus } from '../stores.ts'
 import css from './Rows.module.css'
 
 /** The standard locale seat, prop-passed from the browser root. */
@@ -220,7 +221,7 @@ function assertNever(value: never): never {
 }
 
 interface SessionStatus {
-  state: StateDotState
+  state: StateDotState | 'unread' | 'later' | 'finalized'
   label: string
 }
 
@@ -229,7 +230,7 @@ interface SessionStatus {
  * outranks completion reminders.
  */
 function sessionStatuses(
-  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'runningSubagentCount' | 'completed'>,
+  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'runningSubagentCount' | 'completed' | 'unread' | 'customStatus'>,
   t: RowTranslate,
 ): readonly [SessionStatus, ...SessionStatus[]] {
   const subagents: SessionStatus | undefined = node.runningSubagentCount === 0
@@ -259,11 +260,18 @@ function sessionStatuses(
     default: return assertNever(node.pendingInteraction)
   }
   if (pending !== undefined) return subagents === undefined ? [pending] : [pending, subagents]
+  if (node.customStatus === 'warning') {
+    const primary: SessionStatus = { state: 'warning', label: t('status.waitingDecision') }
+    return subagents === undefined ? [primary] : [primary, subagents]
+  }
   if (node.running) {
     const primary: SessionStatus = { state: 'ongoing', label: t('status.running') }
     return subagents === undefined ? [primary] : [primary, subagents]
   }
   if (subagents !== undefined) return [subagents]
+  if (node.customStatus === 'finalized') return [{ state: 'finalized', label: t('status.finalized') }]
+  if (node.customStatus === 'later') return [{ state: 'later', label: t('status.later') }]
+  if (node.unread) return [{ state: 'unread', label: t('status.unread') }]
   if (node.completed) return [{ state: 'done', label: t('status.completed') }]
   return [{ state: 'done', label: t('status.idle') }]
 }
@@ -272,7 +280,9 @@ function sessionStatuses(
 function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ...SessionStatus[]] }) {
   return (
     <>
-      <StateDot state={statuses[0].state} />
+      {statuses[0].state === 'unread' || statuses[0].state === 'later' || statuses[0].state === 'finalized'
+        ? <span data-state={statuses[0].state} className={clsx(css.dot, css[`dot${statuses[0].state[0]?.toUpperCase()}${statuses[0].state.slice(1)}`])} aria-hidden="true" />
+        : <StateDot state={statuses[0].state} />}
       {statuses.map(status => (
         <span className={css.visuallyHidden} key={status.label}>{status.label}</span>
       ))}
@@ -306,7 +316,9 @@ function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number;
       {!node.blank && <div className={css.hoverTime}>{hoverTimeLabel(node.updatedAt, now, t)}</div>}
       {statuses.map(status => (
         <div className={css.hoverStatus} key={status.label}>
-          <StateDot state={status.state} />
+          {status.state === 'unread' || status.state === 'later' || status.state === 'finalized'
+            ? <span data-state={status.state} className={clsx(css.dot, css[`dot${status.state[0]?.toUpperCase()}${status.state.slice(1)}`])} aria-hidden="true" />
+            : <StateDot state={status.state} />}
           <span>{status.label}</span>
         </div>
       ))}
@@ -376,9 +388,7 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
-export function SessionNodeItem({
-  node, currentId, now, onOpen, onRename, onFork, onArchive, onReveal, drag, flat = false, t,
-}: {
+export interface SessionNodeItemProps {
   node: SessionNode
   currentId: string | undefined
   now: number
@@ -389,6 +399,13 @@ export function SessionNodeItem({
   onFork: (id: SessionNode['id']) => void
   /** Archive this session (row menu action; commits without a dialog). */
   onArchive: (id: SessionNode['id']) => void
+  onToggleUnread?: ((id: SessionNode['id']) => void) | undefined
+  /** Compatibility name retained for callers of the original recent-tasks bar. */
+  onMarkUnread?: ((id: SessionNode['id']) => void) | undefined
+  onToggleCompleted?: ((id: SessionNode['id']) => void) | undefined
+  onSetStatus?: ((id: SessionNode['id'], status: CustomSessionStatus) => void) | undefined
+  /** Workspace badge shown by the fixed recent/in-progress section. */
+  workspaceName?: string | undefined
   /** Scroll this row into view after search navigation, then acknowledge it. */
   onReveal?: (() => void) | undefined
   /** Present only on draggable rows (workspace-group sessions outside search). */
@@ -396,14 +413,20 @@ export function SessionNodeItem({
   /** The row is rendered without a parent Workspace header. */
   flat?: boolean | undefined
   t: RowTranslate
-}) {
+}
+
+export function SessionNodeItem({
+  node, currentId, now, onOpen, onRename, onFork, onArchive, onToggleUnread, onToggleCompleted, onSetStatus,
+  onMarkUnread, workspaceName, onReveal, drag, flat = false, t,
+}: SessionNodeItemProps) {
   const row = node
   const title = displayTitle(node, t)
   const selected = node.id === currentId
   const statuses = sessionStatuses(node, t)
   const primaryStatus = statuses[0]
-  const showStatus = primaryStatus.state !== 'done' || row.completed
+  const showStatus = primaryStatus.state !== 'done' || row.completed || row.unread
   const [menuOpen, setMenuOpen] = useState(false)
+  const toggleUnread = onToggleUnread ?? onMarkUnread
   const rowRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (onReveal === undefined) return
@@ -414,6 +437,19 @@ export function SessionNodeItem({
   // touches the session log, so it is not styled as destructive and needs no
   // confirmation dialog.
   const sessionMenuItems = [
+    ...(onSetStatus === undefined ? [] : [
+      { id: 'set-ongoing', label: t('status.setOngoing'), icon: <StateDot state="ongoing" /> },
+      { id: 'set-warning', label: t('status.setWaitingDecision'), icon: <StateDot state="warning" /> },
+      { id: 'set-later', label: t('status.setLater'), icon: <span className={clsx(css.dot, css.dotLater)} /> },
+      { id: 'set-finalized', label: t('status.setFinalized'), icon: <span className={clsx(css.dot, css.dotFinalized)} /> },
+      { id: 'set-idle', label: t('status.clearStatus'), icon: <IconChecklistOutline14 size={16} /> },
+    ]),
+    ...(toggleUnread === undefined ? [] : [{
+      id: 'unread', label: row.unread ? t('menu.markRead') : t('menu.markUnread'), icon: <IconChecklistOutline14 size={16} />,
+    }]),
+    ...(onToggleCompleted === undefined ? [] : [{
+      id: 'completed', label: row.completed ? t('menu.markIncomplete') : t('menu.markCompleted'), icon: <IconCheckOutline16 size={16} />,
+    }]),
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
     // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
@@ -424,7 +460,7 @@ export function SessionNodeItem({
     <div
       ref={rowRef}
       className={clsx(
-        css.sessionRow, selected && css.selected, menuOpen && css.menuOpen,
+        css.sessionRow, workspaceName !== undefined && css.recentSessionRow, selected && css.selected, menuOpen && css.menuOpen,
         flat && !showStatus && css.flatSessionRowWithoutStatus,
         drag?.marker === 'before' && css.dropBefore, drag?.marker === 'after' && css.dropAfter,
       )}
@@ -464,6 +500,7 @@ export function SessionNodeItem({
           {showStatus && <SessionStatusDots statuses={statuses} />}
         </span>
       )}
+      {workspaceName !== undefined && <span className={css.workspaceBadge} title={workspaceName}>{workspaceName}</span>}
       <span className={css.title}>{title}</span>
       {row.hasActiveSchedule && <ActiveScheduleIndicator t={t} />}
       {/* A blank New Session row is a provisional placeholder: nothing has
@@ -482,6 +519,13 @@ export function SessionNodeItem({
               if (id === 'rename') onRename(node.id, row.title)
               if (id === 'fork') onFork(node.id)
               if (id === 'archive') onArchive(node.id)
+              if (id === 'unread') toggleUnread?.(node.id)
+              if (id === 'completed') onToggleCompleted?.(node.id)
+              if (id === 'set-ongoing') onSetStatus?.(node.id, 'ongoing')
+              if (id === 'set-warning') onSetStatus?.(node.id, 'warning')
+              if (id === 'set-later') onSetStatus?.(node.id, 'later')
+              if (id === 'set-finalized') onSetStatus?.(node.id, 'finalized')
+              if (id === 'set-idle') onSetStatus?.(node.id, 'idle')
             }}
             portal
             closeOnPointerLeave
@@ -510,4 +554,9 @@ export function SessionNodeItem({
       copiedLabel={t('hover.copied')}
     />
   )
+}
+
+/** Recent/in-progress row retaining its Workspace badge and the shared session controls. */
+export function RecentSessionNodeItem({ workspaceName, ...props }: SessionNodeItemProps & { workspaceName: string }) {
+  return <SessionNodeItem {...props} workspaceName={workspaceName} flat />
 }

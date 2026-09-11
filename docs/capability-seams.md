@@ -7,6 +7,15 @@ A service can be a core spine service, a swappable capability seam, or a bundle/
 
 ```mermaid
 flowchart LR
+  pkg_automation["automation"]
+  svc_automation["ctx.automation<br/>Persistent automation scheduler and Remote controller"]
+  pkg_client_ui_automation["client-ui-automation"]
+  pkg_transcription["transcription"]
+  svc_transcription["ctx.transcription<br/>Audio transcription provider registry"]
+  pkg_transcription_groq["transcription-groq"]
+  pkg_voice_input["voice-input"]
+  svc_voiceInput["ctx.voiceInput<br/>Browser voice-input Remote controller"]
+  pkg_client_ui_voice_input["client-ui-voice-input"]
   pkg_attachment["attachment"]
   svc_attachments["ctx.attachments<br/>Durable binary attachment storage"]
   pkg_attachment_local["attachment-local"]
@@ -238,6 +247,7 @@ flowchart LR
   pkg_attachment --> svc_attachments
   pkg_attachment_local --> svc_attachments
   pkg_authorization --> svc_authorization
+  pkg_automation --> svc_automation
   pkg_bash_local --> svc_shell
   pkg_bash_sandbox --> svc_shell
   pkg_client_file_upload --> svc_fileUploads
@@ -328,9 +338,12 @@ flowchart LR
   pkg_token_meter --> svc_tokenMeter
   pkg_tool_subagent --> svc_subagentModelSelection
   pkg_tools --> svc_tools
+  pkg_transcription --> svc_transcription
+  pkg_transcription_groq --> svc_transcription
   pkg_typert_registry --> svc_typert
   pkg_user_approval --> svc_approval
   pkg_user_questions --> svc_userQuestions
+  pkg_voice_input --> svc_voiceInput
   pkg_web --> svc_web
   pkg_web_fetch_http --> svc_web
   pkg_web_search_deepseek --> svc_web
@@ -357,6 +370,7 @@ flowchart LR
   svc_attachments --> pkg_llm_pi_ai
   svc_attachments --> pkg_tool_fs
   svc_authorization --> pkg_llm_pi_ai
+  svc_automation --> pkg_client_ui_automation
   svc_clientModules --> pkg_client_hmr
   svc_codeRuntime --> pkg_tools
   svc_compaction --> pkg_compaction_basic
@@ -454,9 +468,11 @@ flowchart LR
   svc_tools --> pkg_tool_terminal
   svc_tools --> pkg_tool_todo
   svc_tools --> pkg_tool_web
+  svc_transcription --> pkg_voice_input
   svc_typert --> pkg_api_gateway
   svc_typert --> pkg_typert_loader
   svc_userQuestions --> pkg_tool_ask_user
+  svc_voiceInput --> pkg_client_ui_voice_input
   svc_web --> pkg_tool_web
   svc_webServer --> pkg_client_connection
   svc_webServer --> pkg_client_hmr
@@ -471,6 +487,9 @@ flowchart LR
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.automation` | `core` | [`automation`](../packages/automation/automation) | - | `client-ui-automation` | - | Owns durable task state, recurring schedule calculation, execution dispatch, and browser-safe Remote operations. |
+| `ctx.transcription` | `seam` | [`transcription`](../packages/transcription/transcription) | [`transcription-groq`](../packages/transcription/transcription-groq) | [`voice-input`](../packages/transcription/voice-input) | - | Providers register audio transcription implementations; the voice-input service selects one provider for browser recordings. |
+| `ctx.voiceInput` | `core` | [`voice-input`](../packages/transcription/voice-input) | - | [`client-ui-voice-input`](../packages/client/ui-voice-input) | - | Validates browser audio requests and projects transcription results through the generated Remote namespace. |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | [`api-session-controller`](../packages/api/session-controller), [`tool-fs`](../packages/fs/tool-fs), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-deepseek`](../packages/llm/llm-deepseek) | - | The host commits accepted images before session events; provider adapters resolve authorized durable references into provider-native content. |
 | `ctx.fileUploads` | `core` | [`client-file-upload`](../packages/client/file-upload) | - | [`api-session-controller`](../packages/api/session-controller) | - | Owns streaming intake, durable storage, and staged receipt lifetime; the Session controller binds receipts to accepted submissions. |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | Adapters register provider implementations; the loop and compaction call the provider-neutral stream service. |

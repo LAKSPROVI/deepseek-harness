@@ -14,6 +14,8 @@ export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
 export type SessionGroupBy = 'workspace' | 'flat'
 /** Session order: user-arranged only, or user-arranged plus activity promotion. */
 export type SessionOrderBy = 'manual' | 'updated'
+/** Browser-local status selected by the user for one session. */
+export type CustomSessionStatus = 'ongoing' | 'warning' | 'unread' | 'later' | 'completed' | 'finalized' | 'idle'
 
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
 type WorkspaceViewState = {
@@ -29,6 +31,8 @@ type WorkspaceViewState = {
   completedSessions: Record<string, boolean>
   /** User-marked unread sessions. */
   unreadSessions: Record<string, boolean>
+  /** Explicit user status, kept independently from live Host activity. */
+  customSessionStatuses: Record<string, CustomSessionStatus | undefined>
 }
 
 /**
@@ -51,6 +55,7 @@ type WorkspaceViewActions = {
   setSessionCompleted: (draft: WorkspaceViewState, sessionId: string, completed: boolean) => void
   toggleUnreadSession: (draft: WorkspaceViewState, sessionId: string) => void
   setSessionUnread: (draft: WorkspaceViewState, sessionId: string, unread: boolean) => void
+  setSessionStatus: (draft: WorkspaceViewState, sessionId: string, status: CustomSessionStatus) => void
 }
 
 /**
@@ -67,6 +72,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       sessionUpdatedAtByAccount: {},
       completedSessions: {},
       unreadSessions: {},
+      customSessionStatuses: {},
     }),
     persist: 'dsh.workspace.view.v6',
     actions: {
@@ -123,6 +129,11 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         if (unread && d.completedSessions) {
           d.completedSessions[sessionId] = false
         }
+      },
+      setSessionStatus: (d, sessionId: string, status: CustomSessionStatus) => {
+        d.customSessionStatuses[sessionId] = status === 'idle' ? undefined : status
+        d.completedSessions[sessionId] = status === 'completed' || status === 'finalized'
+        d.unreadSessions[sessionId] = status === 'unread'
       },
     },
   })

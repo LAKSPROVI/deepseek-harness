@@ -5,6 +5,9 @@
  */
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
+export const NS = 'workspace'
+
+/** Simplified Chinese dictionary for the Workspace browser. */
 export const zh = {
   'group.ungrouped': '未分组',
   'session.new': '新会话',
@@ -65,11 +68,15 @@ export const zh = {
   'status.planReview': '计划待审',
   'status.waitingAnswer': '等待回答',
   'status.completed': '已完成',
+  'status.finalized': '已结束',
+  'status.later': '稍后完成',
   'status.waitingDecision': '等待决定',
   'status.setOngoing': '进行中',
   'status.setWaitingDecision': '等待决定',
   'status.setUnread': '未读',
   'status.setCompleted': '已完成',
+  'status.setFinalized': '设为已结束',
+  'status.setLater': '稍后完成',
   'status.clearStatus': '清除状态 / 空闲',
   'notes.button.aria': '会话备注与待办提醒',
   'notes.button.label': '备注',
@@ -168,11 +175,15 @@ export const en = {
   'status.planReview': 'Aguardando revisão de plano',
   'status.waitingAnswer': 'Aguardando resposta',
   'status.completed': 'Concluída',
+  'status.finalized': 'Finalizada',
+  'status.later': 'Concluir depois',
   'status.waitingDecision': 'Aguardando decisão',
   'status.setOngoing': 'Em andamento',
   'status.setWaitingDecision': 'Aguardando decisão',
   'status.setUnread': 'Não lida',
   'status.setCompleted': 'Concluída',
+  'status.setFinalized': 'Marcar como finalizada',
+  'status.setLater': 'Concluir depois',
   'status.clearStatus': 'Limpar status / Ociosa',
   'notes.button.aria': 'Anotações e lembretes da sessão',
   'notes.button.label': 'Anotações',

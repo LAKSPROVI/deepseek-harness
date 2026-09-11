@@ -392,6 +392,17 @@
   color: #ADB2B8;
 }
 
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.dotUnread { background: #3b82f6; }
+.dotLater { background: #f59e0b; }
+.dotFinalized { background: #8b5cf6; }
+
 .iconButton {
   flex: none;
   display: inline-flex;

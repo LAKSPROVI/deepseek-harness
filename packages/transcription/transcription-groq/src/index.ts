@@ -10,7 +10,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import type {} from '@deepseek-ai/dsh-transcription'
 import {
@@ -66,7 +66,7 @@ export const Config: z<Config> = z.object({
 })
 
 /** Settings namespace carrying this provider's endpoint, model, and key reference. */
-export const TRANSCRIPTION_GROQ_SETTINGS_NAMESPACE = settingsNamespace('transcription-groq')
+export const TRANSCRIPTION_GROQ_SETTINGS_NAMESPACE = 'transcription-groq'
 
 /**
  * Project one resolved section into the options the provider serves its next
@@ -103,13 +103,15 @@ function resolveOptions(ctx: Context, config: Config): GroqTranscriptionProvider
 /** Register the Groq transcription provider with `ctx.transcription`. */
 export function apply(ctx: Context, config: Config): void {
   let current: () => Config = () => config
-  installSettingsSection(ctx, TRANSCRIPTION_GROQ_SETTINGS_NAMESPACE, Config, config, {
-    setSource: (source) => {
-      current = source
-    },
-    // The registration carries no resolved value: the provider projects the
-    // section per call, so a committed change needs no re-registration.
-    onChange: () => {},
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, TRANSCRIPTION_GROQ_SETTINGS_NAMESPACE, Config, config, {
+      setSource: (source: () => Config) => {
+        current = source
+      },
+      // The registration carries no resolved value: the provider projects the
+      // section per call, so a committed change needs no re-registration.
+      onChange: () => {},
+    })
   })
   ctx.transcription.registerProvider(new GroqTranscriptionProvider(() => resolveOptions(ctx, current())))
 }

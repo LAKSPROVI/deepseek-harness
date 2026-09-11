@@ -615,7 +615,7 @@ describe('VoiceInputButton transcription', () => {
 
   it('reports one connection line when the carrier itself failed', async () => {
     const ui = mount({
-      answer: { ok: false, error: { code: 'rpc-timeout', message: 'gateway went away', details: {} } },
+      answer: { ok: false, error: { code: 'gateway/internal', message: 'gateway went away', details: {} } } as Answer,
     })
 
     await ui.press()
@@ -916,7 +916,7 @@ describe('VoiceInputButton microphone release', () => {
     ['a container it refused', { recorderMimeType: 'audio/flac' }],
     ['a recording it could not read', { buffer: 'reject' as BufferMode }],
     ['a carrier failure', {
-      answer: { ok: false, error: { code: 'rpc-timeout', message: 'gone', details: {} } } as Answer,
+      answer: { ok: false, error: { code: 'gateway/internal', message: 'gone', details: {} } } as Answer,
     }],
     ['a business failure', {
       answer: { ok: true, value: { ok: false, error: { code: 'aborted' } } } as Answer,

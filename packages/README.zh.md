@@ -53,6 +53,7 @@ harness 由 `packages/` 下的 npm 包组装而成，按能力系列分组：会
 | [`workflow/`](workflow/README.zh.md) | 工作流 seam、worker 线程引擎、面向模型的 `workflow`/`ralph` 工具 |
 | [`webhook/`](webhook/README.zh.md) | 已验证外部事件、受信规则与即发即弃 Workspace Session |
 | [`web/`](web/README.zh.md) | Web 能力系列：seam、搜索/获取提供方、面向模型的 Web 工具 |
+| [`automation/`](automation/README.zh.md) | 持久化任务自动化引擎：调度器、worker、reaper 与 Web 面板的 Remote 命名空间 |
 | [`transcription/`](transcription/README.zh.md) | 转录能力系列：seam、Groq 提供方和浏览器语音输入 Remote |
 | [`attachment/`](attachment/README.zh.md) | 持久附件标识、校验、本地内容寻址存储 |
 | [`spill/`](spill/README.zh.md) | spill 能力系列：存储 seam、本地实现、工具结果 spill 策略 |

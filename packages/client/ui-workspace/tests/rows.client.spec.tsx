@@ -640,6 +640,7 @@ describe('workspace browser rows', () => {
       blank: false,
       running: true,
       runningSubagentCount: 0,
+      hasActiveSchedule: false,
       completed: false,
       unread: false,
       updatedAt: 1000,
@@ -686,6 +687,7 @@ describe('workspace browser rows', () => {
       blank: false,
       running: false,
       runningSubagentCount: 0,
+      hasActiveSchedule: false,
       completed: false,
       unread: true,
       updatedAt: 1000,
@@ -721,6 +723,7 @@ describe('workspace browser rows', () => {
       blank: false,
       running: false,
       runningSubagentCount: 0,
+      hasActiveSchedule: false,
       completed: true,
       unread: false,
       updatedAt: 1000,
@@ -747,5 +750,35 @@ describe('workspace browser rows', () => {
     fireEvent.click(screen.getByLabelText('会话“Done Task”的操作'))
     fireEvent.click(screen.getByRole('menuitem', { name: '标为未完成', hidden: true }))
     expect(onToggleCompleted).toHaveBeenCalledWith(sid('completed-1'))
+  })
+  // Custom "waiting decision" status: a user-set marker with no live pending
+  // interaction still surfaces as the warning dot, not as an idle row.
+  it('renders the custom waiting-decision status as a warning dot', () => {
+    const node: SessionNode = {
+      id: sid('warning-1'),
+      title: 'Decide Task',
+      blank: false,
+      running: false,
+      runningSubagentCount: 0,
+      hasActiveSchedule: false,
+      completed: false,
+      customStatus: 'warning',
+      updatedAt: 1000,
+    }
+    render(
+      <SessionNodeItem
+        node={node}
+        currentId={undefined}
+        now={2000}
+        onOpen={vi.fn()}
+        onRename={vi.fn()}
+        onFork={vi.fn()}
+        onArchive={vi.fn()}
+        t={t}
+      />,
+    )
+    const row = screen.getByRole('treeitem')
+    expect(row.querySelector('[data-state="warning"]')).toBeTruthy()
+    expect(row.querySelector('[data-state="done"]')).toBeNull()
   })
 })

@@ -112,6 +112,9 @@ export const SERVICE_PAGE: Record<string, string> = {
   jobs: 'jobs.md',
   sessionTelemetry: 'session-telemetry.md',
   agentTeams: 'agent-team.md',
+  automation: 'automation.md',
+  transcription: 'transcription.md',
+  voiceInput: 'transcription.md',
   tokenMeter: 'token-meter.md',
   toolResultPruner: 'compaction.md',
   tools: 'tools.md',
@@ -684,6 +687,8 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
+  AutomationTaskView: 'automation task projection is owned by packages/automation/automation/README.md',
+  AutomationTriggerReceipt: 'automation run receipt is owned by packages/automation/automation/README.md',
   BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   InsertReferenceRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   ConsumeTokenRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
@@ -742,7 +747,12 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   InvokeRemoteRequest: 'gateway invocation contract is owned by packages/api/gateway/README.md',
   LocaleDict: 'service-local dictionary fields are owned by packages/client/i18n/src/index.ts',
   ThemeTokens: 'service-local token dictionary is owned by packages/client/ui-theme/src/index.ts',
+  TranscriptionProvider: 'transcription provider contract is owned by packages/transcription/transcription/README.md',
+  TranscriptionRequest: 'transcription request contract is owned by packages/transcription/transcription/README.md',
+  TranscriptionResult: 'transcription result contract is owned by packages/transcription/transcription/README.md',
   Translate: 'service-local bound translator is owned by packages/client/i18n/src/index.ts',
+  VoiceInputTranscribeRequest: 'voice-input request contract is owned by packages/transcription/voice-input/README.md',
+  VoiceInputTranscribeResult: 'voice-input result contract is owned by packages/transcription/voice-input/README.md',
   WebUpgradeRoute:
     'upgrade route registration contract is owned by packages/host/webserver/src/index.ts',
   InvariantRegistration: 'service-local lifecycle handle is owned by packages/runtime-diagnostics/invariants/README.md',

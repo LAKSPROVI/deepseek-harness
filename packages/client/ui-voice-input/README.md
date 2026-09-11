@@ -1,13 +1,35 @@
+---
+description: "Push-to-talk microphone entry for the Web composer that uploads one utterance and appends the transcript to the draft."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-client-ui-voice-input
 
 English | [中文](README.zh.md)
 
+## Summary
+
 Push-to-talk voice input for the Web composer. The plugin contributes one microphone entry (id `voice-input`, order 20) to the conversation composer's `conversation.input.left` tool row: the browser records one utterance with `MediaRecorder`, uploads it to the Host over the generated `voiceInput` Remote namespace, and appends the returned transcript to the session draft.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [How one utterance travels](#how-one-utterance-travels)
+- [Presentation state and copy](#presentation-state-and-copy)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="overview"></a>
+## Overview
 
 This is a **presentation** package. It registers no tool, no prompt section, and no session event. Transcription itself belongs to [`@deepseek-ai/dsh-voice-input`](../../transcription/voice-input/README.md) and the transcription seam behind it; this package owns the recording gesture, the upload hop, and the failure copy.
 
 The client plugin activates from stable faces (`slots`, `remote`, and `locale`) and installs its composer contribution only when `remote.voiceInput` appears. Generated Remote namespaces are mounted asynchronously by `api-remotes`; treating `remote.voiceInput` as a static plugin injection turns valid startup ordering into a failed-plugin screen. The child injection scope is also withdrawn with the namespace during HMR.
 
+<a id="how-one-utterance-travels"></a>
 ## How one utterance travels
 
 A pointer press starts recording and a release sends it; keyboard activation toggles instead, because a keyboard cannot express "still holding" — Enter or Space starts, the next press sends. Both gestures land on the same start/stop pair, so the control is fully operable without a pointer.
@@ -24,12 +46,14 @@ Cancellation is real: the in-flight call carries an `AbortSignal` the gateway ho
 
 Audio bytes and their base64 encoding never reach the console, and no recording is retained after its call settles.
 
+<a id="presentation-state-and-copy"></a>
 ## Presentation state and copy
 
 Recording, uploading, and failure state are local component state — nothing here is shared across entries or survives a remount, so no store is declared. The control carries an accessible name that tracks its phase, `aria-pressed` while recording, `aria-busy` while uploading, and one polite live region that announces each phase change and outcome; failure text also renders visibly for sighted users, outside the accessibility tree so it is announced once.
 
 All copy is localized in the `voiceInput` namespace (zh as the key-set source of truth, en checked complete against it). Each Host business failure code renders as its own line: `provider-unconfigured` tells the user the deployment holds no transcription credential and to configure one. The copy names no provider, because the transcription seam accepts any registered provider and Groq is only the shipped default. Operator-facing `detail` strings never reach the UI — they are diagnostics, not user copy, and an arbitrary-length provider message does not fit a one-row composer control.
 
+<a id="model-experience"></a>
 ## Model Experience
 
 None, as this package is presentation only and registers no tool, prompt fragment, or session event; the transcript lands in the composer draft as ordinary user text, and only the message a human then sends becomes model-visible, through the user-message path that already logs it.
@@ -40,7 +64,19 @@ Independent of every model request: this package contributes no token to any req
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
 - **No language hint is sent** — the request's optional `language` field is left absent, so the provider detects the language. The browser half of a client plugin receives no cordis `config` (the boot manifest carries only id, url, rev, inject, immediately, and external), so a deployment-chosen language cannot be delivered here; the active UI locale is a display preference and not evidence of the language a user speaks.
 - **A long take is refused only after it uploads** — the audio-byte ceiling belongs to the transcription seam, so this consumer adds no cap of its own and an oversized take is encoded and sent before the Host answers `audio-too-large`. A duplicate client-side bound would let the browser and a headless deployment diverge.
 - **One entry, one recording** — the control refuses a second gesture while a recording or upload is in flight; there is no queue of pending takes.
 - **A whole-composer takeover hides the control** — a pending interaction that replaces the InputBar (a question or plan review) takes the tool row and this entry down with it until it resolves.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

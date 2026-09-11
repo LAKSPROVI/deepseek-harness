@@ -5,12 +5,10 @@
  * @module @deepseek-ai/dsh-voice-input/types
  */
 
-import type { TranscriptionAudioFormat } from '@deepseek-ai/dsh-transcription'
-
 /** One recorded utterance uploaded for transcription. */
 export interface VoiceInputTranscribeRequest {
   /** Container format of the recorded bytes, as the recorder declared it. */
-  readonly mediaType: TranscriptionAudioFormat
+  readonly mediaType: 'audio/webm' | 'audio/ogg' | 'audio/mp4' | 'audio/mpeg' | 'audio/wav'
   /** Canonical base64 encoding of the audio bytes; the Host verifies the encoding. */
   readonly data: string
   /** Optional language hint, e.g. `pt`; absent leaves detection to the provider. */
