@@ -33,6 +33,7 @@ import {
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
+import { RouterSyncPanel } from './RouterSyncPanel.tsx'
 import { deriveKeyRef, protocolChoices } from './store.ts'
 import type { ModelsOperations } from './operations.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
@@ -451,6 +452,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             {/* Both families edit the same rows through the same contract; only
                 the extras differ — DeepSeek's inherited capacities, pi-ai's
                 endpoint interrogation. */}
+            {props.provider === '9router' ? (
+              <RouterSyncPanel
+                operations={operations}
+                t={t}
+                disabled={disabled}
+              />
+            ) : null}
             {family === 'deepseek'
               ? (
                 <DeepSeekModelsEditor

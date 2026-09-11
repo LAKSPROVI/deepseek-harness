@@ -690,3 +690,134 @@ select.input {
   line-height: 20px;
   text-align: center;
 }
+/* 9Router Dynamic Synchronization Status Card */
+.syncPanel {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--dsw-alias-bg-module-platform);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.syncHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.syncTitle {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.syncBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.syncBadgeOperational {
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.syncBadgeStale {
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.syncBadgeFailed {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.syncBadgeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.syncMetrics {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.syncMetricRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.syncMetricLabel {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.syncMetricValue {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.syncWarning {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-warn-label);
+  padding: 6px 10px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  border-radius: 6px;
+}
+
+.syncError {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+  padding: 6px 10px;
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  border-radius: 6px;
+}
+
+.syncChips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.syncChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l2);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.syncActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}

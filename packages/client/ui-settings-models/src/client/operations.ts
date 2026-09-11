@@ -8,7 +8,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {
   CredentialInfo, LlmDiscoveredModel, LlmModelDiscoveryRequest,
-  SettingsNamespaceView, SettingsPathOpView,
+  RouterSyncStatus, SettingsNamespaceView, SettingsPathOpView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 
 /** What one namespace write answered. */
@@ -71,6 +71,16 @@ export interface ModelsOperations {
    * @returns the candidates, or the refusal.
    */
   discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<ModelDiscoveryOutcome>
+  /**
+   * Read current 9Router model catalog synchronization status.
+   * @returns latest status or undefined on refusal.
+   */
+  getRouterSyncStatus(): Promise<RouterSyncStatus | undefined>
+  /**
+   * Trigger immediate execution of 9Router synchronization script.
+   * @returns updated status or undefined on refusal.
+   */
+  triggerRouterSync(): Promise<RouterSyncStatus | undefined>
 }
 
 /**
@@ -104,6 +114,14 @@ export function createModelsOperations(ctx: ClientContext): ModelsOperations {
       return response.ok
         ? { kind: 'found', models: response.value }
         : { kind: 'refused', message: response.error.message }
+    },
+    getRouterSyncStatus: async () => {
+      const response = await ctx.remote.llm.routerSyncStatus()
+      return response.ok ? response.value : undefined
+    },
+    triggerRouterSync: async () => {
+      const response = await ctx.remote.llm.triggerRouterSync()
+      return response.ok ? response.value : undefined
     },
   }
 }

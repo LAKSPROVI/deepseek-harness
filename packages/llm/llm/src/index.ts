@@ -21,9 +21,11 @@ import type {
   LlmResolvedModelInfo,
   LlmProviderInfo,
   ModelModality,
+  RouterSyncStatus,
   StreamChunk,
   SystemPromptUpdate,
 } from './types.ts'
+import { executeRouterSync, readRouterSyncStatus } from './router-sync.ts'
 import { freezeMessage, type Message } from './message.ts'
 import { resolveRetryPolicy } from './retry-policy.ts'
 import type { ResolvedRetryPolicy } from './retry-policy.ts'
@@ -643,6 +645,24 @@ export class LlmRuntime extends TypertRemoteService {
         { cause: error },
       )
     }
+  }
+
+  /**
+   * Read current 9Router models synchronization telemetry and state.
+   * @returns latest status including timestamps, route counts, and telemetry.
+   */
+  @Remote
+  async routerSyncStatus(): Promise<RouterSyncStatus> {
+    return await readRouterSyncStatus()
+  }
+
+  /**
+   * Trigger immediate execution of the 9Router models synchronization script.
+   * @returns updated status after synchronization completes.
+   */
+  @Remote
+  async triggerRouterSync(): Promise<RouterSyncStatus> {
+    return await executeRouterSync()
   }
 
   /**

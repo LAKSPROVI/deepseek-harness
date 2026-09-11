@@ -455,3 +455,33 @@ export interface GenerateOptions {
    */
   purpose?: 'compaction' | 'session-title'
 }
+
+/** 9Router dynamic model catalog synchronization telemetry and health status. */
+export interface RouterSyncStatus {
+  /** Timestamp of the last local state synchronization, in ISO 8601 format. */
+  synchronizedAt?: string
+  /** Upstream 9Router monitor update timestamp, in ISO 8601 format. */
+  monitorUpdatedAt?: string
+  /** Total number of model routes discovered in upstream monitor data. */
+  totalRoutes: number
+  /** Number of active and available model routes in upstream monitor data. */
+  availableRoutes: number
+  /** Number of chat models published to DSH settings.yaml. */
+  publishedChatModels: number
+  /** Number of published models supporting visual input modalities. */
+  visionModels?: number
+  /** Number of published models supporting reasoning/thinking output. */
+  reasoningModels?: number
+  /** Fleet-wide average response latency in seconds across available models. */
+  averageLatencySeconds?: number
+  /** Whether the synchronization state is older than the stale threshold (24 hours). */
+  isStale: boolean
+  /** Exit code of the last synchronization task execution, if known. */
+  lastTaskResult?: number
+  /** Last execution timestamp of the synchronization scheduled task. */
+  lastTaskRunTime?: string
+  /** Current state of the synchronization scheduled task. */
+  taskState?: string
+  /** Human-readable error message if synchronization or reading failed. */
+  error?: string
+}
