@@ -67,16 +67,20 @@ export class AutomationService extends TypertRemoteService {
   /** Existing stale-run reaper. */
   readonly reaper: StaleTaskReaper
 
+  /** Store owner every Host-side caller (Chat tools, embedders) writes tasks for. */
+  readonly owner: string
+
   private readonly controller: AutomationController
 
   constructor(ctx: Context, config: AutomationServiceConfig) {
     super(ctx, 'automation', { namespace: 'automations' })
+    this.owner = config.userId ?? 'host'
     this.store = new FileAutomationStore(resolveStorePath(config.storePath))
     this.notifier = new NotificationService(this.store)
     this.worker = new TaskWorker(this.store, this.notifier)
     this.scheduler = new AutomationScheduler(this.store, this.worker, config.pollIntervalMs ?? 1_000)
     this.reaper = new StaleTaskReaper(this.store, this.notifier)
-    this.controller = new AutomationController(this.store, { userId: config.userId ?? 'host' })
+    this.controller = new AutomationController(this.store, { userId: this.owner })
     if (config.enabled ?? true) {
       ctx.effect(() => {
         this.scheduler.start()
@@ -202,6 +206,39 @@ export class AutomationService extends TypertRemoteService {
    */
   async resumeTask(taskId: string): Promise<AutomationTaskView> {
     return await this.controller.resume(taskId)
+  }
+
+  /**
+   * Existing Chat-tool entrypoint for a paused schedule.
+   *
+   * @param taskId Persisted automation task identifier.
+   * @returns Updated automation task view.
+   */
+  async pauseTask(taskId: string): Promise<AutomationTaskView> {
+    return await this.controller.pause(taskId)
+  }
+
+  /**
+   * Read one owned task as its Client projection.
+   *
+   * @param taskId Persisted automation task identifier.
+   * @returns Automation task view.
+   * @throws AutomationTaskNotFoundError when the task is absent or owned by someone else.
+   */
+  async taskView(taskId: string): Promise<AutomationTaskView> {
+    return await this.controller.view(taskId)
+  }
+
+  /**
+   * Delete one owned task and its runs; the ownership check runs before any write.
+   *
+   * @param taskId Persisted automation task identifier.
+   * @returns Whether the store held the task.
+   * @throws AutomationTaskNotFoundError when the task is absent or owned by someone else.
+   */
+  async deleteTask(taskId: string): Promise<boolean> {
+    await this.controller.task(taskId)
+    return await this.store.deleteTask(taskId)
   }
 
   /** Convert only expected owner checks into a stable Client-visible Remote failure. */

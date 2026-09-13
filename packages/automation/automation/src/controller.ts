@@ -75,6 +75,15 @@ export class AutomationController {
   }
 
   /**
+   * Project one owned task for the Client.
+   * @param taskId - task to read; must belong to the configured owner.
+   * @returns the task view.
+   */
+  async view(taskId: string): Promise<AutomationTaskView> {
+    return view(await this.owned(taskId))
+  }
+
+  /**
    * Return an owned task to a Host-only executor without exposing it to the Client.
    * @param taskId - task to read; must belong to the configured owner.
    * @returns the full durable task record.

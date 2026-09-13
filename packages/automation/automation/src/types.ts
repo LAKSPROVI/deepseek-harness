@@ -112,6 +112,8 @@ export interface TaskNotification {
 export interface TaskExecutionContext {
   readonly runId: string
   readonly taskId: string
+  /** Task title at dispatch time, for user-facing labels the handler produces. */
+  readonly taskTitle: string
   readonly attemptNumber: number
   readonly model?: string
   readonly modelProvider?: string

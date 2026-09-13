@@ -31,9 +31,22 @@ export class TaskWorker {
    * Register the executor for one `actionType`; a later registration replaces the earlier one.
    * @param actionType - key tasks reference in `actionType`.
    * @param handler - executor invoked with the task payload.
+   * @returns disposer that removes this handler unless a later registration already replaced it.
    */
-  public registerHandler(actionType: string, handler: ActionHandler): void {
+  public registerHandler(actionType: string, handler: ActionHandler): () => void {
     this.handlers.set(actionType, handler)
+    return () => {
+      if (this.handlers.get(actionType) === handler) this.handlers.delete(actionType)
+    }
+  }
+
+  /**
+   * Whether an executor is registered for one `actionType`.
+   * @param actionType - key tasks reference in `actionType`.
+   * @returns true when a handler would run.
+   */
+  public hasHandler(actionType: string): boolean {
+    return this.handlers.has(actionType)
   }
 
   /**
@@ -72,6 +85,7 @@ export class TaskWorker {
     const context: TaskExecutionContext = {
       runId: job.runId,
       taskId: job.taskId,
+      taskTitle: job.title,
       attemptNumber: job.attemptNumber,
       // Optional under `exactOptionalPropertyTypes`: omit rather than pass an
       // explicit `undefined`, which is a different type from an absent field.

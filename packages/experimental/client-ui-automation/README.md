@@ -74,7 +74,7 @@ No direct effect; the Host engine and any deployment-registered action handler o
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **No create or delete** — the Host exposes neither over Remote, so the panel cannot add or remove a task.
+- **No create or delete** — the Host exposes neither over Remote, so the panel cannot add or remove a task; the model does that through the `automation_*` tools.
 - **Reload on demand only** — the panel refreshes on open and after each action; it subscribes to no live event stream, so a scheduled run that finishes while the panel is open is visible only after the next reload.
 - **No run history** — the panel shows the task view only; run logs and notifications stay Host-side.
 - **English copy only** — the panel registers no locale dictionary yet.

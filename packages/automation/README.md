@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The Automation family runs scheduled tasks outside any live conversation turn: a file-backed store, a recurrence scheduler, an execution worker, a crash-recovery reaper, and a notification stream. One Host service owns all of it and publishes the `automations` Remote namespace the Web panel consumes.
+The Automation family runs scheduled tasks outside any live conversation turn: a file-backed store, a recurrence scheduler, an execution worker, a crash-recovery reaper, and a notification stream. One Host service owns all of it and publishes the `automations` Remote namespace the Web panel consumes; a tool package lets the model manage tasks, and a shipped executor turns a due task into a Session with a prompt.
 
 ## Table of Contents
 
@@ -25,6 +25,8 @@ The Automation family runs scheduled tasks outside any live conversation turn: a
 | Package | Role | ctx key |
 |---|---|---|
 | [`automation/`](automation/README.md) | Store, recurrence, worker, reaper, notifications, REST/SSE library exports, and the Cordis service | `ctx.automation` |
+| [`tool-automation/`](tool-automation/README.md) | Six model-facing `automation_*` tools a preset mounts | registers on `ctx.tools`, consumes `ctx.automation` |
+| [`automation-prompt-action/`](automation-prompt-action/README.md) | `CUSTOM_PROMPT` executor: a due task opens a Workspace Session and sends its prompt | registers on `ctx.automation.worker` |
 
 The browser panel lives in [`experimental/client-ui-automation`](../experimental/client-ui-automation/README.md) and consumes `ctx.remote.automations`.
 

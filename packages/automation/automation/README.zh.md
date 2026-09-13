@@ -117,7 +117,7 @@ kind: "package-reference"
 
 `AutomationService`（`ctx.automation`，[`src/service.ts`](src/service.ts)）是 Web profile 加载的 Cordis 入口。它根据配置中的 `storePath`（相对路径或 `~` 路径解析到 Harness home 即 `DSH_HOME` 之下，绝不解析到进程 cwd）组合存储、通知器、worker、调度器与 reaper，在 `enabled` 为 true 时把调度和滞留运行恢复作为一个 effect 启动，并发布 `automations` Typert Remote 命名空间，含四个方法：`list`、`trigger`、`pause`、`resume`。所有权在启动时固定（`userId`，默认 `host`）；浏览器从不提供身份，存在但属于其他所有者的任务以 `automation/not-found` 应答。
 
-[`@deepseek-ai/dsh-experimental-client-ui-automation`](../../experimental/client-ui-automation/README.zh.md) 挂载该命名空间，并把列表与控件渲染为会话 header 动作。`AutomationApiRouter` 与 `AutomationSseStreamer` 仍是库导出：Cordis 服务不会把它们挂到 `ctx.webServer`，需要 REST 路由或实时流的嵌入方自行接到自己的 HTTP 服务器。
+[`@deepseek-ai/dsh-experimental-client-ui-automation`](../../experimental/client-ui-automation/README.zh.md) 挂载该命名空间，并把列表与控件渲染为会话 header 动作。`AutomationApiRouter` 与 `AutomationSseStreamer` 仍是库导出：Cordis 服务不会把它们挂到 `ctx.webServer`，需要 REST 路由或实时流的嵌入方自行接到自己的 HTTP 服务器。面向模型的一侧位于两个同级包：[`tool-automation`](../tool-automation/README.zh.md)（preset 挂载的 `automation_*` 工具）与 [`automation-prompt-action`](../automation-prompt-action/README.zh.md)（host 平面的 `CUSTOM_PROMPT` 执行器）。
 
 -----
 
@@ -150,10 +150,9 @@ npx vitest run packages/automation/automation/tests
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **没有创建/删除的 Remote 方法** — `automations` 命名空间只暴露 `list`、`trigger`、`pause` 与 `resume`；任务通过嵌入方挂载的 `AutomationApiRouter` 或直接经存储 API 进入存储。
-- **没有 Chat 工具** — 引擎不注册任何模型可见内容；对话式调度延期到有工具包负责 schema 与结果渲染之后。
+- **没有创建/删除的 Remote 方法** — `automations` 命名空间只暴露 `list`、`trigger`、`pause` 与 `resume`；任务通过 [`@deepseek-ai/dsh-tool-automation`](../tool-automation/README.zh.md) 的 `automation_*` 工具、嵌入方挂载的 `AutomationApiRouter`，或直接经存储 API 进入存储。
 - **REST 路由与 SSE 流不由 Cordis 服务挂载** — 它们是库导出；Web profile 只暴露 Remote 命名空间。
-- **Web profile 不注册动作处理器** — `TaskWorker.registerHandler` 是接缝；`actionType` 没有处理器的触发运行会被记录为失败。
+- **只随附一个执行器** — [`@deepseek-ai/dsh-automation-prompt-action`](../automation-prompt-action/README.zh.md) 处理 `CUSTOM_PROMPT`；其他 `actionType` 需要部署方通过 `TaskWorker.registerHandler` 注册处理器，没有处理器的运行会被记录为失败。
 - **只有一个配置所有者** — `AutomationController` 只服务 Host 配置的 `userId`；多用户隔离尚未实现。
 - **`RRULE` 支持限于引擎解析的子集** — 不是完整的 RFC 5545 解析器；不支持的规则在计算下次运行时会失败而不是静默近似。
 

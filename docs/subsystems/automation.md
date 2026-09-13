@@ -8,9 +8,13 @@ The Automation subsystem owns durable scheduled tasks that run outside any live 
 
 A task carries a stable id, an owner, a display name, an action descriptor, an optional recurrence, and a lifecycle state (`ACTIVE`, `PAUSED`, `COMPLETED`, `ERROR`, `ARCHIVED`). Every execution appends a `TaskRun` record with its logs; the reaper sweeps runs left in `RUNNING` by a Host crash and marks them `TIMED_OUT` or `FAILED` so a restart never inherits a phantom lock. Ownership is enforced at the seam: a task id that exists but belongs to another owner surfaces as `automation/not-found`, never as a partial read.
 
+## Executor
+
+A due or triggered task runs through the handler registered for its `actionType` on the worker. The one the engine ships with, [`@deepseek-ai/dsh-automation-prompt-action`](../../packages/automation/automation-prompt-action/README.md), handles `CUSTOM_PROMPT`: it opens one ordinary root Session in the task's workspace, mounts the configured preset, and sends the task's prompt with an `automation` message source; the run is recorded successful once the prompt is admitted. A task whose `actionType` has no handler is recorded failed.
+
 ## Remote and Chat surfaces
 
-The `automations` Remote namespace exposes `list`, `trigger`, `pause`, and `resume`; `pause` and `resume` return the projected `AutomationTaskView` and `trigger` returns an `AutomationTriggerReceipt`, so the browser panel in [`packages/experimental/client-ui-automation`](../../packages/experimental/client-ui-automation/README.md) re-renders without a second read. Creating and deleting tasks is not exposed by the Cordis service: `AutomationApiRouter` and `AutomationSseStreamer` are library exports an embedder mounts on its own HTTP server, and no Chat tool exists yet. A task added through either path lands in the same store and appears in the panel on its next reload.
+The `automations` Remote namespace exposes `list`, `trigger`, `pause`, and `resume`; `pause` and `resume` return the projected `AutomationTaskView` and `trigger` returns an `AutomationTriggerReceipt`, so the browser panel in [`packages/experimental/client-ui-automation`](../../packages/experimental/client-ui-automation/README.md) re-renders without a second read. Creating and deleting tasks is the model's job through [`@deepseek-ai/dsh-tool-automation`](../../packages/automation/tool-automation/README.md), six `automation_*` tools an agent preset mounts; the Web bundle's `automation` preset carries them. `AutomationApiRouter` and `AutomationSseStreamer` remain library exports an embedder mounts on its own HTTP server. A task added through any path lands in the same store and appears in the panel on its next reload.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

@@ -8,9 +8,13 @@ Automation 子系统负责在任何实时对话轮次之外运行的持久化计
 
 任务包含稳定 id、所有者、显示名、动作描述、可选周期以及生命周期状态（`ACTIVE`、`PAUSED`、`COMPLETED`、`ERROR`、`ARCHIVED`）。每次执行追加一条带日志的 `TaskRun` 记录；reaper 扫描因 Host 崩溃而滞留在 `RUNNING` 的运行并标记为 `TIMED_OUT` 或 `FAILED`，因此重启永远不会继承幽灵锁。所有权在接缝处强制执行：存在但属于其他所有者的任务 id 以 `automation/not-found` 呈现，绝不会出现部分读取。
 
+## 执行器
+
+到期或被触发的任务通过 worker 上为其 `actionType` 注册的处理器运行。引擎随附的 [`@deepseek-ai/dsh-automation-prompt-action`](../../packages/automation/automation-prompt-action/README.zh.md) 处理 `CUSTOM_PROMPT`：在任务的工作区打开一个普通的根 Session，挂载配置的 preset，并以 `automation` 消息来源发送任务的 prompt；prompt 被接纳后运行即记录为成功。`actionType` 没有处理器的任务会被记录为失败。
+
 ## Remote 与 Chat 界面
 
-`automations` Remote 命名空间暴露 `list`、`trigger`、`pause` 与 `resume`；`pause` 与 `resume` 返回投影后的 `AutomationTaskView`，`trigger` 返回 `AutomationTriggerReceipt`，使 [`packages/experimental/client-ui-automation`](../../packages/experimental/client-ui-automation/README.zh.md) 中的浏览器面板无需二次读取即可重绘。Cordis 服务不暴露创建与删除任务：`AutomationApiRouter` 与 `AutomationSseStreamer` 是嵌入方挂到自己 HTTP 服务器上的库导出，Chat 工具尚不存在。经任一路径加入的任务落到同一份存储，并在面板下次重载时出现。
+`automations` Remote 命名空间暴露 `list`、`trigger`、`pause` 与 `resume`；`pause` 与 `resume` 返回投影后的 `AutomationTaskView`，`trigger` 返回 `AutomationTriggerReceipt`，使 [`packages/experimental/client-ui-automation`](../../packages/experimental/client-ui-automation/README.zh.md) 中的浏览器面板无需二次读取即可重绘。创建与删除任务是模型通过 [`@deepseek-ai/dsh-tool-automation`](../../packages/automation/tool-automation/README.zh.md) 完成的：六个由 agent preset 挂载的 `automation_*` 工具；Web bundle 的 `automation` preset 携带它们。`AutomationApiRouter` 与 `AutomationSseStreamer` 仍是嵌入方挂到自己 HTTP 服务器上的库导出。经任一路径加入的任务落到同一份存储，并在面板下次重载时出现。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

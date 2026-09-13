@@ -292,6 +292,26 @@ export interface Config {
 
 来源：[`packages/attachment/attachment-local/src/index.ts:61`](../packages/attachment/attachment-local/src/index.ts)
 
+<a id="deepseek-aidsh-automation-prompt-action"></a>
+
+## `@deepseek-ai/dsh-automation-prompt-action`
+
+需要：`automation` · `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry`
+
+```ts config-catalog
+/** Deployment policy for the Sessions this executor opens. */
+export interface Config {
+  /** Handler key registered on the worker; tasks reference it as `actionType`. */
+  readonly actionType?: string
+  /** Agent preset every run mounts; omitted, the roster default applies. */
+  readonly agentPreset?: string
+  /** Permission preset every run's Session gets; omitted, the deployment default applies. */
+  readonly permissionPreset?: string
+}
+```
+
+来源：[`packages/automation/automation-prompt-action/src/index.ts:53`](../packages/automation/automation-prompt-action/src/index.ts)
+
 <a id="deepseek-aidsh-bash-local"></a>
 
 ## `@deepseek-ai/dsh-bash-local`
@@ -3549,6 +3569,7 @@ export interface Config {
 - `@deepseek-ai/dsh-subprocess-local`（[`packages/subprocess/subprocess-local/src/index.ts`](../packages/subprocess/subprocess-local/src/index.ts)）
 - `@deepseek-ai/dsh-terminal`（[`packages/terminal/terminal/src/index.ts`](../packages/terminal/terminal/src/index.ts)）
 - `@deepseek-ai/dsh-tool-ask-user` — 需要 `tools` · `userInteraction`（[`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts)）
+- `@deepseek-ai/dsh-tool-automation` — 需要 `tools` · `automation`（[`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)）
 - `@deepseek-ai/dsh-tool-call-timeout-policy` — 需要 `tools`（[`packages/guard/timeout-policy/src/index.ts`](../packages/guard/timeout-policy/src/index.ts)）
 - `@deepseek-ai/dsh-tool-cordis` — 需要 `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect`（[`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts)）
 - `@deepseek-ai/dsh-tool-subagent-control` — 需要 `tools` · `subagents`（[`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts)）

@@ -79,6 +79,14 @@
         userId: 'host'
         enabled: true
 
+    # The one executor the engine ships with: a due `CUSTOM_PROMPT` task opens
+    # a root Session in its workspace and sends the prompt. Presets and
+    # permissions fall back to the roster and deployment defaults.
+    - id: automation-prompt-action
+      name: '@deepseek-ai/dsh-automation-prompt-action'
+      config:
+        actionType: CUSTOM_PROMPT
+
     # Host-owned Agent Teams domain and model controls. The browser companion
     # below mounts the generated Remote into the conversation header.
     - id: agent-team
@@ -533,5 +541,12 @@
 - insert:
     - id: agent-presets
       name: '@deepseek-ai/dsh-agent-presets'
+      inject: [webStartup]
       config:
         default: standard
+        # The bundle's own presets (`presets/` beside this file): versioned with
+        # the deployment and read-only like the shipped set, so a user preset
+        # claiming the same id is shadowed rather than trusted.
+        roots:
+          - path: !!js ctx.webStartup.presetRoot
+            trust: system

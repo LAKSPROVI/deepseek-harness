@@ -16,6 +16,7 @@ This table connects model-visible tool names to the plugin package and service s
 | Tool package | Model-visible names | Requires | Writes / affects | Shipped aliases | Deployment note |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
+| `@deepseek-ai/dsh-tool-automation` | `automation_create_task`, `automation_delete_task`, `automation_list_tasks`, `automation_pause_task`, `automation_resume_task`, `automation_trigger_task` | `ctx.tools`, `ctx.automation` | `tool/call`, `tool/result after the engine store or controller answers` | - | automation_create_task defaults to the CUSTOM_PROMPT action; the run itself is fire-and-forget and reaches the model only through a later list. |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`, `ctx.codeRuntime (execution time)`, `ctx.systemPrompt` | `tool/call`, `one tool/ptc-dispatch-start + tool/ptc-dispatch pair per bridged sub-call`, `tool/result` | - | Owned by the tool registry as a reserved transport outside filterable capability layers under `mode: ptc` / `mode: both` (see the PTC mode Agent Note). Under `ptc` it is the registry's only wire contribution; the other visible capabilities are declared in a generated SDK section in the loaded runtime's language, and a program calls them through bindings scheduled under the native concurrency contract (submission-ordered starts and policy; concurrency-safe bodies overlap up to `maxParallelSubCalls`) that re-enter the complete guarded tool pipeline and link each nested execution to this outer result. |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
 | `@deepseek-ai/dsh-tool-bash` | `bash` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The bash tool is the model-facing consumer of the bash executor seam. A `run_in_background` run registers with the generic `ctx.jobs` runtime and is collected/stopped through the `job_*` tools from `@deepseek-ai/dsh-tool-jobs`; the `enableRunInBackground` config (default true) removes the parameter entirely when disabled. |
@@ -114,6 +115,176 @@ Ask the user a concise question when you need confirmation, a choice, or missing
 Source: [`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts)
 
 ask_user_question pauses the tool call until the active UI provider returns a human answer.
+
+<a id="deepseek-aidsh-tool-automation"></a>
+
+## `@deepseek-ai/dsh-tool-automation`
+
+### `automation_create_task`
+
+Schedule a persistent task that survives restarts. By default the task opens a new session in a workspace and sends it `prompt` when due (action_type CUSTOM_PROMPT); the workspace defaults to this session's directory. schedule_expr depends on schedule_type: an ISO-8601 instant for ONCE, a number of seconds for INTERVAL, a five-field UTC cron line for CRON, or an RRULE string for RRULE.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Short human-readable task title."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional longer explanation shown in the task list."
+    },
+    "schedule_type": {
+      "type": "string",
+      "description": "How schedule_expr is read.",
+      "enum": [
+        "ONCE",
+        "INTERVAL",
+        "CRON",
+        "RRULE"
+      ]
+    },
+    "schedule_expr": {
+      "type": "string",
+      "description": "ISO instant, seconds, cron line, or RRULE, per schedule_type."
+    },
+    "timezone": {
+      "type": "string",
+      "description": "IANA zone for RRULE evaluation, e.g. America/Sao_Paulo. Defaults to UTC."
+    },
+    "max_runs": {
+      "type": "integer",
+      "description": "Stop after this many completed runs. Omit for an open-ended schedule."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Instruction the new session receives on each run. Required when action_type is CUSTOM_PROMPT."
+    },
+    "workspace_path": {
+      "type": "string",
+      "description": "Absolute workspace directory the run's session opens in. Defaults to this session's directory."
+    },
+    "action_type": {
+      "type": "string",
+      "description": "Executor key; defaults to CUSTOM_PROMPT. Another key needs a deployment-registered handler."
+    },
+    "action_payload": {
+      "type": "object",
+      "description": "Extra fields passed verbatim to the executor. For CUSTOM_PROMPT they merge with prompt and workspace_path.",
+      "additionalProperties": true,
+      "properties": {}
+    }
+  },
+  "required": [
+    "title",
+    "schedule_type",
+    "schedule_expr"
+  ]
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_delete_task`
+
+Delete a persistent task and its run history. This cannot be undone.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_list_tasks`
+
+List the persistent tasks this deployment owns, with status and next run time.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_pause_task`
+
+Pause a persistent task so the scheduler skips it until resumed.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_resume_task`
+
+Resume a paused persistent task; its next run is recalculated from now.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_trigger_task`
+
+Run a persistent task now, outside its schedule. Returns the run id; the run itself proceeds in the background.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+automation_create_task defaults to the CUSTOM_PROMPT action; the run itself is fire-and-forget and reaches the model only through a later list.
 
 <a id="deepseek-aidsh-tools"></a>
 

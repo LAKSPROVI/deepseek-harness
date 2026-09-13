@@ -116,7 +116,7 @@ Enterprise-grade task automation engine, complex recurrence scheduler, concurren
 
 `AutomationService` (`ctx.automation`, [`src/service.ts`](src/service.ts)) is the Cordis entry the Web profile loads. It composes the store, notifier, worker, scheduler, and reaper from the `storePath` in its config (a relative or `~` path resolves under the Harness home, `DSH_HOME`, never under the process cwd), starts scheduling and stale-run recovery as one effect when `enabled` is true, and publishes the `automations` Typert Remote namespace with four methods: `list`, `trigger`, `pause`, and `resume`. Ownership is fixed at boot (`userId`, default `host`); the browser never supplies an identity, and a task that exists but belongs to another owner answers `automation/not-found`.
 
-[`@deepseek-ai/dsh-experimental-client-ui-automation`](../../experimental/client-ui-automation/README.md) mounts that namespace and renders the list and controls as a conversation-header action. `AutomationApiRouter` and `AutomationSseStreamer` remain library exports: the Cordis service mounts neither on `ctx.webServer`, so an embedder that wants the REST routes or the live stream wires them to its own HTTP server.
+[`@deepseek-ai/dsh-experimental-client-ui-automation`](../../experimental/client-ui-automation/README.md) mounts that namespace and renders the list and controls as a conversation-header action. `AutomationApiRouter` and `AutomationSseStreamer` remain library exports: the Cordis service mounts neither on `ctx.webServer`, so an embedder that wants the REST routes or the live stream wires them to its own HTTP server. The model-facing side lives in two sibling packages: [`tool-automation`](../tool-automation/README.md) (the `automation_*` tools a preset mounts) and [`automation-prompt-action`](../automation-prompt-action/README.md) (the host-plane `CUSTOM_PROMPT` executor).
 
 -----
 
@@ -149,10 +149,9 @@ Independent of every model request: no task record or run log enters a request f
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **No create or delete Remote method** — the `automations` namespace exposes only `list`, `trigger`, `pause`, and `resume`; a task enters the store through `AutomationApiRouter` mounted by an embedder or through the store API directly.
-- **No Chat tools** — the engine registers nothing model-facing; conversational scheduling is deferred until a tool package owns the schema and the result rendering.
+- **No create or delete Remote method** — the `automations` namespace exposes only `list`, `trigger`, `pause`, and `resume`; a task enters the store through the `automation_*` tools of [`@deepseek-ai/dsh-tool-automation`](../tool-automation/README.md), `AutomationApiRouter` mounted by an embedder, or the store API directly.
 - **REST router and SSE stream are not mounted by the Cordis service** — they are library exports; the Web profile exposes only the Remote namespace.
-- **The Web profile registers no action handlers** — `TaskWorker.registerHandler` is the seam; a triggered run whose `actionType` has no handler is recorded as failed.
+- **One shipped executor** — [`@deepseek-ai/dsh-automation-prompt-action`](../automation-prompt-action/README.md) handles `CUSTOM_PROMPT`; any other `actionType` needs a deployment-registered handler through `TaskWorker.registerHandler`, and a run without one is recorded as failed.
 - **One configured owner** — `AutomationController` serves the Host-configured `userId` only; multi-user isolation is not implemented.
 - **`RRULE` support is the subset the engine parses** — it is not a complete RFC 5545 parser; an unsupported rule fails next-run calculation instead of silently approximating.
 

@@ -16,6 +16,7 @@ import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from '@deepseek-ai/dsh-agent-presets'
+import type {} from '@deepseek-ai/dsh-automation'
 import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { launchWebScaffold, type WebScaffold } from './scaffold.ts'
@@ -269,3 +270,42 @@ it('lets a preset producer reach the background-job registry', async () => {
     await handle.dispose()
   }
 }, 120_000)
+
+// Every preset the roster lists — the package's shipped set plus the bundle's
+// own root — must mount against THIS composition. A preset row naming a
+// package the bundle does not install, or a config the row's schema no longer
+// accepts, fails here instead of on a user's first session.
+it('mounts every preset the roster lists, and the automation preset carries the task tools', async () => {
+  scaffold = await launchWebScaffold({ deepSeekMissingCredential: true })
+  const ctx = scaffold.ctx
+  const presets = await ctx.agentPresets.list()
+  expect(presets.map(preset => preset.id)).toEqual(expect.arrayContaining(['standard', 'ptc', 'minimal', 'automation']))
+  for (const preset of presets) {
+    expect(preset.broken, preset.id).toBeUndefined()
+    const handle = await ctx.agents.create({
+      sessionId: SessionId(`shipped-preset-${preset.id}`),
+      meta: { cwd: scaffold.workspaceCwd, agentPreset: preset.id },
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, preset.id).then(() => undefined),
+    })
+    try {
+      const names = ctx.tools.schemas(handle.agent).map(schema => schema.name)
+      const automationTools = names.filter(name => name.startsWith('automation_')).sort()
+      if (preset.id === 'automation') {
+        expect(automationTools).toEqual([
+          'automation_create_task',
+          'automation_delete_task',
+          'automation_list_tasks',
+          'automation_pause_task',
+          'automation_resume_task',
+          'automation_trigger_task',
+        ])
+        // The host-plane executor is composed regardless of which preset is open.
+        expect(ctx.automation.worker.hasHandler('CUSTOM_PROMPT')).toBe(true)
+      } else {
+        expect(automationTools, preset.id).toEqual([])
+      }
+    } finally {
+      await handle.dispose()
+    }
+  }
+}, 180_000)

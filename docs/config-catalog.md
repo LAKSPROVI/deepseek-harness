@@ -290,6 +290,26 @@ export interface Config {
 
 Source: [`packages/attachment/attachment-local/src/index.ts:61`](../packages/attachment/attachment-local/src/index.ts)
 
+<a id="deepseek-aidsh-automation-prompt-action"></a>
+
+## `@deepseek-ai/dsh-automation-prompt-action`
+
+Requires: `automation` · `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry`
+
+```ts config-catalog
+/** Deployment policy for the Sessions this executor opens. */
+export interface Config {
+  /** Handler key registered on the worker; tasks reference it as `actionType`. */
+  readonly actionType?: string
+  /** Agent preset every run mounts; omitted, the roster default applies. */
+  readonly agentPreset?: string
+  /** Permission preset every run's Session gets; omitted, the deployment default applies. */
+  readonly permissionPreset?: string
+}
+```
+
+Source: [`packages/automation/automation-prompt-action/src/index.ts:53`](../packages/automation/automation-prompt-action/src/index.ts)
+
 <a id="deepseek-aidsh-bash-local"></a>
 
 ## `@deepseek-ai/dsh-bash-local`
@@ -3547,6 +3567,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-subprocess-local` ([`packages/subprocess/subprocess-local/src/index.ts`](../packages/subprocess/subprocess-local/src/index.ts))
 - `@deepseek-ai/dsh-terminal` ([`packages/terminal/terminal/src/index.ts`](../packages/terminal/terminal/src/index.ts))
 - `@deepseek-ai/dsh-tool-ask-user` — requires `tools` · `userQuestions` ([`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts))
+- `@deepseek-ai/dsh-tool-automation` — requires `tools` · `automation` ([`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts))
 - `@deepseek-ai/dsh-tool-call-timeout-policy` — requires `tools` ([`packages/guard/timeout-policy/src/index.ts`](../packages/guard/timeout-policy/src/index.ts))
 - `@deepseek-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
 - `@deepseek-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))

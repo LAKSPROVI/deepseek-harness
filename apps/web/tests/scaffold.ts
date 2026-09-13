@@ -64,6 +64,7 @@ import {
   type Profile,
 } from '@deepseek-ai/dsh-app-boot'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
+import { WEB_PRESET_ROOT } from '@deepseek-ai/dsh-web-app/startup'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
 import type {
   LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, RetryPolicyConfig, StreamChunk,
@@ -517,13 +518,15 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     ...surfacePatches,
     ...extraOverlayPatches,
     // The roster's shipped presets are the plugin's own, bundled inside
-    // `dsh-agent-presets` and prepended by it. Pin only the machine-local
+    // `dsh-agent-presets` and prepended by it, and the Web bundle's own root
+    // is a deployment fact this scaffold keeps. Pin only the machine-local
     // root away: a developer's own `~/.dsh/.agent-presets` must not be able
     // to change a golden.
     {
       id: 'agent-presets',
       config: {
         default: 'standard',
+        roots: [{ path: WEB_PRESET_ROOT, trust: 'system' }],
         includeUserRoot: false,
       },
     },
