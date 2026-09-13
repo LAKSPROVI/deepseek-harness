@@ -90,7 +90,7 @@
     # Host-owned Agent Teams domain and model controls. The browser companion
     # below mounts the generated Remote into the conversation header.
     - id: agent-team
-      name: '@deepseek-ai/dsh-experimental-agent-team'
+      name: '@deepseek-ai/dsh-agent-team'
       config:
         maxMembers: 8
         maxTasks: 256
@@ -99,7 +99,7 @@
         disposalTimeoutMs: 5000
 
     - id: tool-agent-team
-      name: '@deepseek-ai/dsh-experimental-tool-agent-team'
+      name: '@deepseek-ai/dsh-tool-agent-team'
       config:
         freshProvider: spawn
         forkProvider: fork
@@ -333,10 +333,10 @@
       name: '@deepseek-ai/dsh-client-ui-workspace'
 
     - id: ui-automation
-      name: '@deepseek-ai/dsh-experimental-client-ui-automation'
+      name: '@deepseek-ai/dsh-client-ui-automation'
 
     - id: ui-agent-team
-      name: '@deepseek-ai/dsh-experimental-client-ui-agent-team'
+      name: '@deepseek-ai/dsh-client-ui-agent-team'
 
     # Input triggers: the '/' | '@' pipeline (ui-input-trigger), the command surface over
     # it (ui-commands), and the reference sources (ui-skill / ui-reference).

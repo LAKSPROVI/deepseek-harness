@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-experimental-agent-team-profile` is a private profile layer that enables [Agent Teams](../agent-team/README.md) over `@deepseek-ai/dsh-base`. Its patch inserts the Team domain and Team-scoped tools, disables the overlapping global continuable-child controls, and keeps the ordinary fresh and fork delegation tools as one-shot operations. Add it explicitly to an initialized source-checkout profile; official releases exclude this package.
+`dsh-experimental-agent-team-profile` is a private profile layer that enables [Agent Teams](../../agent-team/agent-team/README.md) over `@deepseek-ai/dsh-base`. Its patch inserts the Team domain and Team-scoped tools, disables the overlapping global continuable-child controls, and keeps the ordinary fresh and fork delegation tools as one-shot operations. Add it explicitly to an initialized source-checkout profile; official releases exclude this package.
 
 ## Table of Contents
 
@@ -64,8 +64,8 @@ The package's runtime content is [`cordis.patch.yml`](cordis.patch.yml). Applied
 ## Further Exploration
 
 - [Experimental packages](../README.md) — incubation status and release exclusion.
-- [Agent Teams service](../agent-team/README.md) — durable roster, messaging, and task-board behavior.
-- [Agent Teams tools](../tool-agent-team/README.md) — the Team-scoped model tool surface.
+- [Agent Teams service](../../agent-team/agent-team/README.md) — durable roster, messaging, and task-board behavior.
+- [Agent Teams tools](../../agent-team/tool-agent-team/README.md) — the Team-scoped model tool surface.
 - [Base bundle](../../bundle/base/README.md) — the profile layer this patch extends.
 
 -----
@@ -77,7 +77,7 @@ The package's runtime content is [`cordis.patch.yml`](cordis.patch.yml). Applied
 
 #### What the model sees
 
-The Team policy and schemas belong to [`@deepseek-ai/dsh-experimental-tool-agent-team`](../tool-agent-team/README.md). This bundle changes composition only: Team-scoped `list_agents`, `send_message`, and `interrupt_agent` replace the disabled global continuable-child controls. `subagent` and `subagent_fork` remain available as one-shot delegation tools, whose children do not receive the continuable-child `report` tool.
+The Team policy and schemas belong to [`@deepseek-ai/dsh-tool-agent-team`](../../agent-team/tool-agent-team/README.md). This bundle changes composition only: Team-scoped `list_agents`, `send_message`, and `interrupt_agent` replace the disabled global continuable-child controls. `subagent` and `subagent_fork` remain available as one-shot delegation tools, whose children do not receive the continuable-child `report` tool.
 
 #### Token effect
 

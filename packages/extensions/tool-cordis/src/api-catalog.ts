@@ -624,6 +624,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
+        signature: 'readonly owner: string',
+        description: 'Store owner every Host-side caller (Chat tools, embedders) writes tasks for.',
+        parameters: [],
+      },
+      {
         signature: '@Remote(\'list\') async list(): Promise<readonly { readonly id: string readonly title: string readonly description?: string readonly scheduleType: \'ONCE\' | \'INTERVAL\' | \'CRON\' | \'RRULE\' readonly status: \'ACTIVE\' | \'PAUSED\' | \'COMPLETED\' | \'ERROR\' | \'ARCHIVED\' readonly nextRunAt: string | null readonly lastRunAt: string | null readonly totalRunsCompleted: number readonly maxRuns: number | null readonly createdAt: string readonly updatedAt: string }[]>',
         description: 'List the deployment owner\'s persisted tasks without modifying the store.',
         parameters: [],
@@ -658,6 +663,26 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Existing Chat-tool entrypoint for a resumed schedule.',
         parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
         returns: 'Updated automation task view.',
+      },
+      {
+        signature: 'async pauseTask(taskId: string): Promise<AutomationTaskView>',
+        description: 'Existing Chat-tool entrypoint for a paused schedule.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Updated automation task view.',
+      },
+      {
+        signature: 'async taskView(taskId: string): Promise<AutomationTaskView>',
+        description: 'Read one owned task as its Client projection.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Automation task view.',
+        throws: ['AutomationTaskNotFoundError when the task is absent or owned by someone else.'],
+      },
+      {
+        signature: 'async deleteTask(taskId: string): Promise<boolean>',
+        description: 'Delete one owned task and its runs; the ownership check runs before any write.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Whether the store held the task.',
+        throws: ['AutomationTaskNotFoundError when the task is absent or owned by someone else.'],
       },
     ],
   },
@@ -1314,6 +1339,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'settingsNs', description: 'namespace whose registered discovery serves this draft.' }, { name: 'request', description: 'endpoint, protocol, and one-shot credential to use.' }, { name: 'signal', description: 'caller cancellation supplied by the Remote carrier.' }],
         returns: 'advertised models in endpoint order.',
         throws: ['RemoteError with `llm/model-discovery-rejected` when discovery refuses or fails.'],
+      },
+      {
+        signature: '@Remote async routerSyncStatus(): Promise<RouterSyncStatus>',
+        description: 'Read current 9Router models synchronization telemetry and state.',
+        parameters: [],
+        returns: 'latest status including timestamps, route counts, and telemetry.',
+      },
+      {
+        signature: '@Remote async triggerRouterSync(): Promise<RouterSyncStatus>',
+        description: 'Trigger immediate execution of the 9Router models synchronization script.',
+        parameters: [],
+        returns: 'updated status after synchronization completes.',
       },
       {
         signature: 'providerRetryPolicy(provider: string): ResolvedRetryPolicy',
@@ -4657,7 +4694,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmRuntime',
-    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions) /* …truncated — full shape in source */',
+    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote\n    async routerSyncStatus(): Promise<RouterSyncStatus>;\n    @Remote\n    async triggerRouterSync(): Promise<RouterSyncStatus>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCall /* …truncated — full shape in source */',
   },
   {
     name: 'LspHover',
@@ -5054,6 +5091,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ResumeAgentOptions',
     declaration: 'export interface ResumeAgentOptions {\n    readonly resumeSessionId: SessionId;\n    readonly parentAgent?: Agent;\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
+  },
+  {
+    name: 'RouterSyncStatus',
+    declaration: 'export interface RouterSyncStatus {\n    synchronizedAt?: string;\n    monitorUpdatedAt?: string;\n    totalRoutes: number;\n    availableRoutes: number;\n    publishedChatModels: number;\n    visionModels?: number;\n    reasoningModels?: number;\n    averageLatencySeconds?: number;\n    isStale: boolean;\n    lastTaskResult?: number;\n    lastTaskRunTime?: string;\n    taskState?: string;\n    error?: string;\n}',
   },
   {
     name: 'RunnerFailureRule',
@@ -5981,7 +6022,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TaskExecutionContext',
-    declaration: 'export interface TaskExecutionContext {\n    readonly runId: string;\n    readonly taskId: string;\n    readonly attemptNumber: number;\n    readonly model?: string;\n    readonly modelProvider?: string;\n    readonly promptTemplate?: string;\n    log(message: string, level?: \'info\' | \'warn\' | \'error\'): void;\n}',
+    declaration: 'export interface TaskExecutionContext {\n    readonly runId: string;\n    readonly taskId: string;\n    readonly taskTitle: string;\n    readonly attemptNumber: number;\n    readonly model?: string;\n    readonly modelProvider?: string;\n    readonly promptTemplate?: string;\n    log(message: string, level?: \'info\' | \'warn\' | \'error\'): void;\n}',
   },
   {
     name: 'TaskLogEntry',
@@ -6009,7 +6050,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TaskWorker',
-    declaration: 'export class TaskWorker {\n    constructor(private readonly store: IAutomationStore, private readonly notifier: NotificationService);\n    public registerHandler(actionType: string, handler: ActionHandler): void;\n    public async executeJob(job: EnqueuedJobData): Promise<void>;\n}',
+    declaration: 'export class TaskWorker {\n    constructor(private readonly store: IAutomationStore, private readonly notifier: NotificationService);\n    public registerHandler(actionType: string, handler: ActionHandler): () => void;\n    public hasHandler(actionType: string): boolean;\n    public async executeJob(job: EnqueuedJobData): Promise<void>;\n}',
   },
   {
     name: 'TeamId',

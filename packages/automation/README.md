@@ -28,7 +28,7 @@ The Automation family runs scheduled tasks outside any live conversation turn: a
 | [`tool-automation/`](tool-automation/README.md) | Six model-facing `automation_*` tools a preset mounts | registers on `ctx.tools`, consumes `ctx.automation` |
 | [`automation-prompt-action/`](automation-prompt-action/README.md) | `CUSTOM_PROMPT` executor: a due task opens a Workspace Session and sends its prompt | registers on `ctx.automation.worker` |
 
-The browser panel lives in [`experimental/client-ui-automation`](../experimental/client-ui-automation/README.md) and consumes `ctx.remote.automations`.
+The browser panel lives in [`client/ui-automation`](../client/ui-automation/README.md) and consumes `ctx.remote.automations`.
 
 <a id="related-documentation"></a>
 ## Related documentation

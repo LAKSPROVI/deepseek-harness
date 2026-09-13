@@ -117,7 +117,7 @@ kind: "package-reference"
 
 `AutomationService`（`ctx.automation`，[`src/service.ts`](src/service.ts)）是 Web profile 加载的 Cordis 入口。它根据配置中的 `storePath`（相对路径或 `~` 路径解析到 Harness home 即 `DSH_HOME` 之下，绝不解析到进程 cwd）组合存储、通知器、worker、调度器与 reaper，在 `enabled` 为 true 时把调度和滞留运行恢复作为一个 effect 启动，并发布 `automations` Typert Remote 命名空间，含四个方法：`list`、`trigger`、`pause`、`resume`。所有权在启动时固定（`userId`，默认 `host`）；浏览器从不提供身份，存在但属于其他所有者的任务以 `automation/not-found` 应答。
 
-[`@deepseek-ai/dsh-experimental-client-ui-automation`](../../experimental/client-ui-automation/README.zh.md) 挂载该命名空间，并把列表与控件渲染为会话 header 动作。`AutomationApiRouter` 与 `AutomationSseStreamer` 仍是库导出：Cordis 服务不会把它们挂到 `ctx.webServer`，需要 REST 路由或实时流的嵌入方自行接到自己的 HTTP 服务器。面向模型的一侧位于两个同级包：[`tool-automation`](../tool-automation/README.zh.md)（preset 挂载的 `automation_*` 工具）与 [`automation-prompt-action`](../automation-prompt-action/README.zh.md)（host 平面的 `CUSTOM_PROMPT` 执行器）。
+[`@deepseek-ai/dsh-client-ui-automation`](../../client/ui-automation/README.zh.md) 挂载该命名空间，并把列表与控件渲染为会话 header 动作。`AutomationApiRouter` 与 `AutomationSseStreamer` 仍是库导出：Cordis 服务不会把它们挂到 `ctx.webServer`，需要 REST 路由或实时流的嵌入方自行接到自己的 HTTP 服务器。面向模型的一侧位于两个同级包：[`tool-automation`](../tool-automation/README.zh.md)（preset 挂载的 `automation_*` 工具）与 [`automation-prompt-action`](../automation-prompt-action/README.zh.md)（host 平面的 `CUSTOM_PROMPT` 执行器）。
 
 -----
 

@@ -46,7 +46,7 @@ describe('release families', () => {
     const members = releaseFamily('dsh').members(resolve(import.meta.dirname, '../..'))
 
     expect(members.some(member => member.directory.startsWith('packages/experimental/'))).toBe(false)
-    expect(members.map(member => member.name)).not.toContain('@deepseek-ai/dsh-experimental-agent-team')
+    expect(members.map(member => member.name)).not.toContain('@deepseek-ai/dsh-experimental-agent-team-profile')
   })
 
   it('excludes private applications from the publish set', () => {

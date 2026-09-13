@@ -959,6 +959,18 @@ async discoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, sig
 @Remote('discoverModels') async remoteDiscoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal, ): Promise<LlmDiscoveredModel[]>
 
 /**
+ * Read current 9Router models synchronization telemetry and state.
+ * @returns latest status including timestamps, route counts, and telemetry.
+ */
+@Remote async routerSyncStatus(): Promise<RouterSyncStatus>
+
+/**
+ * Trigger immediate execution of the 9Router models synchronization script.
+ * @returns updated status after synchronization completes.
+ */
+@Remote async triggerRouterSync(): Promise<RouterSyncStatus>
+
+/**
  * Resolve the retry policy captured when one provider route was registered.
  * @param provider - registered provider route to inspect.
  * @returns the provider-owned policy, with normal defaults already resolved.

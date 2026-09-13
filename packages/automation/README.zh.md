@@ -28,7 +28,7 @@ Automation 家族在任何实时对话轮次之外运行计划任务：基于文
 | [`tool-automation/`](tool-automation/README.zh.md) | preset 挂载的六个面向模型的 `automation_*` 工具 | 注册到 `ctx.tools`，消费 `ctx.automation` |
 | [`automation-prompt-action/`](automation-prompt-action/README.zh.md) | `CUSTOM_PROMPT` 执行器：到期任务打开 Workspace Session 并发送其 prompt | 注册到 `ctx.automation.worker` |
 
-浏览器面板位于 [`experimental/client-ui-automation`](../experimental/client-ui-automation/README.zh.md)，消费 `ctx.remote.automations`。
+浏览器面板位于 [`client/ui-automation`](../client/ui-automation/README.zh.md)，消费 `ctx.remote.automations`。
 
 <a id="related-documentation"></a>
 ## 相关文档

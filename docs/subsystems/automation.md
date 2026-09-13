@@ -14,7 +14,7 @@ A due or triggered task runs through the handler registered for its `actionType`
 
 ## Remote and Chat surfaces
 
-The `automations` Remote namespace exposes `list`, `trigger`, `pause`, and `resume`; `pause` and `resume` return the projected `AutomationTaskView` and `trigger` returns an `AutomationTriggerReceipt`, so the browser panel in [`packages/experimental/client-ui-automation`](../../packages/experimental/client-ui-automation/README.md) re-renders without a second read. Creating and deleting tasks is the model's job through [`@deepseek-ai/dsh-tool-automation`](../../packages/automation/tool-automation/README.md), six `automation_*` tools an agent preset mounts; the Web bundle's `automation` preset carries them. `AutomationApiRouter` and `AutomationSseStreamer` remain library exports an embedder mounts on its own HTTP server. A task added through any path lands in the same store and appears in the panel on its next reload.
+The `automations` Remote namespace exposes `list`, `trigger`, `pause`, and `resume`; `pause` and `resume` return the projected `AutomationTaskView` and `trigger` returns an `AutomationTriggerReceipt`, so the browser panel in [`packages/client/ui-automation`](../../packages/client/ui-automation/README.md) re-renders without a second read. Creating and deleting tasks is the model's job through [`@deepseek-ai/dsh-tool-automation`](../../packages/automation/tool-automation/README.md), six `automation_*` tools an agent preset mounts; the Web bundle's `automation` preset carries them. `AutomationApiRouter` and `AutomationSseStreamer` remain library exports an embedder mounts on its own HTTP server. A task added through any path lands in the same store and appears in the panel on its next reload.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -77,6 +77,32 @@ async triggerNow(taskId: string): Promise<AutomationTriggerReceipt>
  * @returns Updated automation task view.
  */
 async resumeTask(taskId: string): Promise<AutomationTaskView>
+
+/**
+ * Existing Chat-tool entrypoint for a paused schedule.
+ *
+ * @param taskId Persisted automation task identifier.
+ * @returns Updated automation task view.
+ */
+async pauseTask(taskId: string): Promise<AutomationTaskView>
+
+/**
+ * Read one owned task as its Client projection.
+ *
+ * @param taskId Persisted automation task identifier.
+ * @returns Automation task view.
+ * @throws AutomationTaskNotFoundError when the task is absent or owned by someone else.
+ */
+async taskView(taskId: string): Promise<AutomationTaskView>
+
+/**
+ * Delete one owned task and its runs; the ownership check runs before any write.
+ *
+ * @param taskId Persisted automation task identifier.
+ * @returns Whether the store held the task.
+ * @throws AutomationTaskNotFoundError when the task is absent or owned by someone else.
+ */
+async deleteTask(taskId: string): Promise<boolean>
 ```
 
 Source: [`packages/automation/automation/src/service.ts`](../../packages/automation/automation/src/service.ts)

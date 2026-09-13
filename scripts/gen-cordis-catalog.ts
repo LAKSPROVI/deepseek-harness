@@ -689,6 +689,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
   AutomationTaskView: 'automation task projection is owned by packages/automation/automation/README.md',
   AutomationTriggerReceipt: 'automation run receipt is owned by packages/automation/automation/README.md',
+  RouterSyncStatus: '9Router model catalog synchronization telemetry is owned by packages/llm/llm/README.md',
   BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   InsertReferenceRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   ConsumeTokenRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',

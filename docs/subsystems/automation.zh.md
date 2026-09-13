@@ -14,7 +14,7 @@ Automation 子系统负责在任何实时对话轮次之外运行的持久化计
 
 ## Remote 与 Chat 界面
 
-`automations` Remote 命名空间暴露 `list`、`trigger`、`pause` 与 `resume`；`pause` 与 `resume` 返回投影后的 `AutomationTaskView`，`trigger` 返回 `AutomationTriggerReceipt`，使 [`packages/experimental/client-ui-automation`](../../packages/experimental/client-ui-automation/README.zh.md) 中的浏览器面板无需二次读取即可重绘。创建与删除任务是模型通过 [`@deepseek-ai/dsh-tool-automation`](../../packages/automation/tool-automation/README.zh.md) 完成的：六个由 agent preset 挂载的 `automation_*` 工具；Web bundle 的 `automation` preset 携带它们。`AutomationApiRouter` 与 `AutomationSseStreamer` 仍是嵌入方挂到自己 HTTP 服务器上的库导出。经任一路径加入的任务落到同一份存储，并在面板下次重载时出现。
+`automations` Remote 命名空间暴露 `list`、`trigger`、`pause` 与 `resume`；`pause` 与 `resume` 返回投影后的 `AutomationTaskView`，`trigger` 返回 `AutomationTriggerReceipt`，使 [`packages/client/ui-automation`](../../packages/client/ui-automation/README.zh.md) 中的浏览器面板无需二次读取即可重绘。创建与删除任务是模型通过 [`@deepseek-ai/dsh-tool-automation`](../../packages/automation/tool-automation/README.zh.md) 完成的：六个由 agent preset 挂载的 `automation_*` 工具；Web bundle 的 `automation` preset 携带它们。`AutomationApiRouter` 与 `AutomationSseStreamer` 仍是嵌入方挂到自己 HTTP 服务器上的库导出。经任一路径加入的任务落到同一份存储，并在面板下次重载时出现。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -77,6 +77,32 @@ async triggerNow(taskId: string): Promise<AutomationTriggerReceipt>
  * @returns Updated automation task view.
  */
 async resumeTask(taskId: string): Promise<AutomationTaskView>
+
+/**
+ * Existing Chat-tool entrypoint for a paused schedule.
+ *
+ * @param taskId Persisted automation task identifier.
+ * @returns Updated automation task view.
+ */
+async pauseTask(taskId: string): Promise<AutomationTaskView>
+
+/**
+ * Read one owned task as its Client projection.
+ *
+ * @param taskId Persisted automation task identifier.
+ * @returns Automation task view.
+ * @throws AutomationTaskNotFoundError when the task is absent or owned by someone else.
+ */
+async taskView(taskId: string): Promise<AutomationTaskView>
+
+/**
+ * Delete one owned task and its runs; the ownership check runs before any write.
+ *
+ * @param taskId Persisted automation task identifier.
+ * @returns Whether the store held the task.
+ * @throws AutomationTaskNotFoundError when the task is absent or owned by someone else.
+ */
+async deleteTask(taskId: string): Promise<boolean>
 ```
 
 Source: [`packages/automation/automation/src/service.ts`](../../packages/automation/automation/src/service.ts)

@@ -54,6 +54,7 @@ Every package lives in exactly one group; new packages join existing groups, and
 | [`webhook/`](webhook/README.md) | Verified external events, trusted rules, and fire-and-forget Workspace Sessions |
 | [`web/`](web/README.md) | Web capability family: seam, search/fetch providers, model-facing web tools |
 | [`automation/`](automation/README.md) | Durable task automation engine: scheduler, worker, reaper, and the Web panel's Remote namespace |
+| [`agent-team/`](agent-team/README.md) | Agent Teams: named teammates with durable messages, a shared task board, and the model-facing team tools |
 | [`transcription/`](transcription/README.md) | Transcription capability family: seam, Groq provider, and browser voice-input Remote |
 | [`attachment/`](attachment/README.md) | Durable attachment identity, validation, local content-addressed storage |
 | [`spill/`](spill/README.md) | Spill capability family: storage seam, local impl, tool-result spill policy |

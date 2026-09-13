@@ -12,8 +12,8 @@
   "description": "Persistent scheduled automation engine and generated browser Remote",
   "license": "MIT",
   "type": "module",
-  "main": "./lib/index.js",
-  "types": "./lib/types/index.d.ts",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
   "exports": {
     ".": {
       "types": "./lib/types/index.d.ts",
