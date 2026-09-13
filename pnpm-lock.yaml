@@ -4686,6 +4686,9 @@ importers:
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:^
         version: link:../../typert/protocol
+      '@deepseek-ai/dsh-util-crypto':
+        specifier: workspace:^
+        version: link:../../util/crypto
       '@deepseek-ai/dsh-voice-input':
         specifier: workspace:^
         version: link:../../transcription/voice-input
