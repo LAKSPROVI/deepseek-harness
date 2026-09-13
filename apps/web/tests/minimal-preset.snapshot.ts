@@ -139,7 +139,16 @@ describe('minimal agent preset', () => {
         "prompt": "You are a helpful software engineer assistant.",
         "tools": [
           "bash",
+          "interrupt_agent",
+          "list_agents",
+          "send_message",
+          "spawn_teammate",
           "str_replace_editor",
+          "team_task_create",
+          "team_task_get",
+          "team_task_list",
+          "team_task_update",
+          "wait_agent",
         ],
       }
     `)

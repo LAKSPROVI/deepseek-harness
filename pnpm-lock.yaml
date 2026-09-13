@@ -2648,6 +2648,9 @@ importers:
       '@deepseek-ai/dsh-automation':
         specifier: workspace:^
         version: link:../../automation/automation
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:^
+        version: link:../locale
       '@deepseek-ai/dsh-client-test-runtime':
         specifier: workspace:^
         version: link:../../test-support/client-runtime

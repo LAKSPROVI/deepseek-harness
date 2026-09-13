@@ -55,7 +55,7 @@ export function SessionContextActions({
 
   const handleStartWithSummary = () => {
     setOpen(false)
-    const title = sessionSummary?.displayTitle ?? 'Sessão Anterior'
+    const title = sessionSummary?.displayTitle ?? t('context.newSession.previousTitle')
 
     // Save brief summary seed for the new session into localStorage
     const summaryDraft = `### 📋 Contexto Resumido da Conversa Anterior\n- **Origem:** "${title}"\n- **Objetivo:** Continuar com foco refinado e janela de tokens limpa.\n\nPor favor, resuma os pontos-chave da nossa conversa anterior e me informe como podemos prosseguir.`
@@ -116,7 +116,7 @@ export function SessionContextActions({
             <IconNewChatOutline16 className={css.menuIcon} />
             <div className={css.menuText}>
               <span className={css.menuTitle}>{t('context.newSession.clean')}</span>
-              <span className={css.menuDesc}>Inicia uma nova conversa no mesmo workspace, com contexto 100% limpo.</span>
+              <span className={css.menuDesc}>{t('context.newSession.cleanDesc')}</span>
             </div>
           </button>
 
@@ -129,7 +129,7 @@ export function SessionContextActions({
             <IconRefreshOutline16 className={css.menuIcon} />
             <div className={css.menuText}>
               <span className={css.menuTitle}>{t('context.newSession.withSummary')}</span>
-              <span className={css.menuDesc}>Abre um novo chat carregando o resumo do contexto anterior para continuar a tarefa.</span>
+              <span className={css.menuDesc}>{t('context.newSession.withSummaryDesc')}</span>
             </div>
           </button>
 
@@ -144,7 +144,7 @@ export function SessionContextActions({
             <IconBranchOutline16 className={css.menuIcon} />
             <div className={css.menuText}>
               <span className={css.menuTitle}>{t('menu.fork')}</span>
-              <span className={css.menuDesc}>Ramifica a conversa a partir deste exato momento.</span>
+              <span className={css.menuDesc}>{t('menu.forkDesc')}</span>
             </div>
           </button>
         </div>

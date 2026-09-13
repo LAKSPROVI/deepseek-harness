@@ -251,7 +251,7 @@ export function SessionNotesPopover({ sessionId, inputActions, t }: SessionNotes
                           type="button"
                           className={css.deleteButton}
                           onClick={() => { handleDeleteReminder(reminder.id) }}
-                          title="Excluir"
+                          title={t('notes.reminders.delete')}
                         >
                           ✕
                         </button>

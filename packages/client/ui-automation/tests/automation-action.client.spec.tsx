@@ -2,7 +2,10 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { AutomationAction } from '../src/client/AutomationAction.tsx'
+import type { AutomationActionProps } from '../src/client/types.ts'
+import { en } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 
@@ -23,7 +26,9 @@ describe('AutomationAction', () => {
   it('loads persisted tasks and triggers the selected task from the native panel', async () => {
     const list = vi.fn(() => Promise.resolve([task]))
     const trigger = vi.fn(() => Promise.resolve({ runId: 'run-1' }))
-    render(<AutomationAction list={list} trigger={trigger} pause={vi.fn()} resume={vi.fn()} />)
+    // The deployment dictionary (`en`) carries the pt-BR copy this fork ships.
+    const props = { list, trigger, pause: vi.fn(), resume: vi.fn(), t: makeTranslate(en, {}) } as unknown as AutomationActionProps
+    render(<AutomationAction {...props} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Automações' }))
     expect(await screen.findByText('Atualizar prazos')).toBeTruthy()

@@ -9,6 +9,7 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { AutomationActionProps } from '../src/client/types.ts'
 import { apply, inject } from '../src/client/index.ts'
@@ -49,6 +50,7 @@ async function bench() {
     }
   }
   new RemoteService(ctx)
+  ctx.provide('locale', new LocaleRuntime(ctx))
   await ctx.plugin(SlotRegistry).await()
   ctx.slots.register({
     name: 'root',
@@ -63,7 +65,7 @@ async function bench() {
 describe('client-ui-automation browser plugin', () => {
   it('registers the header action with the documented id and order', async () => {
     const b = await bench()
-    expect(inject).toEqual(['remote', 'slots'])
+    expect(inject).toEqual(['remote', 'slots', 'locale'])
     expect(b.entry?.options).toMatchObject({ id: 'automation', order: 30 })
     expect(b.face).toBeTypeOf('function')
   })

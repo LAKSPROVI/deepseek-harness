@@ -6,6 +6,7 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../automation/automation" },
     { "path": "../../api/remotes/tsconfig.client.json" },
+    { "path": "../locale" },
     { "path": "../ui-conversation" },
     { "path": "../ui-slots" }
   ]
