@@ -222,7 +222,14 @@ export async function openPromptSession(
  * @param config - deployment policy; schemastery has applied the defaults.
  */
 export function apply(ctx: Context, config: Config): void {
-  const resolved = { ...config, actionType: config.actionType ?? 'CUSTOM_PROMPT' }
+  // Copied field by field: the loader hands a schema instance, and spreading a
+  // class instance would drop its prototype. Optionals stay absent when unset
+  // (`exactOptionalPropertyTypes`).
+  const resolved: Required<Pick<Config, 'actionType'>> & Config = {
+    actionType: config.actionType ?? 'CUSTOM_PROMPT',
+    ...config.agentPreset !== undefined ? { agentPreset: config.agentPreset } : {},
+    ...config.permissionPreset !== undefined ? { permissionPreset: config.permissionPreset } : {},
+  }
   ctx.effect(() => ctx.automation.worker.registerHandler(resolved.actionType, async (payload, run) => {
     const typed = resolvePayload(payload)
     run.log(`opening a "${typed.agentPreset ?? resolved.agentPreset ?? 'default'}" session in ${typed.workspacePath}`)

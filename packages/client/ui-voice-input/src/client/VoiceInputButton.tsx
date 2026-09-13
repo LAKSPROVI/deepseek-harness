@@ -38,7 +38,8 @@ function recordingSupport(): MediaDevices | undefined {
   // recorder is read off globalThis because a `typeof` guard on its declared
   // face is a condition the types call impossible.
   const { MediaRecorder: recorder } = globalThis as { MediaRecorder?: unknown }
-  const devices: MediaDevices | undefined = navigator.mediaDevices
+  // lib.dom types the property as always present; insecure contexts omit it.
+  const { mediaDevices: devices } = navigator as { mediaDevices?: MediaDevices }
   if (devices === undefined || recorder === undefined) return undefined
   return devices
 }

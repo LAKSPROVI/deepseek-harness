@@ -20,9 +20,13 @@ export class StaleTaskReaper {
   public start(): void {
     if (this.isRunning) return
     this.isRunning = true
-    this.reap().catch(err => console.error('[StaleTaskReaper] Error on startup reap:', err))
+    this.reap().catch((err: unknown) => {
+      console.error('[StaleTaskReaper] Error on startup reap:', err)
+    })
     this.timer = setInterval(() => {
-      this.reap().catch(err => console.error('[StaleTaskReaper] Error on periodic reap:', err))
+      this.reap().catch((err: unknown) => {
+        console.error('[StaleTaskReaper] Error on periodic reap:', err)
+      })
     }, this.checkIntervalMs)
   }
 

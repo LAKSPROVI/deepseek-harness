@@ -2,7 +2,7 @@
 import { IAutomationStore } from './store'
 import { AutomationScheduler } from './scheduler'
 import { TaskWorker } from './worker'
-import { CreateTaskDTO, TaskStatus } from './types'
+import { CreateTaskDTO } from './types'
 import { RecurrenceEngine } from './recurrence'
 
 /** Framework-neutral view of one HTTP request after URL and body parsing. */
@@ -81,22 +81,25 @@ export class AutomationApiRouter {
       if (pathname === '/api/tasks' && method === 'GET') {
         const userId = context.query.get('userId') || undefined
         const tasks = await this.store.listTasks(userId)
-        return sendJson(200, { success: true, data: tasks })
+        sendJson(200, { success: true, data: tasks })
+        return
       }
 
       // 2. POST /api/tasks
       if (pathname === '/api/tasks' && method === 'POST') {
         // The parsed body is untrusted `unknown`; the required-field check
         // immediately below is what makes this shape claim safe to act on.
-        const dto = context.body as CreateTaskDTO
+        const dto = context.body as Partial<CreateTaskDTO>
         if (!dto.title || !dto.scheduleType || !dto.scheduleExpr || !dto.actionType) {
-          return sendJson(400, {
+          sendJson(400, {
             success: false,
             error: 'Campos obrigatórios ausentes: title, scheduleType, scheduleExpr, actionType',
           })
+          return
         }
-        const task = await this.store.createTask(dto)
-        return sendJson(201, { success: true, data: task })
+        const task = await this.store.createTask(dto as CreateTaskDTO)
+        sendJson(201, { success: true, data: task })
+        return
       }
 
       // 3. GET /api/tasks/:id
@@ -104,30 +107,39 @@ export class AutomationApiRouter {
       if (taskDetailMatch && method === 'GET') {
         const taskId = routeParam(taskDetailMatch)
         const task = await this.store.getTask(taskId)
-        if (!task) return sendJson(404, { success: false, error: 'Tarefa não encontrada' })
-        return sendJson(200, { success: true, data: task })
+        if (!task) {
+          sendJson(404, { success: false, error: 'Tarefa não encontrada' })
+          return
+        }
+        sendJson(200, { success: true, data: task })
+        return
       }
 
       // 4. PATCH /api/tasks/:id/pause ou /resume
       const pauseMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/pause$/)
       if (pauseMatch && method === 'POST') {
         const taskId = routeParam(pauseMatch)
-        const updated = await this.store.updateTask(taskId, { status: 'PAUSED' as TaskStatus })
-        return sendJson(200, { success: true, data: updated })
+        const updated = await this.store.updateTask(taskId, { status: 'PAUSED' })
+        sendJson(200, { success: true, data: updated })
+        return
       }
 
       const resumeMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/resume$/)
       if (resumeMatch && method === 'POST') {
         const taskId = routeParam(resumeMatch)
         const current = await this.store.getTask(taskId)
-        if (!current) return sendJson(404, { success: false, error: 'Tarefa não encontrada' })
+        if (!current) {
+          sendJson(404, { success: false, error: 'Tarefa não encontrada' })
+          return
+        }
 
         const nextRun = RecurrenceEngine.calculateNextRun(current, new Date())
         const updated = await this.store.updateTask(taskId, {
-          status: 'ACTIVE' as TaskStatus,
+          status: 'ACTIVE',
           nextRunAt: nextRun,
         })
-        return sendJson(200, { success: true, data: updated })
+        sendJson(200, { success: true, data: updated })
+        return
       }
 
       // 5. POST /api/tasks/:id/trigger (Executar Agora)
@@ -135,7 +147,10 @@ export class AutomationApiRouter {
       if (triggerMatch && method === 'POST') {
         const taskId = routeParam(triggerMatch)
         const task = await this.store.getTask(taskId)
-        if (!task) return sendJson(404, { success: false, error: 'Tarefa não encontrada' })
+        if (!task) {
+          sendJson(404, { success: false, error: 'Tarefa não encontrada' })
+          return
+        }
 
         const run = await this.store.createRun(task.id, new Date())
         // Worker async execution
@@ -157,13 +172,16 @@ export class AutomationApiRouter {
             retryLimit: task.retryLimit,
             attemptNumber: 1,
           })
-          .catch(err => console.error('[API Trigger Error]', err))
+          .catch((err: unknown) => {
+            console.error('[API Trigger Error]', err)
+          })
 
-        return sendJson(202, {
+        sendJson(202, {
           success: true,
           message: 'Disparo manual iniciado com sucesso',
           data: { runId: run.id },
         })
+        return
       }
 
       // 6. GET /api/tasks/:id/runs (Histórico de execuções da tarefa)
@@ -171,7 +189,8 @@ export class AutomationApiRouter {
       if (runsMatch && method === 'GET') {
         const taskId = routeParam(runsMatch)
         const runs = await this.store.listRunsByTask(taskId)
-        return sendJson(200, { success: true, data: runs })
+        sendJson(200, { success: true, data: runs })
+        return
       }
 
       // 7. GET /api/notifications
@@ -179,7 +198,8 @@ export class AutomationApiRouter {
         const userId = context.query.get('userId') || 'default'
         const unreadOnly = context.query.get('unread') === 'true'
         const notifications = await this.store.listNotifications(userId, unreadOnly)
-        return sendJson(200, { success: true, data: notifications })
+        sendJson(200, { success: true, data: notifications })
+        return
       }
 
       // 8. POST /api/notifications/:id/read
@@ -187,15 +207,18 @@ export class AutomationApiRouter {
       if (readNotifMatch && method === 'POST') {
         const notifId = routeParam(readNotifMatch)
         const ok = await this.store.markNotificationRead(notifId)
-        return sendJson(200, { success: ok })
+        sendJson(200, { success: ok })
+        return
       }
 
       // 404 Route Not Found
-      return sendJson(404, { success: false, error: `Rota não encontrada: ${method} ${pathname}` })
+      sendJson(404, { success: false, error: `Rota não encontrada: ${method} ${pathname}` })
+      return
     } catch (err: unknown) {
       console.error('[AutomationApiRouter Error]', err)
       const message = err instanceof Error ? err.message : 'Erro interno no servidor'
-      return sendJson(500, { success: false, error: message })
+      sendJson(500, { success: false, error: message })
+      return
     }
   }
 
@@ -203,8 +226,8 @@ export class AutomationApiRouter {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method || '')) return undefined
     return new Promise((resolve) => {
       let data = ''
-      req.on('data', (chunk) => {
-        data += chunk
+      req.on('data', (chunk: Buffer | string) => {
+        data += chunk.toString()
       })
       req.on('end', () => {
         try {

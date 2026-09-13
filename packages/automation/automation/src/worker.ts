@@ -1,6 +1,6 @@
 ﻿import { IAutomationStore } from './store'
 import { NotificationService } from './notifier'
-import { ActionHandler, TaskExecutionContext, TaskLogEntry, RunStatus, TaskStatus } from './types'
+import { ActionHandler, TaskExecutionContext, TaskLogEntry, RunStatus } from './types'
 
 /** Everything the worker needs to execute one run without re-reading the task. */
 export interface EnqueuedJobData {
@@ -120,7 +120,9 @@ export class TaskWorker {
   private async executeWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
     let timer: NodeJS.Timeout | undefined
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('EXECUTION_TIMEOUT')), timeoutMs)
+      timer = setTimeout(() => {
+        reject(new Error('EXECUTION_TIMEOUT'))
+      }, timeoutMs)
     })
 
     try {
@@ -170,7 +172,7 @@ export class TaskWorker {
         totalRunsCompleted: newTotal,
         lastRunAt: finishedAt,
         lastRunStatus: status,
-        status: isCompleted ? ('COMPLETED' as TaskStatus) : task.status,
+        status: isCompleted ? 'COMPLETED' : task.status,
         nextRunAt: isCompleted ? null : task.nextRunAt,
       })
     }

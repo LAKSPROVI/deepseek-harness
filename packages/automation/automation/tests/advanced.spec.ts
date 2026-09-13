@@ -14,7 +14,9 @@ describe('Advanced Concurrency, Overlap Policy and Notifications', () => {
     let resolveSlowTask: () => void = () => {}
     worker.registerHandler('SLOW_ASYNC_TASK', () => {
       return new Promise((resolve) => {
-        resolveSlowTask = () => resolve({ completed: true })
+        resolveSlowTask = () => {
+          resolve({ completed: true })
+        }
       })
     })
 

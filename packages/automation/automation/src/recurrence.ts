@@ -22,7 +22,7 @@ export function calculateNextRun(
   referenceDate: Date = new Date(),
 ): Date | null {
   // 1. Max runs check
-  if (task.maxRuns !== null && task.maxRuns !== undefined && task.totalRunsCompleted >= task.maxRuns) {
+  if (task.maxRuns !== null && task.totalRunsCompleted >= task.maxRuns) {
     return null
   }
 

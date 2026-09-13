@@ -17,9 +17,13 @@ export class AutomationScheduler {
   public start(): void {
     if (this.isRunning) return
     this.isRunning = true
-    this.tick().catch(err => console.error('[Scheduler] Error on first tick:', err))
+    this.tick().catch((err: unknown) => {
+      console.error('[Scheduler] Error on first tick:', err)
+    })
     this.intervalTimer = setInterval(() => {
-      this.tick().catch(err => console.error('[Scheduler] Error on tick:', err))
+      this.tick().catch((err: unknown) => {
+        console.error('[Scheduler] Error on tick:', err)
+      })
     }, this.pollIntervalMs)
   }
 
@@ -87,7 +91,7 @@ export class AutomationScheduler {
           retryLimit: task.retryLimit,
           attemptNumber: 1,
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           console.error(`[Scheduler] Unhandled error running job for task ${task.id}:`, err)
         })
     }

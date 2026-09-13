@@ -57,7 +57,7 @@ export class InMemoryAutomationStore implements IAutomationStore {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
   }
 
-  public async createTask(dto: CreateTaskDTO): Promise<AutomationTask> {
+  public createTask(dto: CreateTaskDTO): Promise<AutomationTask> {
     const id = this.generateId('task')
     const now = new Date()
     const taskBase = {
@@ -95,22 +95,23 @@ export class InMemoryAutomationStore implements IAutomationStore {
     }
 
     this.tasks.set(id, task)
-    return { ...task }
+    return Promise.resolve({ ...task })
   }
 
-  public async getTask(id: string): Promise<AutomationTask | null> {
+  public getTask(id: string): Promise<AutomationTask | null> {
     const task = this.tasks.get(id)
-    return task ? { ...task } : null
+    return Promise.resolve(task ? { ...task } : null)
   }
 
-  public async listTasks(userId?: string): Promise<AutomationTask[]> {
+  public listTasks(userId?: string): Promise<AutomationTask[]> {
     const list = Array.from(this.tasks.values())
     if (userId) {
-      return list.filter(t => t.userId === userId).map(t => ({ ...t }))
+      return Promise.resolve(list.filter(t => t.userId === userId).map(t => ({ ...t })))
     }
-    return list.map(t => ({ ...t }))
+    return Promise.resolve(list.map(t => ({ ...t })))
   }
 
+  // oxlint-disable-next-line typescript/require-await -- Preserve promise rejection semantics at the async provider contract.
   public async updateTask(id: string, updates: Partial<AutomationTask>): Promise<AutomationTask> {
     const current = this.tasks.get(id)
     if (!current) throw new Error(`Task with ID ${id} not found`)
@@ -123,11 +124,11 @@ export class InMemoryAutomationStore implements IAutomationStore {
     return { ...updated }
   }
 
-  public async deleteTask(id: string): Promise<boolean> {
-    return this.tasks.delete(id)
+  public deleteTask(id: string): Promise<boolean> {
+    return Promise.resolve(this.tasks.delete(id))
   }
 
-  public async findDueTasks(now: Date, limit: number = 50): Promise<AutomationTask[]> {
+  public findDueTasks(now: Date, limit: number = 50): Promise<AutomationTask[]> {
     const due: AutomationTask[] = []
     for (const task of this.tasks.values()) {
       if (
@@ -140,9 +141,10 @@ export class InMemoryAutomationStore implements IAutomationStore {
         if (due.length >= limit) break
       }
     }
-    return due
+    return Promise.resolve(due)
   }
 
+  // oxlint-disable-next-line typescript/require-await -- Preserve promise rejection semantics at the async provider contract.
   public async createRun(taskId: string, scheduledFor: Date): Promise<TaskRun> {
     const task = this.tasks.get(taskId)
     if (!task) throw new Error(`Task ${taskId} not found`)
@@ -166,18 +168,19 @@ export class InMemoryAutomationStore implements IAutomationStore {
     return { ...run }
   }
 
-  public async getRun(id: string): Promise<TaskRun | null> {
+  public getRun(id: string): Promise<TaskRun | null> {
     const run = this.runs.get(id)
-    return run ? { ...run } : null
+    return Promise.resolve(run ? { ...run } : null)
   }
 
-  public async listRunsByTask(taskId: string): Promise<TaskRun[]> {
-    return Array.from(this.runs.values())
+  public listRunsByTask(taskId: string): Promise<TaskRun[]> {
+    return Promise.resolve(Array.from(this.runs.values())
       .filter(r => r.taskId === taskId)
       .sort((a, b) => b.runNumber - a.runNumber)
-      .map(r => ({ ...r }))
+      .map(r => ({ ...r })))
   }
 
+  // oxlint-disable-next-line typescript/require-await -- Preserve promise rejection semantics at the async provider contract.
   public async updateRun(
     id: string,
     updates: {
@@ -214,16 +217,16 @@ export class InMemoryAutomationStore implements IAutomationStore {
     return { ...updated }
   }
 
-  public async hasActiveRun(taskId: string): Promise<boolean> {
+  public hasActiveRun(taskId: string): Promise<boolean> {
     for (const run of this.runs.values()) {
       if (run.taskId === taskId && run.status === 'RUNNING') {
-        return true
+        return Promise.resolve(true)
       }
     }
-    return false
+    return Promise.resolve(false)
   }
 
-  public async createNotification(
+  public createNotification(
     notif: Omit<TaskNotification, 'id' | 'createdAt' | 'isRead'>,
   ): Promise<TaskNotification> {
     const id = this.generateId('notif')
@@ -234,27 +237,27 @@ export class InMemoryAutomationStore implements IAutomationStore {
       createdAt: new Date(),
     }
     this.notifications.set(id, created)
-    return { ...created }
+    return Promise.resolve({ ...created })
   }
 
-  public async listNotifications(userId: string, unreadOnly?: boolean): Promise<TaskNotification[]> {
-    return Array.from(this.notifications.values())
+  public listNotifications(userId: string, unreadOnly?: boolean): Promise<TaskNotification[]> {
+    return Promise.resolve(Array.from(this.notifications.values())
       .filter(n => n.userId === userId && (!unreadOnly || !n.isRead))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(n => ({ ...n }))
+      .map(n => ({ ...n })))
   }
 
-  public async listNotificationsByTask(taskId: string): Promise<TaskNotification[]> {
-    return Array.from(this.notifications.values())
+  public listNotificationsByTask(taskId: string): Promise<TaskNotification[]> {
+    return Promise.resolve(Array.from(this.notifications.values())
       .filter(n => n.taskId === taskId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(n => ({ ...n }))
+      .map(n => ({ ...n })))
   }
 
-  public async markNotificationRead(id: string): Promise<boolean> {
+  public markNotificationRead(id: string): Promise<boolean> {
     const n = this.notifications.get(id)
-    if (!n) return false
+    if (!n) return Promise.resolve(false)
     this.notifications.set(id, { ...n, isRead: true, readAt: new Date() })
-    return true
+    return Promise.resolve(true)
   }
 }

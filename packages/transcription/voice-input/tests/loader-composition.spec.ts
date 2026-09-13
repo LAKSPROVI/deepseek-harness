@@ -283,7 +283,7 @@ describe('the transcription seam assembled from a cordis.yml', () => {
 
     const result = await ctx.voiceInput.transcribe(upload())
     expect(result).toMatchObject({ ok: false, error: { code: 'provider-unconfigured' } })
-    expect(result.ok === false && result.error.code === 'provider-unconfigured' && result.error.detail)
+    expect(!result.ok && result.error.code === 'provider-unconfigured' && result.error.detail)
       .toContain('GROQ_API_KEY')
     expect(groq.requests).toEqual([])
   })

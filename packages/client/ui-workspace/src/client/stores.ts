@@ -59,6 +59,19 @@ type WorkspaceViewActions = {
 }
 
 /**
+ * Persistence rehydrates by replacing the whole state with the stored JSON, so a
+ * `dsh.workspace.view.v6` blob written before the completed/unread maps existed
+ * arrives without them. Actions that write those maps normalize first; the
+ * `Partial` view is what makes the fill-in visible to the compiler.
+ * @param draft - the mutable state an action received.
+ */
+function ensureSessionMaps(draft: WorkspaceViewState): void {
+  const persisted: Partial<WorkspaceViewState> = draft
+  persisted.completedSessions ??= {}
+  persisted.unreadSessions ??= {}
+}
+
+/**
  * Create the workspace browser viewing store handle.
  * @returns the store handle (spec + type + identity + factory in one).
  */
@@ -99,36 +112,32 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         d.sessionOrderByAccount[accountKey] = order
       },
       toggleCompletedSession: (d, sessionId: string) => {
-        d.completedSessions = d.completedSessions ?? {}
+        ensureSessionMaps(d)
         if (d.completedSessions[sessionId]) {
           d.completedSessions[sessionId] = false
         } else {
           d.completedSessions[sessionId] = true
-          if (d.unreadSessions) d.unreadSessions[sessionId] = false
-        }
-      },
-      setSessionCompleted: (d, sessionId: string, completed: boolean) => {
-        d.completedSessions = d.completedSessions ?? {}
-        d.completedSessions[sessionId] = completed
-        if (completed && d.unreadSessions) {
           d.unreadSessions[sessionId] = false
         }
       },
+      setSessionCompleted: (d, sessionId: string, completed: boolean) => {
+        ensureSessionMaps(d)
+        d.completedSessions[sessionId] = completed
+        if (completed) d.unreadSessions[sessionId] = false
+      },
       toggleUnreadSession: (d, sessionId: string) => {
-        d.unreadSessions = d.unreadSessions ?? {}
+        ensureSessionMaps(d)
         if (d.unreadSessions[sessionId]) {
           d.unreadSessions[sessionId] = false
         } else {
           d.unreadSessions[sessionId] = true
-          if (d.completedSessions) d.completedSessions[sessionId] = false
+          d.completedSessions[sessionId] = false
         }
       },
       setSessionUnread: (d, sessionId: string, unread: boolean) => {
-        d.unreadSessions = d.unreadSessions ?? {}
+        ensureSessionMaps(d)
         d.unreadSessions[sessionId] = unread
-        if (unread && d.completedSessions) {
-          d.completedSessions[sessionId] = false
-        }
+        if (unread) d.completedSessions[sessionId] = false
       },
       setSessionStatus: (d, sessionId: string, status: CustomSessionStatus) => {
         d.customSessionStatuses[sessionId] = status === 'idle' ? undefined : status

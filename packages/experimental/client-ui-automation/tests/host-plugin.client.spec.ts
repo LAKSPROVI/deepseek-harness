@@ -3,6 +3,8 @@ import { apply } from '../src/index.ts'
 
 describe('automation panel host entry', () => {
   it('exports an applicable Cordis plugin body', () => {
-    expect(apply()).toBeUndefined()
+    expect(() => {
+      apply()
+    }).not.toThrow()
   })
 })

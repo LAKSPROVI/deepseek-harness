@@ -224,7 +224,9 @@ describe('voice-input invariant companion', () => {
 
     expect(register).toHaveBeenCalledWith('@deepseek-ai/dsh-voice-input', expect.any(Function))
     const [, installer] = register.mock.calls[0] as unknown as [string, (arg: unknown) => void]
-    expect(() => installer(undefined)).not.toThrow()
+    expect(() => {
+      installer(undefined)
+    }).not.toThrow()
     expect(dispose).toBeTypeOf('function')
   })
 })

@@ -27,8 +27,8 @@ describe('AutomationController', () => {
       expect.objectContaining({
         id: own.id,
         title: 'Verificar prazos',
-        createdAt: expect.any(String),
-        nextRunAt: expect.any(String),
+        createdAt: expect.any(String) as unknown,
+        nextRunAt: expect.any(String) as unknown,
       }),
     ])
   })
@@ -62,12 +62,12 @@ describe('resolveStorePath', () => {
   it('anchors a relative store path to the Harness home, not the process cwd', async () => {
     const { resolveStorePath } = await import('../src/service.ts')
     const { resolveDshHome } = await import('@deepseek-ai/dsh-home-paths')
-    const { isAbsolute, join, resolve } = await import('node:path')
+    const path = await import('node:path')
     const relative = resolveStorePath('./data/automation/store.json')
-    expect(relative).toBe(join(resolveDshHome(), 'data/automation/store.json'))
-    expect(relative).not.toBe(resolve('./data/automation/store.json'))
-    const absolute = resolve('elsewhere/store.json')
+    expect(relative).toBe(path.join(resolveDshHome(), 'data/automation/store.json'))
+    expect(relative).not.toBe(path.resolve('./data/automation/store.json'))
+    const absolute = path.resolve('elsewhere/store.json')
     expect(resolveStorePath(absolute)).toBe(absolute)
-    expect(isAbsolute(resolveStorePath('~/store.json'))).toBe(true)
+    expect(path.isAbsolute(resolveStorePath('~/store.json'))).toBe(true)
   })
 })

@@ -306,14 +306,14 @@ describe('GroqTranscriptionProvider credentials', () => {
     const { apiKey: _omitted, ...rest } = options
     await expect(
       provider({ ...rest, resolveApiKey: () => Promise.resolve(undefined) }).transcribe(request()),
-    ).rejects.toThrow(expect.objectContaining({ code: 'TRANSCRIPTION_CREDENTIAL_MISSING', message: expect.stringContaining('GROQ_API_KEY') }))
+    ).rejects.toThrow(expect.objectContaining({ code: 'TRANSCRIPTION_CREDENTIAL_MISSING', message: expect.stringContaining('GROQ_API_KEY') as unknown }))
   })
 
   it('names the configured reference in the missing-credential message', async () => {
     const { apiKey: _omitted, ...rest } = options
     await expect(
       provider({ ...rest, apiKeyEnv: credentialRef('MY_KEY'), resolveApiKey: () => Promise.resolve('') }).transcribe(request()),
-    ).rejects.toThrow(expect.objectContaining({ message: expect.stringContaining('MY_KEY') }))
+    ).rejects.toThrow(expect.objectContaining({ message: expect.stringContaining('MY_KEY') as unknown }))
   })
 
   it('maps a throwing credential resolver to TRANSCRIPTION_PROVIDER_ERROR', async () => {
@@ -363,7 +363,9 @@ describe('transcription-groq invariant companion', () => {
 
     expect(register).toHaveBeenCalledWith('@deepseek-ai/dsh-transcription-groq', expect.any(Function))
     const [, installer] = register.mock.calls[0] as unknown as [string, (arg: unknown) => void]
-    expect(() => installer(undefined)).not.toThrow()
+    expect(() => {
+      installer(undefined)
+    }).not.toThrow()
     expect(dispose).toBeTypeOf('function')
   })
 })

@@ -46,7 +46,7 @@ export class FileAutomationStore implements IAutomationStore {
       await fs.mkdir(dir, { recursive: true })
 
       const content = await fs.readFile(this.filePath, 'utf-8')
-      const data: PersistentData = JSON.parse(content)
+      const data = JSON.parse(content) as PersistentData
 
       if (Array.isArray(data.tasks)) {
         for (const t of data.tasks) {
@@ -87,7 +87,7 @@ export class FileAutomationStore implements IAutomationStore {
         }
       }
     } catch (err: unknown) {
-      if ((err as { code?: string })?.code !== 'ENOENT') {
+      if ((err as { code?: string }).code !== 'ENOENT') {
         throw err
       }
       // If file does not exist, start with empty data
