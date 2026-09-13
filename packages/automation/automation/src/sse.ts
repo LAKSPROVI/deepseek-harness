@@ -1,6 +1,6 @@
 ﻿import { IncomingMessage, ServerResponse } from 'http'
-import { NotificationService } from './notifier'
-import { TaskNotification } from './types'
+import { NotificationService } from './notifier.ts'
+import { TaskNotification } from './types.ts'
 
 /**
  * Server-Sent Events (SSE) Streamer for delivering real-time task notifications

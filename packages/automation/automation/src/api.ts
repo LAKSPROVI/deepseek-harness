@@ -1,9 +1,9 @@
 ﻿import { IncomingMessage, ServerResponse } from 'http'
-import { IAutomationStore } from './store'
-import { AutomationScheduler } from './scheduler'
-import { TaskWorker, jobForRun } from './worker'
-import { CreateTaskDTO } from './types'
-import { RecurrenceEngine } from './recurrence'
+import { IAutomationStore } from './store.ts'
+import { AutomationScheduler } from './scheduler.ts'
+import { TaskWorker, jobForRun } from './worker.ts'
+import { CreateTaskDTO } from './types.ts'
+import { RecurrenceEngine } from './recurrence.ts'
 
 /** Framework-neutral view of one HTTP request after URL and body parsing. */
 export interface RequestContext {

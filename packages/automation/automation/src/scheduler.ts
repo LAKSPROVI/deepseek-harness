@@ -1,6 +1,6 @@
-﻿import { IAutomationStore } from './store'
-import { TaskWorker, jobForRun } from './worker'
-import { RecurrenceEngine } from './recurrence'
+﻿import { IAutomationStore } from './store.ts'
+import { TaskWorker, jobForRun } from './worker.ts'
+import { RecurrenceEngine } from './recurrence.ts'
 
 /** Polls the store for due tasks and hands each one to the worker, honoring overlap policies. */
 export class AutomationScheduler {

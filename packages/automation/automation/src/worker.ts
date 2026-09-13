@@ -1,6 +1,6 @@
-﻿import { IAutomationStore } from './store'
-import { NotificationService } from './notifier'
-import { ActionHandler, AutomationTask, TaskExecutionContext, TaskLogEntry, RunStatus } from './types'
+﻿import { IAutomationStore } from './store.ts'
+import { NotificationService } from './notifier.ts'
+import { ActionHandler, AutomationTask, TaskExecutionContext, TaskLogEntry, RunStatus } from './types.ts'
 
 /** Everything the worker needs to execute one run without re-reading the task. */
 export interface EnqueuedJobData {

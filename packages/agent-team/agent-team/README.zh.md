@@ -54,7 +54,7 @@ kind: "package-reference"
 | `maxMessageBytes` | `65,536` | 单条发送消息的最大尺寸 |
 | `disposalTimeoutMs` | `5,000` | 关闭清理允许的时间 |
 
-生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-agent-team)是每个受支持字段及其 JSDoc 的穷尽式真源。
+生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-agent-team)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
 ### Teammate
 
@@ -211,7 +211,7 @@ Peer 消息追加在 target 可复用历史前缀之后。冷恢复会先复用�
 
 #### Promotion
 
-promotion 到产品角色组需要按[实验子树规则](../AGENTS.md)审查公共约定、限制、测试证据、发布载荷、运行时依赖与具名稳定 owner。
+本包已于 2026-09-13 按[实验子树规则](../../experimental/AGENTS.md)从 `packages/experimental/` 提升：随附的 Web bundle 依赖本包，而发布成员不能依赖私有原型。上文的限制即提升时审查过的公共约定。
 
 #### 未来方向
 

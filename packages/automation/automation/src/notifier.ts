@@ -1,5 +1,5 @@
-﻿import { IAutomationStore } from './store'
-import { TaskNotification, NotificationLevel } from './types'
+﻿import { IAutomationStore } from './store.ts'
+import { TaskNotification, NotificationLevel } from './types.ts'
 
 /** Callback invoked with every newly created notification. */
 export type NotificationEventListener = (notification: TaskNotification) => void

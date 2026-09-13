@@ -54,7 +54,7 @@ With the tools installed, the model does the rest on request — for example, "c
 | `maxMessageBytes` | `65,536` | Maximum size of one sent message |
 | `disposalTimeoutMs` | `5,000` | Time allowed for shutdown cleanup |
 
-The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-agent-team) is the exhaustive source for every accepted field and its JSDoc.
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-agent-team) is the exhaustive source for every accepted field and its JSDoc.
 
 ### Teammates
 
@@ -211,7 +211,7 @@ This Dev Note is working context for maintainers and is explicitly non-authorita
 
 #### Promotion
 
-Promotion to a product-role group requires reviewing the public contract, limitations, test evidence, release payload, runtime dependents, and a named stable owner, per the [experimental subtree rules](../AGENTS.md).
+Promoted out of `packages/experimental/` on 2026-09-13, following the [experimental subtree rules](../../experimental/AGENTS.md): the shipped Web bundle depends on this package, and a release member cannot depend on a private prototype. The limitations above are the reviewed public contract at promotion time.
 
 #### Future directions
 

@@ -7,8 +7,8 @@ import {
   TaskNotification,
   RunStatus,
   TaskLogEntry,
-} from './types'
-import { InMemoryAutomationStore } from './store'
+} from './types.ts'
+import { InMemoryAutomationStore } from './store.ts'
 
 interface PersistentData {
   tasks: AutomationTask[]

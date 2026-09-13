@@ -1,5 +1,5 @@
-﻿import { SimpleCron } from './cron'
-import { AutomationTask } from './types'
+﻿import { SimpleCron } from './cron.ts'
+import { AutomationTask } from './types.ts'
 
 /**
  * Computes the next execution target given task constraints and reference time.

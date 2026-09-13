@@ -1,5 +1,5 @@
-﻿import { IAutomationStore } from './store'
-import { NotificationService } from './notifier'
+﻿import { IAutomationStore } from './store.ts'
+import { NotificationService } from './notifier.ts'
 
 /**
  * Autonomous daemon that identifies and recovers zombie/stale task runs

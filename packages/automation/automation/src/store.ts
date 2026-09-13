@@ -6,8 +6,8 @@
   RunStatus,
   TaskStatus,
   TaskLogEntry,
-} from './types'
-import { RecurrenceEngine } from './recurrence'
+} from './types.ts'
+import { RecurrenceEngine } from './recurrence.ts'
 
 /** Persistence contract for tasks, runs, and notifications; the file store is the shipped implementation. */
 export interface IAutomationStore {
