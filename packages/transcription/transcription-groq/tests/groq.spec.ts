@@ -11,7 +11,6 @@ import {
 } from '@deepseek-ai/dsh-transcription-groq'
 import type { GroqTranscriptionProviderOptions } from '@deepseek-ai/dsh-transcription-groq'
 import * as groqPlugin from '@deepseek-ai/dsh-transcription-groq'
-import * as invariantCompanion from '@deepseek-ai/dsh-transcription-groq/invariant'
 import type { TranscriptionRequest } from '@deepseek-ai/dsh-transcription'
 
 /** Construct the provider over a fixed options value; production passes a live thunk. */
@@ -351,21 +350,5 @@ describe('transcription-groq plugin', () => {
 
     expect(calls[0]![0]).toBe('https://api.groq.com/openai/v1/audio/transcriptions')
     expect((calls[0]![1].body as FormData).get('model')).toBe('whisper-large-v3-turbo')
-  })
-})
-
-describe('transcription-groq invariant companion', () => {
-  it('reserves package ownership without installing a check', async () => {
-    const register = vi.fn(() => () => {})
-    const ctx = { invariants: { register } } as unknown as Context
-
-    const dispose = await invariantCompanion.apply(ctx)
-
-    expect(register).toHaveBeenCalledWith('@deepseek-ai/dsh-transcription-groq', expect.any(Function))
-    const [, installer] = register.mock.calls[0] as unknown as [string, (arg: unknown) => void]
-    expect(() => {
-      installer(undefined)
-    }).not.toThrow()
-    expect(dispose).toBeTypeOf('function')
   })
 })

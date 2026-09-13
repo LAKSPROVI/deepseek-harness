@@ -7,7 +7,6 @@ import TranscriptionRuntime, {
   type TranscriptionRequest,
   type TranscriptionResult,
 } from '@deepseek-ai/dsh-transcription'
-import * as invariantCompanion from '@deepseek-ai/dsh-transcription/invariant'
 
 const available = true
 const unavailable = false
@@ -223,21 +222,5 @@ describe('TranscriptionRuntime result handling', () => {
     const failure = new TranscriptionError('backend exploded', 'TRANSCRIPTION_PROVIDER_ERROR')
     transcription.registerProvider(makeProvider('groq', available, () => Promise.reject(failure)))
     await expect(transcription.transcribe(request())).rejects.toBe(failure)
-  })
-})
-
-describe('transcription invariant companion', () => {
-  it('reserves package ownership without installing a check', async () => {
-    const register = vi.fn(() => () => {})
-    const ctx = { invariants: { register } } as unknown as Context
-
-    const dispose = await invariantCompanion.apply(ctx)
-
-    expect(register).toHaveBeenCalledWith('@deepseek-ai/dsh-transcription', expect.any(Function))
-    const [, installer] = register.mock.calls[0] as unknown as [string, (arg: unknown) => void]
-    expect(() => {
-      installer(undefined)
-    }).not.toThrow()
-    expect(dispose).toBeTypeOf('function')
   })
 })

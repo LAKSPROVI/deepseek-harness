@@ -1,12 +1,11 @@
 /** The Remote voice-input surface over a stubbed transcription seam. */
 
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { Buffer } from 'node:buffer'
 import { Context } from '@deepseek-ai/cordis'
 import TranscriptionRuntime, { TranscriptionError } from '@deepseek-ai/dsh-transcription'
 import type { TranscriptionProvider, TranscriptionRequest, TranscriptionResult } from '@deepseek-ai/dsh-transcription'
 import VoiceInputService from '@deepseek-ai/dsh-voice-input'
-import * as invariantCompanion from '@deepseek-ai/dsh-voice-input/invariant'
 import type { VoiceInputTranscribeRequest } from '@deepseek-ai/dsh-voice-input'
 
 const AUDIO = new Uint8Array([1, 2, 3, 4, 5])
@@ -212,21 +211,5 @@ describe('VoiceInputService failure projection', () => {
     })
 
     await expect(ctx.voiceInput.transcribe(upload())).rejects.toThrow('bug in the provider')
-  })
-})
-
-describe('voice-input invariant companion', () => {
-  it('reserves package ownership without installing a check', async () => {
-    const register = vi.fn(() => () => {})
-    const ctx = { invariants: { register } } as unknown as Context
-
-    const dispose = await invariantCompanion.apply(ctx)
-
-    expect(register).toHaveBeenCalledWith('@deepseek-ai/dsh-voice-input', expect.any(Function))
-    const [, installer] = register.mock.calls[0] as unknown as [string, (arg: unknown) => void]
-    expect(() => {
-      installer(undefined)
-    }).not.toThrow()
-    expect(dispose).toBeTypeOf('function')
   })
 })
