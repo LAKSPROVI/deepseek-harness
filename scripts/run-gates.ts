@@ -1505,7 +1505,17 @@ export function taskkillArgs(rootPid: number, descendants: number[]): string[][]
   return [rootPid, ...descendants].map(pid => ['/PID', String(pid), '/T', '/F'])
 }
 
-/** Breadth-first walk of the pid/ppid rows starting at `root`. */
+/**
+ * Breadth-first walk of the pid/ppid rows starting at `root`.
+ *
+ * The rows are a snapshot of a live process table, not a tree: Windows reuses
+ * pids, so a captured ppid can name a process that is itself a descendant (or
+ * `root`), and pid 0 lists itself as its own parent. Without a visited set the
+ * walk re-enqueues the same subtree forever and the spread in `push` overflows
+ * the stack (`RangeError: Maximum call stack size exceeded`, seen on the
+ * windows build gate). The queue is also a copy: pushing into the array the
+ * map returned would grow that entry while it is being read.
+ */
 function collectDescendants(root: number, rows: Array<[number, number]>): number[] {
   const byParent = new Map<number, number[]>()
   for (const [pid, ppid] of rows) {
@@ -1514,12 +1524,16 @@ function collectDescendants(root: number, rows: Array<[number, number]>): number
     byParent.set(ppid, children)
   }
   const result: number[] = []
-  const queue = byParent.get(root) ?? []
+  const visited = new Set<number>([root])
+  const queue = [...(byParent.get(root) ?? [])]
   for (let index = 0; index < queue.length; index += 1) {
     const pid = queue[index]
-    if (pid === undefined) continue
+    if (pid === undefined || visited.has(pid)) continue
+    visited.add(pid)
     result.push(pid)
-    queue.push(...(byParent.get(pid) ?? []))
+    for (const child of byParent.get(pid) ?? []) {
+      if (!visited.has(child)) queue.push(child)
+    }
   }
   return result
 }

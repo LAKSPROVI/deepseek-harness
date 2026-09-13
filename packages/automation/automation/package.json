@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Persistent scheduled automation engine and generated browser Remote",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/types/index.d.ts",
