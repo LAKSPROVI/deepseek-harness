@@ -629,25 +629,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
-        signature: '@Remote(\'list\') async list(): Promise<readonly { readonly id: string readonly title: string readonly description?: string readonly scheduleType: \'ONCE\' | \'INTERVAL\' | \'CRON\' | \'RRULE\' readonly status: \'ACTIVE\' | \'PAUSED\' | \'COMPLETED\' | \'ERROR\' | \'ARCHIVED\' readonly nextRunAt: string | null readonly lastRunAt: string | null readonly totalRunsCompleted: number readonly maxRuns: number | null readonly createdAt: string readonly updatedAt: string }[]>',
+        signature: '@Remote(\'list\') async list(): Promise<readonly AutomationTaskView[]>',
         description: 'List the deployment owner\'s persisted tasks without modifying the store.',
         parameters: [],
         returns: 'Persisted automation tasks projected for the browser client.',
       },
       {
-        signature: '@Remote(\'trigger\') async trigger(taskId: string): Promise<{ readonly runId: string }>',
+        signature: '@Remote(\'trigger\') async trigger(taskId: string): Promise<AutomationTriggerReceipt>',
         description: 'Queue one owned task immediately while leaving its recurrence unchanged.',
         parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
         returns: 'Identifier of the queued automation run.',
       },
       {
-        signature: '@Remote(\'pause\') async pause(taskId: string): Promise<{ readonly id: string readonly title: string readonly description?: string readonly scheduleType: \'ONCE\' | \'INTERVAL\' | \'CRON\' | \'RRULE\' readonly status: \'ACTIVE\' | \'PAUSED\' | \'COMPLETED\' | \'ERROR\' | \'ARCHIVED\' readonly nextRunAt: string | null readonly lastRunAt: string | null readonly totalRunsCompleted: number readonly maxRuns: number | null readonly createdAt: string readonly updatedAt: string }>',
+        signature: '@Remote(\'pause\') async pause(taskId: string): Promise<AutomationTaskView>',
         description: 'Pause one owned task.',
         parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
         returns: 'Updated task projected for the browser client.',
       },
       {
-        signature: '@Remote(\'resume\') async resume(taskId: string): Promise<{ readonly id: string readonly title: string readonly description?: string readonly scheduleType: \'ONCE\' | \'INTERVAL\' | \'CRON\' | \'RRULE\' readonly status: \'ACTIVE\' | \'PAUSED\' | \'COMPLETED\' | \'ERROR\' | \'ARCHIVED\' readonly nextRunAt: string | null readonly lastRunAt: string | null readonly totalRunsCompleted: number readonly maxRuns: number | null readonly createdAt: string readonly updatedAt: string }>',
+        signature: '@Remote(\'resume\') async resume(taskId: string): Promise<AutomationTaskView>',
         description: 'Resume one owned task and calculate its next run.',
         parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
         returns: 'Updated task projected for the browser client.',
@@ -3905,6 +3905,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AutomationTask {\n    readonly id: string;\n    readonly userId: string;\n    readonly title: string;\n    readonly description?: string;\n    readonly scheduleType: TaskScheduleType;\n    readonly scheduleExpr: string;\n    readonly timezone: string;\n    readonly maxRuns: number | null;\n    readonly totalRunsCompleted: number;\n    readonly endAt: Date | null;\n    readonly actionType: string;\n    readonly actionPayload: Record<string, unknown>;\n    readonly model?: string;\n    readonly modelProvider?: string;\n    readonly promptTemplate?: string;\n    readonly timeoutSeconds: number;\n    readonly retryLimit: number;\n    readonly overlapPolicy: TaskOverlapPolicy;\n    readonly status: TaskStatus;\n    readonly nextRunAt: Date | null;\n    readonly lastRunAt: Date | null;\n    readonly lastRunStatus?: RunStatus;\n    readonly createdAt: Date;\n    readonly updatedAt: Date;\n}',
   },
   {
+    name: 'AutomationTaskView',
+    declaration: 'export interface AutomationTaskView {\n    readonly id: string;\n    readonly title: string;\n    readonly description?: string;\n    readonly scheduleType: \'ONCE\' | \'INTERVAL\' | \'CRON\' | \'RRULE\';\n    readonly status: \'ACTIVE\' | \'PAUSED\' | \'COMPLETED\' | \'ERROR\' | \'ARCHIVED\';\n    readonly nextRunAt: string | null;\n    readonly lastRunAt: string | null;\n    readonly totalRunsCompleted: number;\n    readonly maxRuns: number | null;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+  },
+  {
     name: 'AutomationTriggerReceipt',
     declaration: 'export interface AutomationTriggerReceipt {\n    readonly runId: string;\n}',
   },
@@ -4338,7 +4342,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'FileAutomationStore',
-    declaration: 'export class FileAutomationStore implements IAutomationStore {\n    constructor(filePath: string);\n    public async createTask(dto: CreateTaskDTO): Promise<AutomationTask>;\n    public async getTask(id: string): Promise<AutomationTask | null>;\n    public async listTasks(userId?: string): Promise<AutomationTask[]>;\n    public async updateTask(id: string, updates: Partial<AutomationTask>): Promise<AutomationTask>;\n    public async deleteTask(id: string): Promise<boolean>;\n    public async findDueTasks(now: Date, limit: number = 50): Promise<AutomationTask[]>;\n    public async createRun(taskId: string, scheduledFor: Date): Promise<TaskRun>;\n    public async getRun(id: string): Promise<TaskRun | null>;\n    public async listRunsByTask(taskId: string): Promise<TaskRun[]>;\n    public async updateRun(id: string, updates: {\n        status?: RunStatus;\n        startedAt?: Date;\n        finishedAt?: Date;\n        durationMs?: number;\n        outputData?: Record<string, unknown>;\n        errorMessage?: string;\n        errorStack?: string;\n        logs?: TaskLogEntry[];\n    }): Promise<TaskRun>;\n    public async hasActiveRun(taskId: string): Promise<boolean>;\n    public async createNotification(notif: Omit<TaskNotification, \'id\' | \'createdAt\' | \'isRead\'>): Promise<TaskNotification>;\n    public async listNotifications(userId: string, unreadOnly?: boolean): Promise<TaskNotification[]>;\n    public async listNotificationsByTask(taskId: string): Promise<TaskNotification[]>;\n    public async mark /* …truncated — full shape in source */',
+    declaration: 'export class FileAutomationStore extends InMemoryAutomationStore {\n    constructor(filePath: string);\n    public override createTask(dto: CreateTaskDTO): Promise<AutomationTask>;\n    public override getTask(id: string): Promise<AutomationTask | null>;\n    public override listTasks(userId?: string): Promise<AutomationTask[]>;\n    public override updateTask(id: string, updates: Partial<AutomationTask>): Promise<AutomationTask>;\n    public override deleteTask(id: string): Promise<boolean>;\n    public override findDueTasks(now: Date, limit?: number): Promise<AutomationTask[]>;\n    public override createRun(taskId: string, scheduledFor: Date): Promise<TaskRun>;\n    public override getRun(id: string): Promise<TaskRun | null>;\n    public override listRunsByTask(taskId: string): Promise<TaskRun[]>;\n    public override updateRun(id: string, updates: {\n        status?: RunStatus;\n        startedAt?: Date;\n        finishedAt?: Date;\n        durationMs?: number;\n        outputData?: Record<string, unknown>;\n        errorMessage?: string;\n        errorStack?: string;\n        logs?: TaskLogEntry[];\n    }): Promise<TaskRun>;\n    public override hasActiveRun(taskId: string): Promise<boolean>;\n    public override createNotification(notif: Omit<TaskNotification, \'id\' | \'createdAt\' | \'isRead\'>): Promise<TaskNotification>;\n    public override listNotifications(userId: string, unreadOnly?: boolean): Promise<TaskNotification[]>;\n    public override listNotificationsByTask(taskId: string): Promise< /* …truncated — full shape in source */',
   },
   {
     name: 'FileBlock',
@@ -4507,6 +4511,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'IndexInjectionPlacement',
     declaration: 'export type IndexInjectionPlacement = \'head\' | \'body\';',
+  },
+  {
+    name: 'InMemoryAutomationStore',
+    declaration: 'export class InMemoryAutomationStore implements IAutomationStore {\n    public createTask(dto: CreateTaskDTO): Promise<AutomationTask>;\n    public getTask(id: string): Promise<AutomationTask | null>;\n    public listTasks(userId?: string): Promise<AutomationTask[]>;\n    public async updateTask(id: string, updates: Partial<AutomationTask>): Promise<AutomationTask>;\n    public deleteTask(id: string): Promise<boolean>;\n    public findDueTasks(now: Date, limit: number = 50): Promise<AutomationTask[]>;\n    public async createRun(taskId: string, scheduledFor: Date): Promise<TaskRun>;\n    public getRun(id: string): Promise<TaskRun | null>;\n    public listRunsByTask(taskId: string): Promise<TaskRun[]>;\n    public async updateRun(id: string, updates: {\n        status?: RunStatus;\n        startedAt?: Date;\n        finishedAt?: Date;\n        durationMs?: number;\n        outputData?: Record<string, unknown>;\n        errorMessage?: string;\n        errorStack?: string;\n        logs?: TaskLogEntry[];\n    }): Promise<TaskRun>;\n    public hasActiveRun(taskId: string): Promise<boolean>;\n    public createNotification(notif: Omit<TaskNotification, \'id\' | \'createdAt\' | \'isRead\'>): Promise<TaskNotification>;\n    public listNotifications(userId: string, unreadOnly?: boolean): Promise<TaskNotification[]>;\n    public listNotificationsByTask(taskId: string): Promise<TaskNotification[]>;\n    public markNotificationRead(id: string): Promise<boolean>;\n}',
   },
   {
     name: 'InspectorId',

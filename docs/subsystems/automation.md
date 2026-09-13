@@ -36,7 +36,7 @@ One Host-owned engine that keeps its store, scheduler, and controls together.
  *
  * @returns Persisted automation tasks projected for the browser client.
  */
-@Remote('list') async list(): Promise<readonly { readonly id: string readonly title: string readonly description?: string readonly scheduleType: 'ONCE' | 'INTERVAL' | 'CRON' | 'RRULE' readonly status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ERROR' | 'ARCHIVED' readonly nextRunAt: string | null readonly lastRunAt: string | null readonly totalRunsCompleted: number readonly maxRuns: number | null readonly createdAt: string readonly updatedAt: string }[]>
+@Remote('list') async list(): Promise<readonly AutomationTaskView[]>
 
 /**
  * Queue one owned task immediately while leaving its recurrence unchanged.
@@ -44,7 +44,7 @@ One Host-owned engine that keeps its store, scheduler, and controls together.
  * @param taskId Persisted automation task identifier.
  * @returns Identifier of the queued automation run.
  */
-@Remote('trigger') async trigger(taskId: string): Promise<{ readonly runId: string }>
+@Remote('trigger') async trigger(taskId: string): Promise<AutomationTriggerReceipt>
 
 /**
  * Pause one owned task.
@@ -52,7 +52,7 @@ One Host-owned engine that keeps its store, scheduler, and controls together.
  * @param taskId Persisted automation task identifier.
  * @returns Updated task projected for the browser client.
  */
-@Remote('pause') async pause(taskId: string): Promise<{ readonly id: string readonly title: string readonly description?: string readonly scheduleType: 'ONCE' | 'INTERVAL' | 'CRON' | 'RRULE' readonly status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ERROR' | 'ARCHIVED' readonly nextRunAt: string | null readonly lastRunAt: string | null readonly totalRunsCompleted: number readonly maxRuns: number | null readonly createdAt: string readonly updatedAt: string }>
+@Remote('pause') async pause(taskId: string): Promise<AutomationTaskView>
 
 /**
  * Resume one owned task and calculate its next run.
@@ -60,7 +60,7 @@ One Host-owned engine that keeps its store, scheduler, and controls together.
  * @param taskId Persisted automation task identifier.
  * @returns Updated task projected for the browser client.
  */
-@Remote('resume') async resume(taskId: string): Promise<{ readonly id: string readonly title: string readonly description?: string readonly scheduleType: 'ONCE' | 'INTERVAL' | 'CRON' | 'RRULE' readonly status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ERROR' | 'ARCHIVED' readonly nextRunAt: string | null readonly lastRunAt: string | null readonly totalRunsCompleted: number readonly maxRuns: number | null readonly createdAt: string readonly updatedAt: string }>
+@Remote('resume') async resume(taskId: string): Promise<AutomationTaskView>
 
 /**
  * Existing Chat-tool entrypoint for a manual run.
