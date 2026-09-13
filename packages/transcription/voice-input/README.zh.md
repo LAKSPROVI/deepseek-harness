@@ -109,3 +109,5 @@ kind: "package-reference"
 无。
 
 </details>
+
+不发布运行时不变量伴生包：Remote 表面在调用之间不持有状态、也不发布事件——它解码一次上传，委托给 `ctx.transcription`，应答后不保留任何内容——因此没有可检查的事件或可变数据关系。

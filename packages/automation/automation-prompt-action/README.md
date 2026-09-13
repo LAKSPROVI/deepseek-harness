@@ -102,3 +102,5 @@ None beyond an ordinary first user message; the preset's prefix is unchanged.
 None.
 
 </details>
+
+No runtime invariant companion is published because the handler owns no state between runs — each due task opens one Session, sends one prompt, and reports through the run it received — so there is no event or mutable data relation to check.

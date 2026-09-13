@@ -105,3 +105,5 @@ Independent of every model request: no audio byte and no transcript token enters
 None.
 
 </details>
+
+No runtime invariant companion is published because the provider map is private and the payload bound and selection rules are enforced per call; the seam publishes no registry observation stream and appends no session event, so there is no owned event/data relation to check.

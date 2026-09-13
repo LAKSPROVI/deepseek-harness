@@ -109,3 +109,5 @@ Independent of every model request: no audio byte and no transcript token enters
 None.
 
 </details>
+
+No runtime invariant companion is published because the Remote surface holds no state across calls and publishes no event — it decodes one upload, delegates to `ctx.transcription`, and retains nothing after answering — so there is no event or mutable data relation to check.

@@ -112,3 +112,5 @@ kind: "package-reference"
 无。
 
 </details>
+
+不发布运行时不变量伴生包：这些工具只是 `ctx.automation` 之上的薄请求适配层，所有可观察事实都属于引擎的存储，参数映射由工具测试覆盖。

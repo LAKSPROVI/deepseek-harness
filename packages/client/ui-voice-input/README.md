@@ -80,3 +80,5 @@ Independent of every model request: this package contributes no token to any req
 None.
 
 </details>
+
+No runtime invariant companion is published because the recording lifecycle lives entirely in one browser component's local state and in MediaStream tracks released on every exit path; the audio bytes never become durable data, and the one relationship worth asserting (a stopped recording leaves no live track) is observable only from the browser, where component specs drive the recorder.

@@ -164,3 +164,5 @@ Independent of every model request: no task record or run log enters a request f
 None.
 
 </details>
+
+No runtime invariant companion is published because the engine's durable state lives in the file store under `$DSH_HOME/data/automation`, which the scheduler, worker, and reaper mutate only through the `IAutomationStore` contract the persistence specs cover; the Cordis seam publishes no session event stream a host-side installer could observe.

@@ -112,3 +112,5 @@ Append-only; newly visible content follows the reusable request prefix and does 
 None.
 
 </details>
+
+No runtime invariant companion is published because the tools are thin request adapters over `ctx.automation`: every observable fact belongs to the engine's store, and the tool specs cover the argument mapping.

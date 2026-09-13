@@ -90,3 +90,5 @@ None.
 </details>
 
 **Runtime invariant:** the panel owns one slot registration and one mounted namespace; every displayed state comes from the last successful `list()`.
+
+No runtime invariant companion is published because the panel is browser-side only: it owns one slot registration and renders the last successful `list()`, neither of which a host-side installer can observe.

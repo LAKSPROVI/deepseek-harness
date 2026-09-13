@@ -99,3 +99,5 @@ Independent of every conversation request: the Groq transcription call is a sepa
 None.
 
 </details>
+
+No runtime invariant companion is published because the provider holds no state between calls — it projects its settings section per transcription and retains no credential — so it publishes no event or mutable data relation to check.

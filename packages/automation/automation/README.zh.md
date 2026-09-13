@@ -165,3 +165,5 @@ npx vitest run packages/automation/automation/tests
 无。
 
 </details>
+
+不发布运行时不变量伴生包：引擎的持久状态位于 `$DSH_HOME/data/automation` 下的文件存储中，调度器、worker 与 reaper 仅通过持久化测试覆盖的 `IAutomationStore` 契约修改它；Cordis 接缝不发布任何可供宿主侧安装器观察的会话事件流。
