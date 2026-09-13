@@ -300,6 +300,9 @@ export default defineConfig({
         // The Team browser entry binds its source-covered mount lifecycle to
         // the generated Team Remote contribution, which likewise exists only in lib.
         'packages/client/ui-agent-team/src/client/index.ts',
+        // Same shape: the automation browser entry binds the generated automations
+        // Remote contribution to its source-covered mount lifecycle.
+        'packages/client/ui-automation/src/client/index.ts',
         // Slash/command/input round: per-file gaps deferred with the same
         // client-lane debt. TODO(gui): cover and remove with the lane above.
         'packages/client/connection/src/client/fixture.ts',

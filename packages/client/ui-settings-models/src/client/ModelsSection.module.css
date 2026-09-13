@@ -692,7 +692,7 @@ select.input {
 }
 /* 9Router Dynamic Synchronization Status Card */
 .syncPanel {
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
   padding: 12px 14px;
   background: var(--dsw-alias-bg-module-platform);
@@ -746,6 +746,8 @@ select.input {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+
+  corner-shape: round;
   background: currentColor;
 }
 
@@ -809,7 +811,7 @@ select.input {
   padding: 2px 6px;
   border-radius: 4px;
   background: var(--dsw-alias-bg-layer-1);
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   font-size: 11px;
   line-height: 14px;
   color: var(--dsw-alias-label-secondary);

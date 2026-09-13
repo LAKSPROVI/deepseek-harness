@@ -12,7 +12,7 @@
   gap: 6px;
   height: 28px;
   padding: 0 8px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 14px;
   background: var(--dsw-alias-bg-module-surface);
   color: var(--dsw-alias-label-secondary);
@@ -45,7 +45,7 @@
   width: 280px;
   padding: 6px;
   background: var(--dsw-alias-bg-module-surface);
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
   animation: menu-in 150ms var(--ds-ease-in-out);
@@ -106,7 +106,7 @@
 }
 
 .divider {
-  height: 1px;
+  height: 0.5px;
   background: var(--dsw-alias-border-l1);
   margin: 4px 6px;
 }

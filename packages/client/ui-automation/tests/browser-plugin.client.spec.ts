@@ -12,7 +12,7 @@ import { cleanup } from '@testing-library/react'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { AutomationActionProps } from '../src/client/types.ts'
-import { apply, inject } from '../src/client/index.ts'
+import { inject, mountAutomationUi } from '../src/client/mount.ts'
 
 afterEach(cleanup)
 
@@ -56,7 +56,7 @@ async function bench() {
     name: 'root',
     children: { 'conversation.session.header.actions': { kind: 'list', scope: 'session' } },
   } as never, (() => null) as never)
-  const fiber = ctx.plugin({ inject: [...inject], apply })
+  const fiber = ctx.plugin({ inject: [...inject], apply: clientCtx => mountAutomationUi(clientCtx, {} as never) })
   await fiber.await()
   const entry = ctx.slots.entries('conversation.session.header.actions')[0]
   return { ctx, fiber, calls, entry, face: entry?.inject as unknown as (() => AutomationActionProps) | undefined }

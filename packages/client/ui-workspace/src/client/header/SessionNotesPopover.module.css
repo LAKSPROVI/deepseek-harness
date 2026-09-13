@@ -12,7 +12,7 @@
   gap: 6px;
   height: 28px;
   padding: 0 8px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 14px;
   background: var(--dsw-alias-bg-module-surface);
   color: var(--dsw-alias-label-secondary);
@@ -61,7 +61,7 @@
   max-width: calc(100vw - 32px);
   max-height: 480px;
   background: var(--dsw-alias-bg-module-surface);
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
   overflow: hidden;
@@ -84,7 +84,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px 8px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-module-platform);
 }
 
@@ -115,7 +115,7 @@
 
 .tabs {
   display: flex;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
   padding: 0 14px;
   gap: 16px;
   background: var(--dsw-alias-bg-module-platform);
@@ -161,13 +161,15 @@
   padding: 12px 14px;
   overflow-y: auto;
   gap: 10px;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .notesArea {
   width: 100%;
   min-height: 180px;
   resize: vertical;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 8px;
   padding: 8px 10px;
   font-family: inherit;
@@ -190,6 +192,8 @@
   gap: 6px;
   max-height: 200px;
   overflow-y: auto;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .reminderItem {
@@ -199,7 +203,7 @@
   padding: 6px 8px;
   border-radius: 6px;
   background: var(--dsw-alias-bg-module-platform);
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   font-size: 12px;
 }
 
@@ -273,7 +277,7 @@
   flex: 1;
   padding: 6px 8px;
   font-size: 12px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 6px;
   background: var(--dsw-alias-bg-module-surface);
   color: var(--dsw-alias-label-primary);
@@ -288,7 +292,7 @@
   width: 120px;
   padding: 6px 8px;
   font-size: 11px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 6px;
   background: var(--dsw-alias-bg-module-surface);
   color: var(--dsw-alias-label-primary);
@@ -321,7 +325,7 @@
   justify-content: flex-end;
   gap: 8px;
   padding: 8px 14px 10px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-module-platform);
 }
 
@@ -330,7 +334,7 @@
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 6px;
   background: var(--dsw-alias-bg-module-surface);
   color: var(--dsw-alias-label-secondary);

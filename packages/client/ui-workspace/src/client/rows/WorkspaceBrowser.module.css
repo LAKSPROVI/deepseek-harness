@@ -360,7 +360,7 @@
   flex: none;
   margin-bottom: 8px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
 }
 
 .recentSectionHeader {
@@ -386,7 +386,9 @@
   line-height: 14px;
   padding: 0 5px;
   border-radius: 8px;
-  background: var(--dsw-alias-bg-module-platform);
+  /* Base-rung fill on purpose: this sheet scrolls (.list) and the elevated
+     scrollbar rebind would recolor the whole session list for one badge. */
+  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-tertiary);
 }
 
