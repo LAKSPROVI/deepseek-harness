@@ -89,19 +89,44 @@ export class ModelDirectoryResolver extends Service {
     // slow or unreachable Host would lock a working composer.
     const conversation = this.ctx.get('conversation')
     if (conversation !== undefined) {
+      const input = conversation.input?.for(actx)
+      const imageIncompatible = (): boolean => {
+        if (input === undefined || typeof conversation.draftAttachments !== 'function') return false
+        const modalities = directory.store.getSnapshot().currentModel?.inputModalities
+        if (modalities === undefined || modalities.includes('image')) return false
+        return conversation.draftAttachments(input.state.getSnapshot().attachmentIds)
+          .some((attachment: ComposerAttachment) => attachment.kind === 'image')
+      }
       const publish = (): void => {
-        conversation.blocks.set(sessionId, directory.store.getSnapshot().routable === false
+        const { routable } = directory.store.getSnapshot()
+        conversation.blocks.set(sessionId, routable === false
           ? { reason: this.blockReason() }
-          : undefined)
+          : imageIncompatible()
+            ? { reason: this.imageReason() }
+            : undefined)
       }
       publish()
-      actx.effect(() => {
-        const stop = directory.store.subscribe(publish)
+      const disposePolicy = this.ctx.effect(() => {
+        const stopDirectory = directory.store.subscribe(publish)
+        const stopInput = input?.state.subscribe(publish)
+        const unregisterAdmission = typeof conversation.registerPromptAdmission === 'function'
+          ? conversation.registerPromptAdmission(
+            sessionId,
+            (attachments: readonly ComposerAttachment[]) =>
+              attachments.some((attachment: ComposerAttachment) => attachment.kind === 'image')
+              && directory.store.getSnapshot().currentModel?.inputModalities?.includes('image') === false
+                ? this.imageReason()
+                : undefined,
+          )
+          : () => {}
         return () => {
-          stop()
+          stopDirectory()
+          stopInput?.()
+          unregisterAdmission()
           conversation.blocks.set(sessionId, undefined)
         }
-      }, 'ui-model-selection: composer block')
+      }, 'ui-model-selection: composer policy plugin owner')
+      actx.effect(() => disposePolicy, 'ui-model-selection: composer policy session owner')
     }
     actx.effect(() => () => {
       directory.dispose()

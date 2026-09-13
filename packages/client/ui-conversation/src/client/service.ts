@@ -36,6 +36,9 @@ import type { InputSubmitMode } from './contract/composer-submission.ts'
  * verbs and the input registry other plugins may reach — and exactly what a
  * test fake must supply.
  */
+/** Synchronous client preflight for one ordinary model prompt. */
+export type PromptAdmissionCheck = (attachments: readonly ComposerAttachment[]) => string | undefined
+
 export interface IConversation {
   /** The per-session input machine registry (SessionInputResolver face). */
   readonly input: SessionInputResolver
@@ -44,6 +47,20 @@ export interface IConversation {
    * cannot import makes a session's input inert with its own reason.
    */
   readonly blocks: ComposerBlocks
+  /**
+   * Register a synchronous preflight for ordinary model prompts in one session.
+   * Returning text rejects before attachment encoding or Host RPC; undefined admits.
+   * @param sessionId - session whose ordinary prompts are checked.
+   * @param check - prompt attachment check.
+   * @returns disposer removing the check.
+   */
+  registerPromptAdmission(sessionId: SessionId, check: PromptAdmissionCheck): () => void
+  /**
+   * Resolve browser-owned draft attachments without serializing them.
+   * @param ids - ordered draft identities.
+   * @returns every registered matching attachment in input order.
+   */
+  draftAttachments(ids: readonly DraftAttachmentId[]): readonly ComposerAttachment[]
   /**
    * Send a prompt into the caller scope's session (queued turn).
    * @param text - prompt text, sent verbatim as one text block.
@@ -156,7 +173,8 @@ export class ConversationController extends Service implements IConversation {
   readonly blocks: ComposerBlocks
   /** Live upload state per file-kind draft; images never appear here. */
   readonly fileUploads: SnapshotStore<Record<string, DraftFileUpload>> = createSnapshotStore<Record<string, DraftFileUpload>>({})
-  private readonly draftAttachments = new Map<DraftAttachmentId, ComposerAttachment>()
+  private readonly registeredDraftAttachments = new Map<DraftAttachmentId, ComposerAttachment>()
+  private readonly promptAdmissions = new Map<SessionId, Set<PromptAdmissionCheck>>()
   private readonly fileUploadOperations = new Map<DraftAttachmentId, {
     readonly controller: AbortController
     readonly done: Promise<void>
@@ -191,12 +209,29 @@ export class ConversationController extends Service implements IConversation {
       await Promise.allSettled([...this.pendingFileUploads])
       this.fileUploadOperations.clear()
       this.fileUploadQueue.length = 0
-      for (const attachment of this.draftAttachments.values()) {
+      for (const attachment of this.registeredDraftAttachments.values()) {
         if (attachment.kind === 'image') revokePreview(attachment.previewUrl)
       }
-      this.draftAttachments.clear()
+      this.registeredDraftAttachments.clear()
+      this.promptAdmissions.clear()
       this.fileUploads.set({})
     }, 'conversation draft attachments')
+  }
+
+  /** @inheritdoc */
+  registerPromptAdmission(sessionId: SessionId, check: PromptAdmissionCheck): () => void {
+    const checks = this.promptAdmissions.get(sessionId) ?? new Set<PromptAdmissionCheck>()
+    checks.add(check)
+    this.promptAdmissions.set(sessionId, checks)
+    return () => {
+      checks.delete(check)
+      if (checks.size === 0) this.promptAdmissions.delete(sessionId)
+    }
+  }
+
+  /** @inheritdoc */
+  draftAttachments(ids: readonly DraftAttachmentId[]): readonly ComposerAttachment[] {
+    return this.resolveDraftAttachments(ids)
   }
 
   /**
@@ -235,6 +270,10 @@ export class ConversationController extends Service implements IConversation {
     const attachments = this.resolveDraftAttachments(attachmentIds)
     if (attachments.length !== attachmentIds.length) {
       throw new Error('conversation.sendSession: one or more draft attachments are no longer available')
+    }
+    for (const check of this.promptAdmissions.get(session.sessionId) ?? []) {
+      const rejection = check(attachments)
+      if (rejection !== undefined) return { kind: 'error', text: rejection }
     }
     const uploads = this.fileUploads.getSnapshot()
     const uploadFor = (attachment: ComposerFileAttachment): Extract<DraftFileUpload, { status: 'ready' }> => {
@@ -309,7 +348,7 @@ export class ConversationController extends Service implements IConversation {
     return files.map((file) => {
       if (isImageMediaType(file.type)) {
         const attachment = browserDraftAttachment(file)
-        this.draftAttachments.set(attachment.id, attachment)
+        this.registeredDraftAttachments.set(attachment.id, attachment)
         probeDimensions(attachment)
         return attachment
       }
@@ -318,7 +357,7 @@ export class ConversationController extends Service implements IConversation {
         id: randomUUID() as DraftAttachmentId,
         file,
       }
-      this.draftAttachments.set(attachment.id, attachment)
+      this.registeredDraftAttachments.set(attachment.id, attachment)
       this.beginFileUpload(sessionId, attachment)
       return attachment
     })
@@ -330,7 +369,7 @@ export class ConversationController extends Service implements IConversation {
    * @param id - draft attachment id whose upload previously failed.
    */
   retryFileUpload(sessionId: SessionId, id: DraftAttachmentId): void {
-    const attachment = this.draftAttachments.get(id)
+    const attachment = this.registeredDraftAttachments.get(id)
     if (attachment === undefined || attachment.kind !== 'file') return
     if (this.fileUploads.getSnapshot()[id]?.status !== 'error') return
     this.beginFileUpload(sessionId, attachment)
@@ -343,7 +382,7 @@ export class ConversationController extends Service implements IConversation {
    */
   rebindDraftFiles(sessionId: SessionId, ids: readonly DraftAttachmentId[]): void {
     for (const id of ids) {
-      const attachment = this.draftAttachments.get(id)
+      const attachment = this.registeredDraftAttachments.get(id)
       if (attachment?.kind === 'file') this.beginFileUpload(sessionId, attachment)
     }
   }
@@ -428,7 +467,7 @@ export class ConversationController extends Service implements IConversation {
   resolveDraftAttachments(ids: readonly DraftAttachmentId[]): readonly ComposerAttachment[] {
     const attachments: ComposerAttachment[] = []
     for (const id of ids) {
-      const attachment = this.draftAttachments.get(id)
+      const attachment = this.registeredDraftAttachments.get(id)
       if (attachment !== undefined) attachments.push(attachment)
     }
     return attachments
@@ -466,12 +505,12 @@ export class ConversationController extends Service implements IConversation {
    * @param id - draft attachment id.
    */
   releaseDraftAttachment(id: DraftAttachmentId): void {
-    const attachment = this.draftAttachments.get(id)
+    const attachment = this.registeredDraftAttachments.get(id)
     if (attachment === undefined) return
     const operation = this.fileUploadOperations.get(id)
     this.fileUploadOperations.delete(id)
     operation?.controller.abort()
-    this.draftAttachments.delete(id)
+    this.registeredDraftAttachments.delete(id)
     if (attachment.kind === 'image') {
       revokePreview(attachment.previewUrl)
       return
@@ -557,14 +596,14 @@ export class ConversationController extends Service implements IConversation {
     const uiConversation = this.ctx.get('uiConversation')
     let observedIndex = 0
     for (const attachment of attachments) {
-      const live = this.draftAttachments.get(attachment.id)
+      const live = this.registeredDraftAttachments.get(attachment.id)
       const ref = retirement.attachments[observedIndex++]
       if (live === undefined) continue
       if (attachment.kind === 'file') {
         this.releaseDraftAttachment(attachment.id)
         continue
       }
-      this.draftAttachments.delete(attachment.id)
+      this.registeredDraftAttachments.delete(attachment.id)
       if (ref !== undefined && 'mediaType' in ref
         && uiConversation?.seedImageUrl(sessionId, ref, attachment.previewUrl) === true) continue
       revokePreview(attachment.previewUrl)

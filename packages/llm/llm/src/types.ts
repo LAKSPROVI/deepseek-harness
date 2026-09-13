@@ -204,6 +204,7 @@ export interface LlmProviderInfo {
 export interface ModelModalityMap {
   text: 'text'
   image: 'image'
+  file: 'file'
 }
 
 /** Any declared provider model modality. */
@@ -293,6 +294,8 @@ export interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+  /** Accepted request modalities; absent means unknown. */
+  inputModalities?: readonly ModelModality[]
 }
 
 /** One adapter-discovered model; catalog membership is advisory, not request validation. */

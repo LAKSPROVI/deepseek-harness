@@ -1,0 +1,158 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.heading {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 20px;
+  line-height: 28px;
+}
+
+.description,
+.notice,
+.aggregate {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.unavailable,
+.error,
+.slashWarning {
+  color: var(--dsw-alias-label-warning);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.unavailable {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-warning);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-warning);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--dsw-alias-border-normal);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.label input,
+.label textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-normal);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-input);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  resize: vertical;
+}
+
+.label input:focus,
+.label textarea:focus {
+  outline: 2px solid var(--dsw-alias-border-focus);
+  outline-offset: 1px;
+}
+
+.editorActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.count {
+  margin-right: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-normal);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.cardText {
+  flex: 1;
+  min-width: 0;
+}
+
+.cardText h3,
+.cardText p {
+  margin: 0;
+}
+
+.cardText h3 {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.cardText p {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.cardActions,
+.slashWarning {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.slashWarning {
+  margin: 4px 0 0;
+}
+
+.error {
+  margin: 0;
+}
+
+.aggregate {
+  align-self: flex-end;
+}

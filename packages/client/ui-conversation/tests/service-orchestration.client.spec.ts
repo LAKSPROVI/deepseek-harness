@@ -138,6 +138,38 @@ describe('ConversationController', () => {
     await b.runtime.dispose()
   })
 
+  it('rejects a client prompt preflight before encoding or RPC and preserves its draft', async () => {
+    const b = await bench()
+    const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preflight')
+    const [image] = b.root.createDrafts(b.runtime.sessions.binding('s1')!.session.sessionId, [
+      new File([Uint8Array.of(1)], 'blocked.png', { type: 'image/png' }),
+    ])
+    if (image === undefined) throw new Error('draft image missing')
+    const arrayBuffer = vi.spyOn((image as { file: File }).file, 'arrayBuffer')
+    const remove = b.root.registerPromptAdmission(
+      b.runtime.sessions.binding('s1')!.session.sessionId,
+      attachments => attachments.some(attachment => attachment.kind === 'image') ? 'Choose another model or remove the image.' : undefined,
+    )
+    b.shell.setDraft('keep this')
+    b.shell.addAttachments([image.id])
+    b.shell.submit()
+
+    await vi.waitFor(() => {
+      expect(b.shell.snapshot.phase).toBe('plain')
+    })
+    expect(b.shell.snapshot.draft).toBe('keep this')
+    expect(b.shell.snapshot.attachmentIds).toEqual([image.id])
+    expect(b.shell.notices.getSnapshot()).toMatchObject({
+      level: 'error', text: 'Choose another model or remove the image.',
+    })
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    expect(b.prompt).not.toHaveBeenCalled()
+
+    remove()
+    created.mockRestore()
+    await b.runtime.dispose()
+  })
+
   it('classifies image MIME drafts as images and every other file as an uploading file draft', async () => {
     const b = await bench()
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview')

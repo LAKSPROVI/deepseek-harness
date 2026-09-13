@@ -123,6 +123,7 @@ export interface ModelCatalogModel {
   readonly id: string
   readonly name: string
   readonly description?: string
+  readonly inputModalities?: readonly string[]
   readonly reasoning?: ModelReasoning
 }
 

@@ -118,7 +118,10 @@ export function apply(ctx: ClientContext): void {
 
   // The composer-block reason is this plugin's own copy, read at raise time so
   // a locale change reaches the next publish.
-  ctx.plugin(ModelDirectoryResolver, { blockReason: () => t('blocked.composer') })
+  ctx.plugin(ModelDirectoryResolver, {
+    blockReason: () => t('blocked.composer'),
+    imageReason: () => t('blocked.images'),
+  })
 
   // Entry 1: the /model popupSelect over the shared directory.
   ctx.inject(['commandUi', 'modelDirectories'], (scope: ClientContext) => {

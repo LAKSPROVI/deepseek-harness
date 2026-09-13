@@ -213,6 +213,32 @@ export function catalogModels(provider: string): Map<string, Model<Api>> {
  */
 export type PiAiReasoningEfforts = Partial<Record<ModelThinkingLevel, string | null>>
 
+/** Reasoning capability verified independently of endpoint discovery. */
+const VERIFIED_REASONING_EFFORTS: Readonly<Record<string, PiAiReasoningEfforts>> = {
+  'kr/gpt-5.6-sol-thinking-agentic': {
+    off: 'none',
+    low: 'low',
+    medium: 'medium',
+    high: 'high',
+    xhigh: 'xhigh',
+    max: 'max',
+  },
+}
+
+/** Default reasoning level verified for an exact route model. */
+const VERIFIED_REASONING_DEFAULTS: Readonly<Record<string, ModelThinkingLevel>> = {
+  'kr/gpt-5.6-sol-thinking-agentic': 'off',
+}
+
+/**
+ * Return the verified default for one exact route model.
+ * @param model - Exact model id sent to the route.
+ * @returns The verified default, or undefined when the route owns the choice.
+ */
+export function verifiedReasoningDefault(model: string): ModelThinkingLevel | undefined {
+  return VERIFIED_REASONING_DEFAULTS[model]
+}
+
 /**
  * Whether one pi-ai compat field is configurable on a profile.
  *
@@ -689,7 +715,11 @@ function resolveModelReasoning(
   entry: PiAiModelProfile,
   base: Model<Api> | undefined,
 ): ModelReasoning {
-  const efforts = entry.reasoningEfforts
+  // This exact model's audited catalog snapshot has no levels. Its functional
+  // reasoning audit is the authority instead: discovery does not establish
+  // effort support, and a route-local declaration must not reintroduce the
+  // rejected `minimal` level.
+  const efforts = VERIFIED_REASONING_EFFORTS[entry.id] ?? entry.reasoningEfforts
   if (efforts === undefined) {
     // Reasoning rides the installed entry or is absent: a bare capability flag
     // would make pi-ai advertise effort levels with no `thinkingLevelMap` to

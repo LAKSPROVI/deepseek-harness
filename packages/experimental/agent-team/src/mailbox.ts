@@ -2,7 +2,6 @@
 
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
-import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
@@ -10,9 +9,9 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { steerHostSubagentPrompt } from '@deepseek-ai/dsh-subagent/internal'
 import { errorMessage, TeamError } from './error.ts'
+import { readPersistedSession } from './persisted.ts'
 import type { TeamJournal } from './journal.ts'
 import type { TeamRuntimeLifecycle } from './lifecycle.ts'
-import { readPersistedSession } from './persisted.ts'
 import type { TeamRoster } from './roster.ts'
 import { resolveActiveMember } from './roster.ts'
 import { messageAccepted } from './session-message.ts'
@@ -26,6 +25,7 @@ import type {
 /** Owns every process-local state transition for the durable Team mailbox. */
 export class TeamMailbox {
   private readonly dispatchTails = new Map<SessionId, Promise<void>>()
+  private readonly activeDispatches = new Map<SessionId, TeamMessageSnapshot>()
   private readonly inFlightMessages = new Set<TeamMessageId>()
   private readonly inFlightDispatches = new Set<Promise<unknown>>()
 
@@ -49,7 +49,7 @@ export class TeamMailbox {
   /**
    * Queue one durable peer message, then attempt immediate delivery.
    * @param caller - exact live sending Team member.
-   * @param request - target name, content, and pre-queue cancellation.
+   * @param request - target name, content, scheduling mode, and pre-queue cancellation.
    * @returns durable message identity and immediate-delivery observation.
    */
   async send(caller: Agent, request: SendTeamMessageRequest): Promise<SendTeamMessageResult> {
@@ -70,7 +70,7 @@ export class TeamMailbox {
     if (this.lifecycle.disposed || event.type !== 'user/message' || event.data.source.kind !== 'team-message') return
     const source = event.data.source
     const acknowledgement = Promise.resolve().then(async () => {
-      const root = this.ctx.agents.get(brandString<SessionId>(source.teamId))
+      const root = this.ctx.agents.get(SessionId(source.teamId))
       if (root !== undefined) await this.checkpointDelivered(root, session, source.messageId)
     }).catch((error: unknown) => {
       this.ctx.logger.warn(`Team message "${source.messageId}" acknowledgement failed: ${errorMessage(error)}`)
@@ -88,11 +88,13 @@ export class TeamMailbox {
     const membership = this.roster.tryMembership(agent)
     if (membership === undefined) return
     const state = this.journal.state(membership.root)
-    const messages = state.messages.filter(message =>
-      !state.delivered.includes(message.id)
+    const messages = [...state.messages.values()].filter(message =>
+      !state.delivered.has(message.id)
       && (membership.role === 'lead' || message.targetId === agent.id))
     for (const message of messages) {
       signal.throwIfAborted()
+      if (membership.role === 'lead' && message.delivery === 'quiet'
+        && message.targetId !== membership.root.id && this.ctx.agents.get(message.targetId) === undefined) continue
       await this.tryDispatch(membership.root, message, signal)
     }
   }
@@ -119,8 +121,8 @@ export class TeamMailbox {
       const state = this.journal.state(root)
       const target = resolveActiveMember(root, state, request.target)
       if (target.id === caller.id) throw new TeamError('a Team member cannot message itself', 'TEAM_SELF_MESSAGE')
-      const pendingForTarget = state.messages.filter(candidate =>
-        candidate.targetId === target.id && !state.delivered.includes(candidate.id)).length
+      const pendingForTarget = [...state.messages.values()].filter(candidate =>
+        candidate.targetId === target.id && !state.delivered.has(candidate.id)).length
       if (pendingForTarget >= this.maxPendingMessagesPerMember) {
         throw new TeamError(
           `teammate "${target.name}" has ${pendingForTarget} pending messages`,
@@ -132,6 +134,7 @@ export class TeamMailbox {
         senderId: caller.id,
         senderName: membership.name,
         targetId: target.id,
+        delivery: request.delivery,
         content,
       }
       if (Buffer.byteLength(JSON.stringify(this.deliveryContent(queued)), 'utf8') > this.maxMessageBytes) {
@@ -186,7 +189,13 @@ export class TeamMailbox {
     message: TeamMessageSnapshot,
     signal: AbortSignal,
   ): Promise<boolean> {
-    return await this.serializeDispatch(message, () => this.dispatchThrough(root, message, signal))
+    const active = this.activeDispatches.get(message.targetId)
+    const live = message.targetId === root.id ? root : this.ctx.agents.get(message.targetId)
+    if (active !== undefined && live !== undefined && message.delivery === 'quiet'
+      && this.messagePrecedes(root, message.id, active.id)) {
+      return await this.dispatchOnce(root, message, signal)
+    }
+    return await this.serializeDispatch(message, () => this.dispatchOnce(root, message, signal))
   }
 
   /** Serialize delivery admission for one durable target in queued order. */
@@ -196,8 +205,16 @@ export class TeamMailbox {
   ): Promise<boolean> {
     const targetId = message.targetId
     const prior = this.dispatchTails.get(targetId) ?? Promise.resolve()
+    const dispatch = async (): Promise<boolean> => {
+      this.activeDispatches.set(targetId, message)
+      try {
+        return await operation()
+      } finally {
+        this.activeDispatches.delete(targetId)
+      }
+    }
     /* v8 ignore next -- dispatch tails absorb rejection, so the recovery callback is a fail-safe backstop. */
-    const run = prior.then(operation, operation)
+    const run = prior.then(dispatch, dispatch)
     /* v8 ignore next -- dispatchOnce contains delivery failures and serializeDispatch itself does not throw. */
     const tail = run.then(() => undefined, () => undefined)
     this.dispatchTails.set(targetId, tail)
@@ -206,29 +223,6 @@ export class TeamMailbox {
     } finally {
       if (this.dispatchTails.get(targetId) === tail) this.dispatchTails.delete(targetId)
     }
-  }
-
-  /** Deliver every pending target message through `message` in durable queue order. */
-  private async dispatchThrough(
-    root: Agent,
-    message: TeamMessageSnapshot,
-    signal: AbortSignal,
-  ): Promise<boolean> {
-    const state = this.journal.state(root)
-    const pending = state.messages.filter(candidate =>
-      candidate.targetId === message.targetId && !state.delivered.includes(candidate.id))
-    const requested = pending.findIndex(candidate => candidate.id === message.id)
-    if (requested < 0) return state.delivered.includes(message.id)
-    for (const candidate of pending.slice(0, requested + 1)) {
-      const ownsInFlight = !this.inFlightMessages.has(candidate.id)
-      if (ownsInFlight) this.inFlightMessages.add(candidate.id)
-      try {
-        if (!await this.dispatchOnce(root, candidate, signal)) return false
-      } finally {
-        if (ownsInFlight) this.inFlightMessages.delete(candidate.id)
-      }
-    }
-    return true
   }
 
   /** Attempt one queued delivery after target-local ordering admits it. */
@@ -247,26 +241,79 @@ export class TeamMailbox {
       }
       const content = this.deliveryContent(message)
       if (message.targetId === root.id) {
-        const input = createUserMessage({ content, source })
-        root.steer(input)
+        root.steer(createUserMessage({ content, source }))
         return await this.checkpointDelivered(root, root.session, message.id)
       }
-      if (target === undefined) {
-        const recorded = await this.persistedTargetRecorded(message.targetId, message.id, signal)
-        if (recorded === undefined) return false
-        if (recorded) {
-          await this.markDelivered(root, message.id, message.targetId)
-          return true
-        }
+      if (message.delivery === 'quiet') {
+        if (target === undefined) return false
+        target.steer(createUserMessage({ content, source }))
+        return await this.checkpointDelivered(root, target.session, message.id)
       }
-      await steerHostSubagentPrompt(this.ctx.subagents, root, message.targetId, content, source, signal)
-      return target === undefined
-        ? true
-        : await this.checkpointDelivered(root, target.session, message.id)
+      if (target !== undefined) {
+        target.followup(createUserMessage({ content, source }))
+        return await this.checkpointDelivered(root, target.session, message.id)
+      }
+      const recorded = await this.persistedTargetRecorded(message.targetId, message.id, signal)
+      if (recorded === undefined) return false
+      if (recorded) {
+        await this.markDelivered(root, message.id, message.targetId)
+        return true
+      }
+      return await this.dispatchThrough(root, message, signal)
     } catch (error: unknown) {
       this.ctx.logger.warn(`team message "${message.id}" remains queued: ${errorMessage(error)}`)
       return false
     }
+  }
+
+  /**
+   * Wake one inactive target by delivering its whole pending queue in durable
+   * queue order, so a follow-up drains the quiet mail queued ahead of it.
+   */
+  private async dispatchThrough(
+    root: Agent,
+    message: TeamMessageSnapshot,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const state = this.journal.state(root)
+    const pending = [...state.messages.values()].filter(candidate =>
+      candidate.targetId === message.targetId && !state.delivered.has(candidate.id))
+    const requested = pending.findIndex(candidate => candidate.id === message.id)
+    if (requested < 0) return state.delivered.has(message.id)
+    for (const candidate of pending.slice(0, requested + 1)) {
+      const ownsInFlight = !this.inFlightMessages.has(candidate.id)
+      if (ownsInFlight) this.inFlightMessages.add(candidate.id)
+      try {
+        const recorded = await this.persistedTargetRecorded(candidate.targetId, candidate.id, signal)
+        if (recorded === undefined) return false
+        if (recorded) {
+          await this.markDelivered(root, candidate.id, candidate.targetId)
+          continue
+        }
+        await steerHostSubagentPrompt(this.ctx.subagents, root, candidate.targetId, this.deliveryContent(candidate), {
+          kind: 'team-message' as const,
+          teamId: TeamId(root.id),
+          messageId: candidate.id,
+          senderId: candidate.senderId,
+          senderName: candidate.senderName,
+        }, signal)
+        const resumed = this.ctx.agents.get(candidate.targetId)
+        if (resumed === undefined) {
+          await this.markDelivered(root, candidate.id, candidate.targetId)
+        } else if (!await this.checkpointDelivered(root, resumed.session, candidate.id)) {
+          return false
+        }
+      } finally {
+        if (ownsInFlight) this.inFlightMessages.delete(candidate.id)
+      }
+    }
+    return true
+  }
+
+  /** Whether `left` was durably queued before `right` in one Lead log. */
+  private messagePrecedes(root: Agent, left: TeamMessageId, right: TeamMessageId): boolean {
+    const ids = [...this.journal.state(root).messages.keys()]
+    return ids.indexOf(left) < ids.indexOf(right)
   }
 
   /** Flush one live target receipt before the Lead records its delivered edge. */
@@ -285,8 +332,8 @@ export class TeamMailbox {
   private async markDelivered(root: Agent, messageId: TeamMessageId, targetId: SessionId): Promise<void> {
     await this.journal.transact(root.id, async () => {
       const state = this.journal.state(root)
-      if (state.delivered.includes(messageId)) return
-      const queued = state.messages.find(message => message.id === messageId)
+      if (state.delivered.has(messageId)) return
+      const queued = state.messages.get(messageId)
       if (queued === undefined || queued.targetId !== targetId) return
       await this.journal.appendAndFlush(root, 'team/message/delivered', {
         version: 2,
@@ -312,7 +359,7 @@ export class TeamMailbox {
     ]
   }
 
-  /** Read an inactive target's durable log before cold resume; uncertainty keeps the mailbox queued. */
+  /** Inspect an inactive target before cold resume; uncertainty keeps the mailbox queued. */
   private async persistedTargetRecorded(
     targetId: SessionId,
     messageId: TeamMessageId,
@@ -324,7 +371,7 @@ export class TeamMailbox {
       return messageAccepted(suffix, message => message.source.kind === 'team-message'
         && message.source.messageId === messageId)
     } catch (error: unknown) {
-      this.ctx.logger.warn(`cannot read Team message target "${targetId}": ${errorMessage(error)}`)
+      this.ctx.logger.warn(`cannot inspect Team message target "${targetId}": ${errorMessage(error)}`)
       return undefined
     }
   }

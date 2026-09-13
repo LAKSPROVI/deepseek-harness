@@ -5,7 +5,7 @@
  * selectModel call. A switch made in either entry updates this shared state.
  */
 import type {
-  ModelCatalogFailure, ModelProviderGroup, ModelSelection, ModelSelectionProjection,
+  ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelSelection, ModelSelectionProjection,
 } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
@@ -17,6 +17,8 @@ import type { ModelCatalogDirectory } from './catalog.ts'
 export interface ModelDirectoryState {
   /** Effective selection: durable next-request projection, then Host default. */
   current: ModelSelection | null
+  /** Exact metadata for the current route; null means unavailable or not loaded. */
+  currentModel: ModelCatalogModel | null
   /**
    * Whether an adapter serves the current selection's provider, as the host reports
    * it — null before the first load, which is NOT the same as blocked. Read
@@ -39,7 +41,7 @@ export interface ModelDirectoryState {
 export class ModelDirectory {
   /** The shared snapshot both entries render from (uSES-safe store). */
   readonly store: SnapshotStore<ModelDirectoryState> = createSnapshotStore<ModelDirectoryState>({
-    current: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
+    current: null, currentModel: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
   })
 
   /** Latest selection operation wins; an older response never overwrites a newer one. */
@@ -151,6 +153,7 @@ export class ModelDirectory {
       }
       this.store.set({
         current: null,
+        currentModel: null,
         routable: null,
         groups: [],
         failures: [],
@@ -160,9 +163,12 @@ export class ModelDirectory {
       return
     }
     const current = projected.next ?? catalog.value.default
+    const currentGroup = catalog.value.groups.find(g => g.id === current.provider)
+    const currentModel = currentGroup?.models.find(m => m.id === current.model) ?? null
     this.resolved = true
     this.store.set({
       current,
+      currentModel,
       routable: catalog.value.routableProviders.includes(current.provider),
       groups: catalog.value.groups,
       failures: catalog.value.failures,

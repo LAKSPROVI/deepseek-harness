@@ -1,73 +1,72 @@
-/** Serialized Team transactions over the exact live Lead Session log. */
+/** Team Lead journal and committed state reader. */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SessionEventMap, SessionId } from '@deepseek-ai/dsh-session'
-import type { TeamEventType, TeamState } from './projection.ts'
+import type { SessionEventMap } from '@deepseek-ai/dsh-session'
+import { foldTeam } from './fold.ts'
+import type { TeamEventType, TeamFoldState } from './fold.ts'
 
 type AppendTeamEvent = <T extends TeamEventType>(type: T, data: SessionEventMap[T]) => void
-type MutableTeamEventType = 'team/member' | 'team/task' | 'team/message/queued' | 'team/message/delivered'
+type MutableTeamEventType = 'team/member' | 'team/task' | 'team/debate' | 'team/message/queued' | 'team/message/delivered'
 
 /** Owns per-Lead transaction order and committed Team event publication. */
 export class TeamJournal {
-  private readonly tails = new Map<SessionId, Promise<void>>()
+  private readonly transactions = new Map<string, Promise<unknown>>()
 
   /**
-   * @param ctx - Team service context with the injected Session service.
-   * @param onCommit - synchronous notification after the Team event flush succeeds.
+   * @param ctx - Context carrying Session persistence and transaction coordinator.
+   * @param onCommitted - observer notified when any Team event commits.
    */
   constructor(
     private readonly ctx: Context,
-    private readonly onCommit: (root: Agent) => void,
+    private readonly onCommitted: (root: Agent) => void,
   ) {}
 
   /**
-   * Read authoritative Team state for one exact live Lead.
+   * Fold authoritative Team state for one exact live Lead.
    * @param root - exact live Team Lead.
-   * @returns current projected state selected by the Lead Team id.
+   * @returns current replay state selected by the Lead Team id.
    */
-  state(root: Agent): TeamState {
-    const projection = this.ctx.sessionProjections.stateOf(root.session, 'agentTeam')
-    if (projection === undefined) throw new Error('Agent Teams projection is not registered')
-    if (projection.failure !== undefined) throw new Error(projection.failure)
-    return projection
+  state(root: Agent): TeamFoldState {
+    return foldTeam(root.id, root.session.snapshotEvents())
   }
 
   /**
-   * Serialize one Lead's asynchronous mutation operation.
-   * @param rootId - Lead Session identity selecting the transaction queue.
-   * @param operation - complete read-check-append operation.
-   * @returns the operation result.
+   * Serialize operations targeting one Team Lead's Session log.
+   * @param rootId - exact root Session identity.
+   * @param operation - async callback executed under the exclusive lock.
+   * @returns the operation's resolved value.
    */
-  async transact<T>(rootId: SessionId, operation: () => Promise<T>): Promise<T> {
-    const prior = this.tails.get(rootId) ?? Promise.resolve()
-    const run = prior.then(operation, operation)
-    const tail = run.then(() => undefined, () => undefined)
-    this.tails.set(rootId, tail)
+  async transact<T>(rootId: string, operation: () => Promise<T>): Promise<T> {
+    const prior = this.transactions.get(rootId) ?? Promise.resolve()
+    const current = (async () => {
+      await prior
+      return await operation()
+    })()
+    const tracked = current.then(() => undefined, () => undefined)
+    this.transactions.set(rootId, tracked)
     try {
-      return await run
+      return await current
     } finally {
-      if (this.tails.get(rootId) === tail) this.tails.delete(rootId)
+      if (this.transactions.get(rootId) === tracked) {
+        this.transactions.delete(rootId)
+      }
     }
   }
 
   /**
-   * Append and checkpoint one root-owned Team event before publication.
-   * @param root - exact live Lead whose Session owns the event.
+   * Append one Team event, flush durability, and notify observers synchronously.
+   * @param root - exact live Team Lead Session receiving the event.
    * @param type - Team event discriminant.
-   * @param data - payload correlated with the event type.
+   * @param data - matching version-tagged payload.
    */
   async appendAndFlush<T extends MutableTeamEventType>(
     root: Agent,
     type: T,
     data: SessionEventMap[T],
   ): Promise<void> {
-    // Team events never enter the conversation surface. This narrower local
-    // capability removes Session.append's conditional surface argument while
-    // preserving the event-key/payload correlation.
-    const append = root.session.append.bind(root.session) as unknown as AppendTeamEvent
-    append(type, data)
+    (root.session.append as AppendTeamEvent)(type, data)
     await this.ctx.sessions.flush(root.session)
-    this.onCommit(root)
+    this.onCommitted(root)
   }
 }

@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { SESSION_FORMAT_VERSION, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionEventMap, SessionEventType } from '@deepseek-ai/dsh-session'
-import { teamProjectionDefinition } from '../src/projection.ts'
-import type { TeamProjectionState, TeamState } from '../src/projection.ts'
+import {
+  applyTeamEvent,
+  emptyTeamFoldState,
+  foldTeam,
+  isTeamEvent,
+} from '../src/fold.ts'
+import type { TeamFoldState } from '../src/fold.ts'
 import { TeamId, TeamMessageId, TeamTaskId } from '../src/types.ts'
 import type { TeamMemberSnapshot, TeamMessageSnapshot, TeamTaskSnapshot } from '../src/types.ts'
 
@@ -10,39 +15,19 @@ const ROOT = SessionId('team-root')
 const TEAM = TeamId(ROOT)
 const CHILD = SessionId('child-a')
 
-function event<T extends Extract<SessionEventType, `team/${string}`>>(type: T, data: SessionEventMap[T], seq: SessionSeq): SessionEvent<T> {
-  return { type, data, seq, time: seq } as unknown as SessionEvent<T>
+function event<T extends SessionEventType>(type: T, data: SessionEventMap[T], seq: number): SessionEvent<T> {
+  return { type, data, seq, time: seq } as SessionEvent<T>
 }
 
-function project(rootId: SessionId, events: readonly SessionEvent[]): TeamProjectionState {
-  let state = teamProjectionDefinition.init({
-    version: SESSION_FORMAT_VERSION,
-    id: rootId,
-    createdAt: 0,
-    isSeeded: false,
-  })
-  for (const event of events) state = teamProjectionDefinition.apply(state, event)
-  return state
+/** Queued-minus-delivered mail, the recovery mailbox the fold is responsible for. */
+function pending(state: TeamFoldState): TeamMessageSnapshot[] {
+  return [...state.messages.values()].filter(message => !state.delivered.has(message.id))
 }
 
-function teamState(projected: TeamProjectionState): TeamState {
-  if (projected.failure !== undefined) throw new Error(projected.failure)
-  return projected
-}
-
-function projectTeam(rootId: SessionId, events: readonly SessionEvent[]): TeamState {
-  return teamState(project(rootId, events))
-}
-
-/** Queued-minus-delivered mail retained by the projection. */
-function pending(state: TeamState): TeamMessageSnapshot[] {
-  return state.messages.filter(message => !state.delivered.includes(message.id))
-}
-
-/** Whether one Team state contains no projected records. */
-function isEmptyState(state: TeamState): boolean {
-  return state.members.length === 0 && state.tasks.length === 0
-    && state.messages.length === 0 && state.delivered.length === 0
+/** Whether one fold reached the end of its log without applying any Team record. */
+function isEmptyFold(state: TeamFoldState): boolean {
+  return state.members.size === 0 && state.tasks.size === 0
+    && state.messages.size === 0 && state.delivered.size === 0
 }
 
 function member(overrides: Partial<TeamMemberSnapshot> = {}): TeamMemberSnapshot {
@@ -76,83 +61,83 @@ function message(overrides: Partial<TeamMessageSnapshot> = {}): TeamMessageSnaps
     senderId: ROOT,
     senderName: 'lead',
     targetId: CHILD,
+    delivery: 'quiet',
     content: [{ type: 'text', text: 'hello' }],
     ...overrides,
   }
 }
 
-describe('Agent Teams projection events', () => {
-  it('projects current-team records independently from inherited records', () => {
+describe('Agent Teams fold', () => {
+  it('folds current-team records and ignores inherited records', () => {
     const records: SessionEvent[] = [
-      event('team/member', { version: 2, teamId: TeamId('ancestor'), member: member() }, SessionSeq(0)),
-      event('team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(1)),
+      event('team/member', { version: 2, teamId: TeamId('ancestor'), member: member() }, 0),
+      event('team/member', { version: 2, teamId: TEAM, member: member() }, 1),
       event('team/member', {
         version: 2,
         teamId: TEAM,
         member: member({ phase: 'active' }),
-      }, SessionSeq(2)),
-      event('team/task', { version: 2, teamId: TEAM, task: task({ id: TeamTaskId('task-7') }) }, SessionSeq(3)),
-      event('team/message/queued', { version: 2, teamId: TEAM, message: message() }, SessionSeq(4)),
+      }, 2),
+      event('team/task', { version: 2, teamId: TEAM, task: task({ id: TeamTaskId('task-7') }) }, 3),
+      event('team/message/queued', { version: 2, teamId: TEAM, message: message() }, 4),
     ]
-    const projected = project(ROOT, records)
-    const state = teamState(projected)
+    const state = foldTeam(ROOT, records)
 
     expect(state).toMatchObject({ id: TEAM })
-    expect(state.members).toHaveLength(1)
-    expect(state.tasks).toHaveLength(1)
+    expect(state.members.size).toBe(1)
+    expect(state.tasks.size).toBe(1)
     expect(pending(state)).toHaveLength(1)
     expect(state.nextTaskNumber).toBe(8)
-    expect(state.members.find(member => member.id === CHILD)?.name).toBe('worker-a')
-    expect(teamProjectionDefinition.stateSchema.parse(JSON.parse(JSON.stringify(projected))))
-      .toEqual(projected)
+    expect(state.members.get(CHILD)?.name).toBe('worker-a')
+    expect(isTeamEvent(records[0]!)).toBe(true)
+    expect(isTeamEvent(event('turn/start', { turn: 1 }, 5))).toBe(false)
   })
 
   it('enforces teammate identity and lifecycle', () => {
-    const base = event('team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(0))
-    expect(() => projectTeam(ROOT, [event('team/member', {
+    const base = event('team/member', { version: 2, teamId: TEAM, member: member() }, 0)
+    expect(() => foldTeam(ROOT, [event('team/member', {
       version: 2,
       teamId: TEAM,
       member: member({ phase: 'active' }),
-    }, SessionSeq(0))])).toThrow(/must begin provisioning/)
-    expect(() => projectTeam(ROOT, [base, event('team/member', {
+    }, 0)])).toThrow(/must begin provisioning/)
+    expect(() => foldTeam(ROOT, [base, event('team/member', {
       version: 2,
       teamId: TEAM,
       member: member({ name: 'renamed', phase: 'active' }),
-    }, SessionSeq(1))])).toThrow(/immutable identity/)
-    expect(() => projectTeam(ROOT, [base, event('team/member', {
+    }, 1)])).toThrow(/immutable identity/)
+    expect(() => foldTeam(ROOT, [base, event('team/member', {
       version: 2,
       teamId: TEAM,
       member: member({ phase: 'active' }),
-    }, SessionSeq(1)), event('team/member', {
+    }, 1), event('team/member', {
       version: 2,
       teamId: TEAM,
       member: member({ phase: 'failed' }),
-    }, SessionSeq(2))])).toThrow(/invalid active -> failed/)
+    }, 2)])).toThrow(/invalid active -> failed/)
 
     const duplicateName = member({ id: SessionId('child-b') })
-    expect(() => projectTeam(ROOT, [base, event('team/member', {
+    expect(() => foldTeam(ROOT, [base, event('team/member', {
       version: 2,
       teamId: TEAM,
       member: duplicateName,
-    }, SessionSeq(1))])).toThrow(/name .* reused/)
+    }, 1)])).toThrow(/name .* reused/)
   })
 
   it('enforces task revision continuity', () => {
-    const first = event('team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0))
-    expect(() => projectTeam(ROOT, [event('team/task', {
+    const first = event('team/task', { version: 2, teamId: TEAM, task: task() }, 0)
+    expect(() => foldTeam(ROOT, [event('team/task', {
       version: 2,
       teamId: TEAM,
       task: task({ revision: 2 }),
-    }, SessionSeq(0))])).toThrow(/begin at revision 1/)
-    expect(() => projectTeam(ROOT, [first, event('team/task', {
+    }, 0)])).toThrow(/begin at revision 1/)
+    expect(() => foldTeam(ROOT, [first, event('team/task', {
       version: 2,
       teamId: TEAM,
       task: task({ revision: 3 }),
-    }, SessionSeq(1))])).toThrow(/revision is not contiguous/)
+    }, 1)])).toThrow(/revision is not contiguous/)
   })
 
   it('rejects every invalid persisted task dependency relation', () => {
-    const first = event('team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0))
+    const first = event('team/task', { version: 2, teamId: TEAM, task: task() }, 0)
     const second = event('team/task', {
       version: 2,
       teamId: TEAM,
@@ -160,14 +145,14 @@ describe('Agent Teams projection events', () => {
         id: TeamTaskId('task-2'),
         blockedBy: [TeamTaskId('task-1')],
       }),
-    }, SessionSeq(1))
+    }, 1)
     const invalid: Array<{ records: SessionEvent[]; message: RegExp }> = [
       {
         records: [event('team/task', {
           version: 2,
           teamId: TEAM,
           task: task({ blockedBy: [TeamTaskId('missing')] }),
-        }, SessionSeq(0))],
+        }, 0)],
         message: /blocker task "missing" .* is missing or deleted/,
       },
       {
@@ -175,14 +160,14 @@ describe('Agent Teams projection events', () => {
           version: 2,
           teamId: TEAM,
           task: task({ blockedBy: [TeamTaskId('task-1')] }),
-        }, SessionSeq(0))],
+        }, 0)],
         message: /cannot block itself/,
       },
       {
         records: [first, event('team/task', {
           ...second.data,
           task: { ...second.data.task, blockedBy: [TeamTaskId('task-1'), TeamTaskId('task-1')] },
-        }, SessionSeq(1))],
+        }, 1)],
         message: /repeats blocker/,
       },
       {
@@ -190,7 +175,7 @@ describe('Agent Teams projection events', () => {
           version: 2,
           teamId: TEAM,
           task: task({ revision: 2, blockedBy: [TeamTaskId('task-2')] }),
-        }, SessionSeq(2))],
+        }, 2)],
         message: /dependency cycle/,
       },
       {
@@ -198,63 +183,63 @@ describe('Agent Teams projection events', () => {
           version: 2,
           teamId: TEAM,
           task: task({ revision: 2, status: 'deleted' }),
-        }, SessionSeq(2))],
+        }, 2)],
         message: /blocker task "task-1" .* is missing or deleted/,
       },
     ]
 
     for (const { records, message: expected } of invalid) {
-      expect(() => projectTeam(ROOT, records)).toThrow(expected)
+      expect(() => foldTeam(ROOT, records)).toThrow(expected)
     }
   })
 
   it('leaves numeric allocation unchanged for a branded nonstandard task id', () => {
-    const state = projectTeam(ROOT, [event('team/task', {
+    const state = foldTeam(ROOT, [event('team/task', {
       version: 2,
       teamId: TEAM,
       task: task({ id: TeamTaskId('external-task') }),
-    }, SessionSeq(0))])
+    }, 0)])
     expect(state.nextTaskNumber).toBe(1)
   })
 
   it('rejects a persisted numeric task id outside the safe integer range', () => {
-    expect(() => projectTeam(ROOT, [event('team/task', {
+    expect(() => foldTeam(ROOT, [event('team/task', {
       version: 2,
       teamId: TEAM,
       task: task({ id: TeamTaskId('task-9007199254740992') }),
-    }, SessionSeq(0))])).toThrow(/persisted Agent Teams team\/task payload is invalid/)
+    }, 0)])).toThrow(/persisted Agent Teams team\/task payload is invalid/)
   })
 
   it('enforces mailbox queue and acknowledgement relations', () => {
-    const queued = event('team/message/queued', { version: 2, teamId: TEAM, message: message() }, SessionSeq(0))
+    const queued = event('team/message/queued', { version: 2, teamId: TEAM, message: message() }, 0)
     const delivered = event('team/message/delivered', {
       version: 2,
       teamId: TEAM,
       messageId: TeamMessageId('message-1'),
       targetId: CHILD,
-    }, SessionSeq(1))
-    expect(pending(projectTeam(ROOT, [queued, delivered]))).toEqual([])
-    expect(() => projectTeam(ROOT, [queued, queued])).toThrow(/queued twice/)
-    expect(() => projectTeam(ROOT, [delivered])).toThrow(/delivered before queueing/)
-    expect(() => projectTeam(ROOT, [queued, event('team/message/delivered', {
+    }, 1)
+    expect(pending(foldTeam(ROOT, [queued, delivered]))).toEqual([])
+    expect(() => foldTeam(ROOT, [queued, queued])).toThrow(/queued twice/)
+    expect(() => foldTeam(ROOT, [delivered])).toThrow(/delivered before queueing/)
+    expect(() => foldTeam(ROOT, [queued, event('team/message/delivered', {
       ...delivered.data,
       targetId: SessionId('other'),
-    }, SessionSeq(1))])).toThrow(/target changed/)
-    expect(() => projectTeam(ROOT, [queued, delivered, { ...delivered, seq: SessionSeq(2) }])).toThrow(/delivered twice/)
+    }, 1)])).toThrow(/target changed/)
+    expect(() => foldTeam(ROOT, [queued, delivered, { ...delivered, seq: 2 }])).toThrow(/delivered twice/)
   })
 
-  it('validates every current-version persisted payload before projecting it', () => {
+  it('validates every current-version persisted payload before folding it', () => {
     const malformed = [
       {
-        ...event('team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(0)),
+        ...event('team/member', { version: 2, teamId: TEAM, member: member() }, 0),
         data: { version: 2, teamId: TEAM, member: { ...member(), name: 42 } },
       },
       {
-        ...event('team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0)),
+        ...event('team/task', { version: 2, teamId: TEAM, task: task() }, 0),
         data: { version: 2, teamId: TEAM, task: { ...task(), blockedBy: [42] } },
       },
       {
-        ...event('team/message/queued', { version: 2, teamId: TEAM, message: message() }, SessionSeq(0)),
+        ...event('team/message/queued', { version: 2, teamId: TEAM, message: message() }, 0),
         data: {
           version: 2,
           teamId: TEAM,
@@ -267,7 +252,7 @@ describe('Agent Teams projection events', () => {
           teamId: TEAM,
           messageId: TeamMessageId('message-1'),
           targetId: CHILD,
-        }, SessionSeq(0)),
+        }, 0),
         data: {
           version: 2,
           teamId: TEAM,
@@ -276,71 +261,65 @@ describe('Agent Teams projection events', () => {
         },
       },
       {
-        ...event('team/member', { version: 2, teamId: TEAM, member: member() }, SessionSeq(0)),
+        ...event('team/member', { version: 2, teamId: TEAM, member: member() }, 0),
         data: { version: 2, teamId: TEAM, member: member(), unexpected: true },
       },
       {
-        ...event('team/task', { version: 2, teamId: TEAM, task: task() }, SessionSeq(0)),
+        ...event('team/task', { version: 2, teamId: TEAM, task: task() }, 0),
         data: { version: 2, teamId: 42, task: task() },
       },
     ] as unknown as SessionEvent[]
 
     for (const candidate of malformed) {
-      expect(() => projectTeam(ROOT, [candidate]))
+      expect(() => foldTeam(ROOT, [candidate]))
         .toThrow(/persisted Agent Teams .* payload is invalid/)
     }
   })
 
   it('retains merge-extensible content blocks while rejecting malformed core variants', () => {
     const extension = { type: 'plugin/custom', payload: { value: 1 } } as never
-    const state = projectTeam(ROOT, [event('team/message/queued', {
+    const state = foldTeam(ROOT, [event('team/message/queued', {
       version: 2,
       teamId: TEAM,
       message: message({ content: [extension] }),
-    }, SessionSeq(0))])
+    }, 0)])
     expect(pending(state)[0]?.content).toEqual([extension])
   })
 
-  it('records unsupported event versions without applying them', () => {
+  it('rejects unsupported event versions without mutating an empty state', () => {
+    const state = emptyTeamFoldState(ROOT)
     const invalid = event('team/task', {
-      version: 1 as 2,
+      version: 3 as 2,
       teamId: TEAM,
       task: task(),
-    }, SessionSeq(0))
-    const later = event('team/task', {
-      version: 2,
-      teamId: TEAM,
-      task: task(),
-    }, SessionSeq(1))
-    const state = project(ROOT, [invalid, later])
-    expect(state.failure).toMatch(/unsupported Agent Teams event version 1/)
-    expect(isEmptyState(state)).toBe(true)
+    }, 0)
+    expect(() => { applyTeamEvent(state, invalid) }).toThrow(/unsupported Agent Teams event version 3/)
+    expect(isEmptyFold(state)).toBe(true)
   })
 
-  it('isolates unsupported inherited Team records from the current Team', () => {
+  it('ignores unsupported inherited Team records before decoding their version', () => {
     const inherited = event('team/task', {
-      version: 1 as 2,
+      version: 3 as 2,
       teamId: TeamId('ancestor'),
       task: task(),
-    }, SessionSeq(0))
-    const projected = project(ROOT, [inherited])
-    expect(projected.failure).toBeUndefined()
-    expect(isEmptyState(teamState(projected))).toBe(true)
+    }, 0)
+    expect(isEmptyFold(foldTeam(ROOT, [inherited]))).toBe(true)
   })
 
-  it('ignores malformed current-version records inherited from another Team', () => {
+  it('still validates complete current-version records inherited from another Team', () => {
     const inherited = {
       ...event('team/task', {
         version: 2,
         teamId: TeamId('ancestor'),
         task: task(),
-      }, SessionSeq(0)),
+      }, 0),
       data: {
         version: 2,
         teamId: TeamId('ancestor'),
         task: { ...task(), subject: 42 },
       },
     } as unknown as SessionEvent
-    expect(isEmptyState(projectTeam(ROOT, [inherited]))).toBe(true)
+    expect(() => foldTeam(ROOT, [inherited]))
+      .toThrow(/persisted Agent Teams team\/task payload is invalid/)
   })
 })
