@@ -126,6 +126,10 @@ export function resolvePayload(payload: Record<string, unknown>): PromptActionPa
   }
 }
 
+// The two helpers below mirror the private Session-bootstrap helpers in
+// packages/webhook/webhook/src/session.ts; extracting them needs a public
+// seam that package does not offer yet.
+/* jscpd:ignore-start */
 /** Apply the creation-time selection until the Session's first durable request header exists. */
 function installInitialModelSelection(agentCtx: Context, selection: ModelSelection): void {
   agentCtx.on('agent/request', async ({ agent }, next): Promise<LlmCallConfig> => {
@@ -145,6 +149,7 @@ function installInitialModelSelection(agentCtx: Context, selection: ModelSelecti
 function reportRollbackFailure(ctx: Context, subject: string, error: unknown): void {
   ctx.logger.warn(`automation prompt action: ${subject} rollback failed: ${errorChain(error)}`)
 }
+/* jscpd:ignore-end */
 
 /**
  * Create, attach, title, configure, and prompt one ordinary root Session for
@@ -198,6 +203,8 @@ export async function openPromptSession(
       },
     }))
   } catch (error: unknown) {
+    // Same unwind order as the webhook Session bootstrap (see the note above).
+    /* jscpd:ignore-start */
     if (attached) {
       try {
         await workspace.detachSession(sessionId)
@@ -210,6 +217,7 @@ export async function openPromptSession(
     } catch (rollbackError: unknown) {
       reportRollbackFailure(ctx, `Agent disposal for Session "${sessionId}"`, rollbackError)
     }
+    /* jscpd:ignore-end */
     throw error
   }
   return { sessionId }

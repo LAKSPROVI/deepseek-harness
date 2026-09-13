@@ -45,15 +45,15 @@ export interface IAutomationStore {
 }
 
 /**
- * High-performance, concurrent in-memory store with atomic lock simulation.
+ * In-memory store: the reference implementation of every store rule. The
+ * file-backed store extends it and only adds loading and persistence.
  */
 export class InMemoryAutomationStore implements IAutomationStore {
-  private tasks = new Map<string, AutomationTask>()
-  private runs = new Map<string, TaskRun>()
-  private notifications = new Map<string, TaskNotification>()
-  private lockedTaskIds = new Set<string>()
+  protected readonly tasks = new Map<string, AutomationTask>()
+  protected readonly runs = new Map<string, TaskRun>()
+  protected readonly notifications = new Map<string, TaskNotification>()
 
-  private generateId(prefix: string): string {
+  protected generateId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
   }
 
@@ -134,8 +134,7 @@ export class InMemoryAutomationStore implements IAutomationStore {
       if (
         task.status === 'ACTIVE' &&
         task.nextRunAt !== null &&
-        task.nextRunAt.getTime() <= now.getTime() &&
-        !this.lockedTaskIds.has(task.id)
+        task.nextRunAt.getTime() <= now.getTime()
       ) {
         due.push({ ...task })
         if (due.length >= limit) break

@@ -174,31 +174,23 @@ export function apply(ctx: Context): void {
     },
   }))
 
-  ctx.tools.register(defineTool({
-    name: 'automation_pause_task',
-    description: 'Pause a persistent task so the scheduler skips it until resumed.',
-    parameters: { id: TASK_ID_PARAMETER },
-    output: {
-      schema: TASK_VIEW_SCHEMA,
-      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
-    },
-    async execute(args) {
-      return plainView(await owned(() => automation.pauseTask(args.id)))
-    },
-  }))
-
-  ctx.tools.register(defineTool({
-    name: 'automation_resume_task',
-    description: 'Resume a paused persistent task; its next run is recalculated from now.',
-    parameters: { id: TASK_ID_PARAMETER },
-    output: {
-      schema: TASK_VIEW_SCHEMA,
-      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
-    },
-    async execute(args) {
-      return plainView(await owned(() => automation.resumeTask(args.id)))
-    },
-  }))
+  // Pause and resume share one shape: a task id in, the updated task view out.
+  const registerTaskStatusTool = (name: string, description: string, mutate: (taskId: string) => Promise<AutomationTaskView>): void => {
+    ctx.tools.register(defineTool({
+      name,
+      description,
+      parameters: { id: TASK_ID_PARAMETER },
+      output: {
+        schema: TASK_VIEW_SCHEMA,
+        render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+      },
+      async execute(args) {
+        return plainView(await owned(() => mutate(args.id)))
+      },
+    }))
+  }
+  registerTaskStatusTool('automation_pause_task', 'Pause a persistent task so the scheduler skips it until resumed.', taskId => automation.pauseTask(taskId))
+  registerTaskStatusTool('automation_resume_task', 'Resume a paused persistent task; its next run is recalculated from now.', taskId => automation.resumeTask(taskId))
 
   ctx.tools.register(defineTool({
     name: 'automation_delete_task',

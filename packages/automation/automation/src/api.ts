@@ -1,7 +1,7 @@
 ﻿import { IncomingMessage, ServerResponse } from 'http'
 import { IAutomationStore } from './store'
 import { AutomationScheduler } from './scheduler'
-import { TaskWorker } from './worker'
+import { TaskWorker, jobForRun } from './worker'
 import { CreateTaskDTO } from './types'
 import { RecurrenceEngine } from './recurrence'
 
@@ -155,23 +155,7 @@ export class AutomationApiRouter {
         const run = await this.store.createRun(task.id, new Date())
         // Worker async execution
         this.worker
-          .executeJob({
-            runId: run.id,
-            taskId: task.id,
-            userId: task.userId,
-            title: task.title,
-            actionType: task.actionType,
-            actionPayload: task.actionPayload,
-            // Optional under `exactOptionalPropertyTypes`: an absent field and a
-            // field explicitly set to `undefined` are different types, so omit
-            // rather than pass `undefined` through.
-            ...task.model !== undefined ? { model: task.model } : {},
-            ...task.modelProvider !== undefined ? { modelProvider: task.modelProvider } : {},
-            ...task.promptTemplate !== undefined ? { promptTemplate: task.promptTemplate } : {},
-            timeoutSeconds: task.timeoutSeconds,
-            retryLimit: task.retryLimit,
-            attemptNumber: 1,
-          })
+          .executeJob(jobForRun(task, run.id))
           .catch((err: unknown) => {
             console.error('[API Trigger Error]', err)
           })

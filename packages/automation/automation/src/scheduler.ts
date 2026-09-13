@@ -1,5 +1,5 @@
 ﻿import { IAutomationStore } from './store'
-import { TaskWorker } from './worker'
+import { TaskWorker, jobForRun } from './worker'
 import { RecurrenceEngine } from './recurrence'
 
 /** Polls the store for due tasks and hands each one to the worker, honoring overlap policies. */
@@ -75,22 +75,7 @@ export class AutomationScheduler {
       dispatchedCount++
       // Execute asynchronously without blocking the scheduler loop
       this.worker
-        .executeJob({
-          runId: run.id,
-          taskId: task.id,
-          userId: task.userId,
-          title: task.title,
-          actionType: task.actionType,
-          actionPayload: task.actionPayload,
-          // Optional under `exactOptionalPropertyTypes`: omit rather than pass
-          // an explicit `undefined`, which is a different type from absent.
-          ...task.model !== undefined ? { model: task.model } : {},
-          ...task.modelProvider !== undefined ? { modelProvider: task.modelProvider } : {},
-          ...task.promptTemplate !== undefined ? { promptTemplate: task.promptTemplate } : {},
-          timeoutSeconds: task.timeoutSeconds,
-          retryLimit: task.retryLimit,
-          attemptNumber: 1,
-        })
+        .executeJob(jobForRun(task, run.id))
         .catch((err: unknown) => {
           console.error(`[Scheduler] Unhandled error running job for task ${task.id}:`, err)
         })

@@ -38,18 +38,8 @@ export function resolveMediaType(declared: string): VoiceMediaType | undefined {
 }
 
 /**
- * Canonical base64 of the recorded bytes. Mirrors `bytesToBase64` in
- * `packages/client/ui-conversation/src/client/service.ts`: the chunked loop is
- * required because spreading an audio-sized buffer into
+ * Canonical base64 of the recorded bytes: the chunked encoder from
+ * `@deepseek-ai/dsh-util-crypto`, because spreading an audio-sized buffer into
  * `String.fromCharCode` exceeds the argument limit and throws.
- * @param data - the complete recorded bytes.
- * @returns the base64 encoding the JSON-only RPC carries.
  */
-export function bytesToBase64(data: Uint8Array): string {
-  let binary = ''
-  const chunk = 0x8000
-  for (let offset = 0; offset < data.length; offset += chunk) {
-    binary += String.fromCharCode(...data.subarray(offset, offset + chunk))
-  }
-  return btoa(binary)
-}
+export { bytesToBase64 } from '@deepseek-ai/dsh-util-crypto'

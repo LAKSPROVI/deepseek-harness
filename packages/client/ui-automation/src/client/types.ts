@@ -1,22 +1,11 @@
-/** Client-safe task projection supplied by the generated automations Remote namespace. */
-export interface AutomationTaskView {
-  readonly id: string
-  readonly title: string
-  readonly description?: string
-  readonly scheduleType: 'ONCE' | 'INTERVAL' | 'CRON' | 'RRULE'
-  readonly status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ERROR' | 'ARCHIVED'
-  readonly nextRunAt: string | null
-  readonly lastRunAt: string | null
-  readonly totalRunsCompleted: number
-  readonly maxRuns: number | null
-  readonly createdAt: string
-  readonly updatedAt: string
-}
+import type { AutomationTaskView, AutomationTriggerReceipt } from '@deepseek-ai/dsh-automation/remote-types'
+
+export type { AutomationTaskView } from '@deepseek-ai/dsh-automation/remote-types'
 
 /** Browser actions obtained from `ctx.remote.automations`. */
 export interface AutomationActionProps {
   readonly list: () => Promise<readonly AutomationTaskView[]>
-  readonly trigger: (taskId: string) => Promise<{ readonly runId: string }>
+  readonly trigger: (taskId: string) => Promise<AutomationTriggerReceipt>
   readonly pause: (taskId: string) => Promise<AutomationTaskView>
   readonly resume: (taskId: string) => Promise<AutomationTaskView>
 }

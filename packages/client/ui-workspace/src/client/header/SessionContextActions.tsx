@@ -5,7 +5,8 @@
  * 3. Fork session
  */
 
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useRef, useState } from 'react'
+import { useEscapeToClose } from './popover.ts'
 import type { WorkspaceId, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -81,14 +82,12 @@ export function SessionContextActions({
     forkSession(sessionId)
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key === 'Escape' && open) {
-      event.preventDefault()
-      setOpen(false)
-      triggerRef.current?.focus()
-    }
-  }
+  const onKeyDown = useEscapeToClose(open, () => { setOpen(false) }, triggerRef)
 
+  // The trigger markup mirrors SessionNotesPopover on purpose: both header
+  // popovers must expose the same refs, ARIA state, and focus contract, and a
+  // shared component would only pass every one of these through as props.
+  /* jscpd:ignore-start */
   return (
     <div ref={rootRef} className={css.root} onKeyDown={onKeyDown}>
       <button
@@ -99,6 +98,7 @@ export function SessionContextActions({
         aria-label={t('context.newSession.aria')}
         title={t('context.newSession.aria')}
         onClick={() => { setOpen(v => !v) }}
+        /* jscpd:ignore-end */
       >
         <IconNewChatOutline16 />
         <span>{t('context.newSession.button')}</span>

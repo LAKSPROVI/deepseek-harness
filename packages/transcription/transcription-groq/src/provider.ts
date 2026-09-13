@@ -192,6 +192,10 @@ export class GroqTranscriptionProvider implements TranscriptionProvider {
     }
   }
 
+  // Credential resolution and the abort helpers below mirror
+  // packages/web/web-search-deepseek/src/provider.ts; per-package copies are
+  // the repository convention (lsp-stdio keeps its own abortable too).
+  /* jscpd:ignore-start */
   /**
    * Resolve one operation's credential without retaining it on the provider.
    * @param options - the caller's snapshot, so the key and the endpoint it is sent to come from one section.
@@ -251,6 +255,7 @@ function abortable<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted === true) throw aborted(signal)
 }
+/* jscpd:ignore-end */
 
 /** Build the provider's stable cancellation error while retaining the caller's reason. */
 function aborted(signal?: AbortSignal, fallback?: unknown): TranscriptionError {

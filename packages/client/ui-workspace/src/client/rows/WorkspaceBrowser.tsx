@@ -897,6 +897,13 @@ export function WorkspaceBrowser({
   const customSessionStatuses = useStore(s => s.customSessionStatuses)
   const recentList = useSessions(s => s)
   const recentPendingInteractions = useSessionPendingInteraction(s => s)
+  // One handler set for every session list below; the store actions are stable.
+  const sessionFlagHandlers = useMemo(() => ({
+    onToggleUnread: (sessionId: string) => { actions.toggleUnreadSession(sessionId) },
+    onToggleCompleted: (sessionId: string) => { actions.toggleCompletedSession(sessionId) },
+    onSetStatus: (sessionId: string, status: CustomSessionStatus) => { actions.setSessionStatus(sessionId, status) },
+  }), [actions])
+
   const recentNodes = useMemo(() => deriveRecentAndInProgress(
     recentList, archivedSessionIds, recentPendingInteractions, { completedSessions, unreadSessions, customSessionStatuses }, 6,
   ), [recentList, archivedSessionIds, recentPendingInteractions, completedSessions, unreadSessions, customSessionStatuses])
@@ -1297,9 +1304,7 @@ export function WorkspaceBrowser({
                   onRename={onSessionRename}
                   onFork={forkSession}
                   onArchive={onSessionArchive}
-                  onToggleUnread={(sessionId) => { actions.toggleUnreadSession(sessionId) }}
-                  onToggleCompleted={(sessionId) => { actions.toggleCompletedSession(sessionId) }}
-                  onSetStatus={(sessionId, status) => { actions.setSessionStatus(sessionId, status) }}
+                  {...sessionFlagHandlers}
                   t={t}
                 />
               ))}
@@ -1337,9 +1342,7 @@ export function WorkspaceBrowser({
                 completedSessions={completedSessions}
                 unreadSessions={unreadSessions}
                 customSessionStatuses={customSessionStatuses}
-                onToggleUnread={(sessionId) => { actions.toggleUnreadSession(sessionId) }}
-                onToggleCompleted={(sessionId) => { actions.toggleCompletedSession(sessionId) }}
-                onSetStatus={(sessionId, status) => { actions.setSessionStatus(sessionId, status) }}
+                {...sessionFlagHandlers}
                 t={t}
               />
             )
@@ -1370,9 +1373,7 @@ export function WorkspaceBrowser({
                 completedSessions={completedSessions}
                 unreadSessions={unreadSessions}
                 customSessionStatuses={customSessionStatuses}
-                onToggleUnread={(sessionId) => { actions.toggleUnreadSession(sessionId) }}
-                onToggleCompleted={(sessionId) => { actions.toggleCompletedSession(sessionId) }}
-                onSetStatus={(sessionId, status) => { actions.setSessionStatus(sessionId, status) }}
+                {...sessionFlagHandlers}
                 t={t}
                 onRenameRequest={(workspaceId, currentTitle) => {
                   setRenameTarget({ workspaceId, currentTitle })

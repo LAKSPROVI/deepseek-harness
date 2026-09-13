@@ -53,6 +53,7 @@
     "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
+    "@deepseek-ai/dsh-util-crypto": "workspace:^",
     "@deepseek-ai/dsh-voice-input": "workspace:^",
     "@types/react": "~18.3.1",
     "react": "^18.2.0"

@@ -1,6 +1,6 @@
 ﻿import { IAutomationStore } from './store'
 import { NotificationService } from './notifier'
-import { ActionHandler, TaskExecutionContext, TaskLogEntry, RunStatus } from './types'
+import { ActionHandler, AutomationTask, TaskExecutionContext, TaskLogEntry, RunStatus } from './types'
 
 /** Everything the worker needs to execute one run without re-reading the task. */
 export interface EnqueuedJobData {
@@ -16,6 +16,32 @@ export interface EnqueuedJobData {
   timeoutSeconds: number
   retryLimit: number
   attemptNumber: number
+}
+
+/**
+ * Project one persisted task into the job the worker executes for a run.
+ * Optional task fields are copied only when present: under
+ * `exactOptionalPropertyTypes` an absent field and one set to `undefined` are
+ * different types.
+ * @param task - the persisted task the run belongs to.
+ * @param runId - the run record already created for this execution.
+ * @returns the first-attempt job for the worker.
+ */
+export function jobForRun(task: AutomationTask, runId: string): EnqueuedJobData {
+  return {
+    runId,
+    taskId: task.id,
+    userId: task.userId,
+    title: task.title,
+    actionType: task.actionType,
+    actionPayload: task.actionPayload,
+    ...task.model !== undefined ? { model: task.model } : {},
+    ...task.modelProvider !== undefined ? { modelProvider: task.modelProvider } : {},
+    ...task.promptTemplate !== undefined ? { promptTemplate: task.promptTemplate } : {},
+    timeoutSeconds: task.timeoutSeconds,
+    retryLimit: task.retryLimit,
+    attemptNumber: 1,
+  }
 }
 
 /** Executes one run per job: resolves the handler, enforces the timeout, records logs, and notifies. */

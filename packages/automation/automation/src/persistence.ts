@@ -1,4 +1,4 @@
-﻿import { promises as fs } from 'fs'
+import { promises as fs } from 'fs'
 import * as path from 'path'
 import {
   AutomationTask,
@@ -6,11 +6,9 @@ import {
   TaskRun,
   TaskNotification,
   RunStatus,
-  TaskStatus,
   TaskLogEntry,
 } from './types'
-import { IAutomationStore } from './store'
-import { RecurrenceEngine } from './recurrence'
+import { InMemoryAutomationStore } from './store'
 
 interface PersistentData {
   tasks: AutomationTask[]
@@ -19,23 +17,20 @@ interface PersistentData {
 }
 
 /**
- * Robust, production-grade JSON file-based persistence store.
- * Supports atomic write-and-rename guarantees across restarts.
+ * JSON file-backed store with atomic write-and-rename across restarts.
+ *
+ * Every store rule lives in {@link InMemoryAutomationStore}; this class only
+ * loads the file into the inherited maps before the first read and persists
+ * them after each write, so the two implementations cannot drift.
  */
-export class FileAutomationStore implements IAutomationStore {
+export class FileAutomationStore extends InMemoryAutomationStore {
   private filePath: string
   private isLoaded = false
-  private tasks = new Map<string, AutomationTask>()
-  private runs = new Map<string, TaskRun>()
-  private notifications = new Map<string, TaskNotification>()
   private writeLock: Promise<void> = Promise.resolve()
 
   constructor(filePath: string) {
+    super()
     this.filePath = path.resolve(filePath)
-  }
-
-  private generateId(prefix: string): string {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
   }
 
   private async ensureLoaded(): Promise<void> {
@@ -113,144 +108,51 @@ export class FileAutomationStore implements IAutomationStore {
     await this.writeLock
   }
 
-  public async createTask(dto: CreateTaskDTO): Promise<AutomationTask> {
+  /** Load once, run one store operation, and persist when it wrote. */
+  private async through<T>(operation: () => Promise<T>, persist: boolean | ((result: T) => boolean) = false): Promise<T> {
     await this.ensureLoaded()
-    const id = this.generateId('task')
-    const now = new Date()
-
-    const taskBase = {
-      id,
-      userId: dto.userId,
-      title: dto.title,
-      // Optional fields under `exactOptionalPropertyTypes`: an absent field and
-      // one explicitly set to `undefined` are different types, so spread them in
-      // only when the DTO carried a value.
-      ...dto.description !== undefined ? { description: dto.description } : {},
-      scheduleType: dto.scheduleType,
-      scheduleExpr: dto.scheduleExpr,
-      timezone: dto.timezone || 'America/Sao_Paulo',
-      maxRuns: dto.maxRuns ?? null,
-      totalRunsCompleted: 0,
-      endAt: dto.endAt ?? null,
-      actionType: dto.actionType,
-      actionPayload: dto.actionPayload ?? {},
-      ...dto.model !== undefined ? { model: dto.model } : {},
-      ...dto.modelProvider !== undefined ? { modelProvider: dto.modelProvider } : {},
-      ...dto.promptTemplate !== undefined ? { promptTemplate: dto.promptTemplate } : {},
-      timeoutSeconds: dto.timeoutSeconds ?? 300,
-      retryLimit: dto.retryLimit ?? 3,
-      overlapPolicy: dto.overlapPolicy ?? 'SKIP',
-      status: 'ACTIVE' as TaskStatus,
-      lastRunAt: null,
-      createdAt: now,
-      updatedAt: now,
-    }
-
-    const nextRunAt = RecurrenceEngine.calculateNextRun(taskBase, now)
-    const task: AutomationTask = {
-      ...taskBase,
-      nextRunAt,
-    }
-
-    this.tasks.set(id, task)
-    await this.persist()
-    return { ...task }
+    const result = await operation()
+    if (typeof persist === 'function' ? persist(result) : persist) await this.persist()
+    return result
   }
 
-  public async getTask(id: string): Promise<AutomationTask | null> {
-    await this.ensureLoaded()
-    const task = this.tasks.get(id)
-    return task ? { ...task } : null
+  public override createTask(dto: CreateTaskDTO): Promise<AutomationTask> {
+    return this.through(() => super.createTask(dto), true)
   }
 
-  public async listTasks(userId?: string): Promise<AutomationTask[]> {
-    await this.ensureLoaded()
-    const list = Array.from(this.tasks.values())
-    if (userId) {
-      return list.filter(t => t.userId === userId).map(t => ({ ...t }))
-    }
-    return list.map(t => ({ ...t }))
+  public override getTask(id: string): Promise<AutomationTask | null> {
+    return this.through(() => super.getTask(id))
   }
 
-  public async updateTask(id: string, updates: Partial<AutomationTask>): Promise<AutomationTask> {
-    await this.ensureLoaded()
-    const current = this.tasks.get(id)
-    if (!current) throw new Error(`Task with ID ${id} not found`)
-
-    const updated: AutomationTask = {
-      ...current,
-      ...updates,
-      updatedAt: new Date(),
-    }
-
-    this.tasks.set(id, updated)
-    await this.persist()
-    return { ...updated }
+  public override listTasks(userId?: string): Promise<AutomationTask[]> {
+    return this.through(() => super.listTasks(userId))
   }
 
-  public async deleteTask(id: string): Promise<boolean> {
-    await this.ensureLoaded()
-    const res = this.tasks.delete(id)
-    if (res) await this.persist()
-    return res
+  public override updateTask(id: string, updates: Partial<AutomationTask>): Promise<AutomationTask> {
+    return this.through(() => super.updateTask(id, updates), true)
   }
 
-  public async findDueTasks(now: Date, limit: number = 50): Promise<AutomationTask[]> {
-    await this.ensureLoaded()
-    const due: AutomationTask[] = []
-    for (const task of this.tasks.values()) {
-      if (
-        task.status === 'ACTIVE' &&
-        task.nextRunAt !== null &&
-        task.nextRunAt.getTime() <= now.getTime()
-      ) {
-        due.push({ ...task })
-        if (due.length >= limit) break
-      }
-    }
-    return due
+  public override deleteTask(id: string): Promise<boolean> {
+    return this.through(() => super.deleteTask(id), deleted => deleted)
   }
 
-  public async createRun(taskId: string, scheduledFor: Date): Promise<TaskRun> {
-    await this.ensureLoaded()
-    const task = this.tasks.get(taskId)
-    if (!task) throw new Error(`Task ${taskId} not found`)
-
-    const existingRuns = Array.from(this.runs.values()).filter(r => r.taskId === taskId)
-    const runNumber = existingRuns.length + 1
-    const runId = this.generateId('run')
-
-    const run: TaskRun = {
-      id: runId,
-      taskId,
-      runNumber,
-      status: 'QUEUED',
-      attemptNumber: 1,
-      scheduledFor,
-      executionLogs: [],
-      createdAt: new Date(),
-    }
-
-    this.runs.set(runId, run)
-    await this.persist()
-    return { ...run }
+  public override findDueTasks(now: Date, limit?: number): Promise<AutomationTask[]> {
+    return this.through(() => super.findDueTasks(now, limit))
   }
 
-  public async getRun(id: string): Promise<TaskRun | null> {
-    await this.ensureLoaded()
-    const run = this.runs.get(id)
-    return run ? { ...run } : null
+  public override createRun(taskId: string, scheduledFor: Date): Promise<TaskRun> {
+    return this.through(() => super.createRun(taskId, scheduledFor), true)
   }
 
-  public async listRunsByTask(taskId: string): Promise<TaskRun[]> {
-    await this.ensureLoaded()
-    return Array.from(this.runs.values())
-      .filter(r => r.taskId === taskId)
-      .sort((a, b) => b.runNumber - a.runNumber)
-      .map(r => ({ ...r }))
+  public override getRun(id: string): Promise<TaskRun | null> {
+    return this.through(() => super.getRun(id))
   }
 
-  public async updateRun(
+  public override listRunsByTask(taskId: string): Promise<TaskRun[]> {
+    return this.through(() => super.listRunsByTask(taskId))
+  }
+
+  public override updateRun(
     id: string,
     updates: {
       status?: RunStatus
@@ -263,79 +165,28 @@ export class FileAutomationStore implements IAutomationStore {
       logs?: TaskLogEntry[]
     },
   ): Promise<TaskRun> {
-    await this.ensureLoaded()
-    const current = this.runs.get(id)
-    if (!current) throw new Error(`TaskRun with ID ${id} not found`)
-
-    // `...current` already supplies every prior value, so each update only needs
-    // to override the fields it actually carries — spreading rather than
-    // assigning keeps an absent optional absent under
-    // `exactOptionalPropertyTypes`, where `undefined` is not the same as unset.
-    const updated: TaskRun = {
-      ...current,
-      ...updates.status !== undefined ? { status: updates.status } : {},
-      ...updates.startedAt !== undefined ? { startedAt: updates.startedAt } : {},
-      ...updates.finishedAt !== undefined ? { finishedAt: updates.finishedAt } : {},
-      ...updates.durationMs !== undefined ? { durationMs: updates.durationMs } : {},
-      ...updates.outputData !== undefined ? { outputData: updates.outputData } : {},
-      ...updates.errorMessage !== undefined ? { errorMessage: updates.errorMessage } : {},
-      ...updates.errorStack !== undefined ? { errorStack: updates.errorStack } : {},
-      executionLogs: updates.logs ? [...updates.logs] : current.executionLogs,
-    }
-
-    this.runs.set(id, updated)
-    await this.persist()
-    return { ...updated }
+    return this.through(() => super.updateRun(id, updates), true)
   }
 
-  public async hasActiveRun(taskId: string): Promise<boolean> {
-    await this.ensureLoaded()
-    for (const run of this.runs.values()) {
-      if (run.taskId === taskId && run.status === 'RUNNING') {
-        return true
-      }
-    }
-    return false
+  public override hasActiveRun(taskId: string): Promise<boolean> {
+    return this.through(() => super.hasActiveRun(taskId))
   }
 
-  public async createNotification(
+  public override createNotification(
     notif: Omit<TaskNotification, 'id' | 'createdAt' | 'isRead'>,
   ): Promise<TaskNotification> {
-    await this.ensureLoaded()
-    const id = this.generateId('notif')
-    const created: TaskNotification = {
-      ...notif,
-      id,
-      isRead: false,
-      createdAt: new Date(),
-    }
-    this.notifications.set(id, created)
-    await this.persist()
-    return { ...created }
+    return this.through(() => super.createNotification(notif), true)
   }
 
-  public async listNotifications(userId: string, unreadOnly?: boolean): Promise<TaskNotification[]> {
-    await this.ensureLoaded()
-    return Array.from(this.notifications.values())
-      .filter(n => n.userId === userId && (!unreadOnly || !n.isRead))
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(n => ({ ...n }))
+  public override listNotifications(userId: string, unreadOnly?: boolean): Promise<TaskNotification[]> {
+    return this.through(() => super.listNotifications(userId, unreadOnly))
   }
 
-  public async listNotificationsByTask(taskId: string): Promise<TaskNotification[]> {
-    await this.ensureLoaded()
-    return Array.from(this.notifications.values())
-      .filter(n => n.taskId === taskId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(n => ({ ...n }))
+  public override listNotificationsByTask(taskId: string): Promise<TaskNotification[]> {
+    return this.through(() => super.listNotificationsByTask(taskId))
   }
 
-  public async markNotificationRead(id: string): Promise<boolean> {
-    await this.ensureLoaded()
-    const n = this.notifications.get(id)
-    if (!n) return false
-    this.notifications.set(id, { ...n, isRead: true, readAt: new Date() })
-    await this.persist()
-    return true
+  public override markNotificationRead(id: string): Promise<boolean> {
+    return this.through(() => super.markNotificationRead(id), marked => marked)
   }
 }

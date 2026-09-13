@@ -99,19 +99,7 @@ export class AutomationService extends TypertRemoteService {
    * @returns Persisted automation tasks projected for the browser client.
    */
   @Remote('list')
-  async list(): Promise<readonly {
-    readonly id: string
-    readonly title: string
-    readonly description?: string
-    readonly scheduleType: 'ONCE' | 'INTERVAL' | 'CRON' | 'RRULE'
-    readonly status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ERROR' | 'ARCHIVED'
-    readonly nextRunAt: string | null
-    readonly lastRunAt: string | null
-    readonly totalRunsCompleted: number
-    readonly maxRuns: number | null
-    readonly createdAt: string
-    readonly updatedAt: string
-  }[]> {
+  async list(): Promise<readonly AutomationTaskView[]> {
     return await this.controller.list()
   }
 
@@ -122,7 +110,7 @@ export class AutomationService extends TypertRemoteService {
    * @returns Identifier of the queued automation run.
    */
   @Remote('trigger')
-  async trigger(taskId: string): Promise<{ readonly runId: string }> {
+  async trigger(taskId: string): Promise<AutomationTriggerReceipt> {
     return await this.withTaskError(taskId, () => this.triggerNow(taskId))
   }
 
@@ -133,19 +121,7 @@ export class AutomationService extends TypertRemoteService {
    * @returns Updated task projected for the browser client.
    */
   @Remote('pause')
-  async pause(taskId: string): Promise<{
-    readonly id: string
-    readonly title: string
-    readonly description?: string
-    readonly scheduleType: 'ONCE' | 'INTERVAL' | 'CRON' | 'RRULE'
-    readonly status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ERROR' | 'ARCHIVED'
-    readonly nextRunAt: string | null
-    readonly lastRunAt: string | null
-    readonly totalRunsCompleted: number
-    readonly maxRuns: number | null
-    readonly createdAt: string
-    readonly updatedAt: string
-  }> {
+  async pause(taskId: string): Promise<AutomationTaskView> {
     return await this.withTaskError(taskId, () => this.controller.pause(taskId))
   }
 
@@ -156,19 +132,7 @@ export class AutomationService extends TypertRemoteService {
    * @returns Updated task projected for the browser client.
    */
   @Remote('resume')
-  async resume(taskId: string): Promise<{
-    readonly id: string
-    readonly title: string
-    readonly description?: string
-    readonly scheduleType: 'ONCE' | 'INTERVAL' | 'CRON' | 'RRULE'
-    readonly status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ERROR' | 'ARCHIVED'
-    readonly nextRunAt: string | null
-    readonly lastRunAt: string | null
-    readonly totalRunsCompleted: number
-    readonly maxRuns: number | null
-    readonly createdAt: string
-    readonly updatedAt: string
-  }> {
+  async resume(taskId: string): Promise<AutomationTaskView> {
     return await this.withTaskError(taskId, () => this.resumeTask(taskId))
   }
 

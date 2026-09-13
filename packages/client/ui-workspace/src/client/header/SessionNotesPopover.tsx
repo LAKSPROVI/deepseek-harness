@@ -4,7 +4,8 @@
  * copy notes, or inject them into the chat input composer.
  */
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useEscapeToClose } from './popover.ts'
 import clsx from 'clsx'
 import {
   IconListPenOutline16, IconPlusOutline16, writeClipboard, useDismissOnOutsidePointer,
@@ -161,13 +162,7 @@ export function SessionNotesPopover({ sessionId, inputActions, t }: SessionNotes
     saveNotesData(sessionId, updated)
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key === 'Escape' && open) {
-      event.preventDefault()
-      setOpen(false)
-      triggerRef.current?.focus()
-    }
-  }
+  const onKeyDown = useEscapeToClose(open, () => { setOpen(false) }, triggerRef)
 
   return (
     <div ref={rootRef} className={css.root} onKeyDown={onKeyDown}>
