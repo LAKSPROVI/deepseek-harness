@@ -107,7 +107,9 @@ describe('web command-line provider', () => {
       trustedHosts: ['lab.internal', 'lab-2.internal', '10.0.0.9'],
       presetRoot: WEB_PRESET_ROOT,
     })
-    const { presetRoot: _presetRoot, ...flagValues } = values
+    // The reader row only names the flag-derived fields; the preset root is
+    // an assembly fact the consumer never reads back.
+    const { presetRoot: _presetRoot, ...flagValues } = values as WebStartupValues
     expect(observed.readerConfig).toEqual(flagValues)
     expect(observed.exits).toEqual([])
   })
