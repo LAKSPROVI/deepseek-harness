@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
@@ -136,6 +136,62 @@ describe('automation tools', () => {
     expect(deleted.isError).toBe(false)
     expect(deleted.text).toBe(`Deleted task ${id}`)
     expect(await ctx.automation.list()).toEqual([])
+  })
+
+  it('carries description, timezone and max_runs, and lets a custom executor skip the prompt and workspace', async () => {
+    const ctx = await setup()
+    const described = await call(ctx, 'automation_create_task', {
+      title: 'Com descrição',
+      description: 'explicação longa',
+      schedule_type: 'INTERVAL',
+      schedule_expr: '60',
+      timezone: 'America/Sao_Paulo',
+      max_runs: 3,
+      prompt: 'p',
+    }, agentIn('/work'))
+    expect(described.value).toMatchObject({ description: 'explicação longa', maxRuns: 3 })
+    expect(await ctx.automation.store.getTask(described.value?.['id'] as string)).toMatchObject({ timezone: 'America/Sao_Paulo' })
+
+    // Another executor key needs neither a prompt nor a workspace; the payload passes through verbatim.
+    const custom = await call(ctx, 'automation_create_task', {
+      title: 'Handler próprio',
+      schedule_type: 'INTERVAL',
+      schedule_expr: '60',
+      action_type: 'DEPLOYMENT_HANDLER',
+      action_payload: { itemCode: 'PROC-1' },
+    })
+    expect(custom.isError).toBe(false)
+    expect(await ctx.automation.store.getTask(custom.value?.['id'] as string)).toMatchObject({
+      actionType: 'DEPLOYMENT_HANDLER',
+      actionPayload: { itemCode: 'PROC-1' },
+    })
+  })
+
+  it('classifies listing as concurrency-safe and every mutation as exclusive', async () => {
+    const ctx = await setup()
+    const mode = (name: string, args: Record<string, unknown>) =>
+      ctx.tools.executionMode({ signal, callId: ToolCallId(`mode-${name}`), name, arguments: args }).kind
+    expect(mode('automation_list_tasks', {})).toBe('parallel')
+    expect(mode('automation_pause_task', { id: 'x' })).toBe('exclusive')
+  })
+
+  it('surfaces engine failures other than ownership untouched and reports an already-gone delete', async () => {
+    const ctx = await setup()
+    const created = await call(ctx, 'automation_create_task', {
+      title: 'Ciclo', schedule_type: 'INTERVAL', schedule_expr: '60', prompt: 'p',
+    }, agentIn('/work'))
+    const id = created.value?.['id'] as string
+
+    vi.spyOn(ctx.automation, 'pauseTask').mockRejectedValueOnce(new Error('disco cheio'))
+    const failed = await call(ctx, 'automation_pause_task', { id })
+    expect(failed.isError).toBe(true)
+    expect(failed.text).toContain('disco cheio')
+    expect(failed.text).not.toContain('automation_list_tasks')
+
+    vi.spyOn(ctx.automation, 'deleteTask').mockResolvedValueOnce(false)
+    const gone = await call(ctx, 'automation_delete_task', { id })
+    expect(gone.isError).toBe(false)
+    expect(gone.text).toBe(`Task ${id} was already gone`)
   })
 
   it('reports a task owned by someone else as absent instead of touching it', async () => {

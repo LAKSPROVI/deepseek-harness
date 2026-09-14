@@ -45,6 +45,7 @@ export class SimpleCron {
         const [rangePart, stepStr] = item.split('/')
         // A missing half parses as NaN, which the checks below already reject —
         // the coalesce only makes that path expressible to the type checker.
+        /* v8 ignore next -- split on a present '/' always yields a second half; the coalesce never runs. */
         const step = parseInt(stepStr ?? '', 10)
         if (isNaN(step) || step <= 0) {
           throw new Error(`Invalid step in cron field: ${item}`)
@@ -55,6 +56,7 @@ export class SimpleCron {
         if (rangePart !== undefined && rangePart !== '*' && rangePart !== '') {
           if (rangePart.includes('-')) {
             const [s, e] = rangePart.split('-').map(v => parseInt(v, 10))
+            /* v8 ignore next 3 -- split on a present '-' always yields two halves; the guard only narrows the tuple type. */
             if (s === undefined || e === undefined) {
               throw new Error(`Invalid range in cron field: ${item}`)
             }

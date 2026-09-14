@@ -120,3 +120,85 @@ describe('RouterSyncPanel', () => {
     })
   })
 })
+
+describe('formatSyncTimestamp fallbacks', () => {
+  it('returns the raw input for an unparsable date or a formatter failure', () => {
+    expect(formatSyncTimestamp('not-a-date')).toBe('not-a-date')
+    const toLocaleString = vi.spyOn(Date.prototype, 'toLocaleString').mockImplementationOnce(() => {
+      throw new RangeError('formatter unavailable')
+    })
+    expect(formatSyncTimestamp('2026-09-04T00:15:05.029Z')).toBe('2026-09-04T00:15:05.029Z')
+    toLocaleString.mockRestore()
+  })
+})
+
+describe('RouterSyncPanel degraded paths', () => {
+  const fresh = { totalRoutes: 10, availableRoutes: 5, publishedChatModels: 4, isStale: false }
+
+  it('reports a refused status query and a bare rejection reason', async () => {
+    const refused = { getRouterSyncStatus: vi.fn().mockResolvedValue(undefined), triggerRouterSync: vi.fn() }
+    render(<RouterSyncPanel operations={refused} t={t} disabled={false} />)
+    await waitFor(() => {
+      expect(screen.getAllByText(en.routerSyncFailed).length).toBeGreaterThanOrEqual(1)
+    })
+    cleanup()
+
+    const bare = { getRouterSyncStatus: vi.fn().mockRejectedValue('offline'), triggerRouterSync: vi.fn() }
+    render(<RouterSyncPanel operations={bare} t={t} disabled={false} />)
+    await waitFor(() => {
+      expect(screen.getByText('offline')).toBeDefined()
+    })
+  })
+
+  it('reports a refused, failing, or bare-rejected manual sync', async () => {
+    const operations = {
+      getRouterSyncStatus: vi.fn().mockResolvedValue(fresh),
+      triggerRouterSync: vi.fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('sync exploded'))
+        .mockRejectedValueOnce('sync offline'),
+    }
+    render(<RouterSyncPanel operations={operations} t={t} disabled={false} />)
+    await waitFor(() => {
+      expect(screen.getByText(en.routerSyncTrigger)).toBeDefined()
+    })
+
+    fireEvent.click(screen.getByText(en.routerSyncTrigger))
+    await waitFor(() => {
+      expect(screen.getAllByText(en.routerSyncFailed).length).toBeGreaterThanOrEqual(1)
+    })
+    fireEvent.click(screen.getByText(en.routerSyncTrigger))
+    await waitFor(() => {
+      expect(screen.getByText('sync exploded')).toBeDefined()
+    })
+    fireEvent.click(screen.getByText(en.routerSyncTrigger))
+    await waitFor(() => {
+      expect(screen.getByText('sync offline')).toBeDefined()
+    })
+  })
+
+  it('shows only the telemetry chips the status carries and the error the state file recorded', async () => {
+    const operations = {
+      getRouterSyncStatus: vi.fn().mockResolvedValue({ ...fresh, visionModels: 3, error: 'Network timeout' }),
+      triggerRouterSync: vi.fn(),
+    }
+    render(<RouterSyncPanel operations={operations} t={t} disabled={false} />)
+    await waitFor(() => {
+      expect(screen.getByText('3 vision')).toBeDefined()
+      expect(screen.getByText('Network timeout')).toBeDefined()
+    })
+    expect(screen.queryByText(/reasoning$/)).toBeNull()
+    expect(screen.queryByText(/avg latency$/)).toBeNull()
+    cleanup()
+
+    const reasoningOnly = {
+      getRouterSyncStatus: vi.fn().mockResolvedValue({ ...fresh, reasoningModels: 2 }),
+      triggerRouterSync: vi.fn(),
+    }
+    render(<RouterSyncPanel operations={reasoningOnly} t={t} disabled={false} />)
+    await waitFor(() => {
+      expect(screen.getByText('2 reasoning')).toBeDefined()
+    })
+    expect(screen.queryByText(/vision$/)).toBeNull()
+  })
+})

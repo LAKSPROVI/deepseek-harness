@@ -534,3 +534,17 @@ describe('workspaceLabel', () => {
     expect(workspaceLabel('/')).toBe('/')
   })
 })
+
+describe('browser-local status overlays', () => {
+  it('flags unread rows from the explicit status or the unread overlay and carries a custom status', () => {
+    const rows = deriveFlat(list(summary('a', 3), summary('b', 2), summary('c', 1)), noArchive, noAttention, {
+      unreadSessions: { b: true },
+      customSessionStatuses: { a: 'unread', c: 'later' },
+    })
+    expect(rows.map(row => [row.id, row.unread, row.customStatus])).toEqual([
+      ['a', true, 'unread'],
+      ['b', true, undefined],
+      ['c', undefined, 'later'],
+    ])
+  })
+})

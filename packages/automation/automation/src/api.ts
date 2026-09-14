@@ -20,6 +20,7 @@ export interface RequestContext {
  * because an indexed read into `RegExpMatchArray` is optional to the compiler.
  */
 function routeParam(match: RegExpMatchArray): string {
+  /* v8 ignore next -- every route pattern has one required group, so the fallback never runs. */
   return match[1] ?? ''
 }
 
@@ -87,9 +88,10 @@ export class AutomationApiRouter {
 
       // 2. POST /api/tasks
       if (pathname === '/api/tasks' && method === 'POST') {
-        // The parsed body is untrusted `unknown`; the required-field check
-        // immediately below is what makes this shape claim safe to act on.
-        const dto = context.body as Partial<CreateTaskDTO>
+        // The parsed body is untrusted `unknown` (and absent when the JSON was
+        // malformed); the required-field check immediately below is what makes
+        // this shape claim safe to act on.
+        const dto = (context.body ?? {}) as Partial<CreateTaskDTO>
         if (!dto.title || !dto.scheduleType || !dto.scheduleExpr || !dto.actionType) {
           sendJson(400, {
             success: false,

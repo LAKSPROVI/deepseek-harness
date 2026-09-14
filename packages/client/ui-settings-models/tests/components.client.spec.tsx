@@ -1519,3 +1519,53 @@ describe('apiKeyFailure', () => {
     expect(apiKeyFailure('"a')).toBeUndefined()
   })
 })
+
+describe('9Router synchronization surface', () => {
+  const status = { totalRoutes: 10, availableRoutes: 5, publishedChatModels: 4, isStale: false }
+
+  it('unwraps the sync Remote answers and folds refusals to undefined', async () => {
+    const { face } = scriptedFace()
+    const answering = operationsWith({
+      ...face,
+      llm: {
+        ...face.llm,
+        routerSyncStatus: vi.fn(() => Promise.resolve(remoteOk(status))),
+        triggerRouterSync: vi.fn(() => Promise.resolve(remoteOk({ ...status, isStale: true }))),
+      },
+    })
+    expect(await answering.getRouterSyncStatus()).toEqual(status)
+    expect(await answering.triggerRouterSync()).toEqual({ ...status, isStale: true })
+
+    const refusing = operationsWith({
+      ...face,
+      llm: {
+        ...face.llm,
+        routerSyncStatus: vi.fn(() => Promise.resolve(remoteFail('offline', 'gateway/internal'))),
+        triggerRouterSync: vi.fn(() => Promise.resolve(remoteFail('offline', 'gateway/internal'))),
+      },
+    })
+    expect(await refusing.getRouterSyncStatus()).toBeUndefined()
+    expect(await refusing.triggerRouterSync()).toBeUndefined()
+  })
+
+  it('mounts the synchronization panel inside the 9router provider editor', async () => {
+    const { face } = scriptedFace()
+    const operations = operationsWith({
+      ...face,
+      llm: { ...face.llm, routerSyncStatus: vi.fn(() => Promise.resolve(remoteOk(status))), triggerRouterSync: vi.fn() },
+    })
+    const { ProviderEditor } = await import('../src/client/ProviderEditor.tsx')
+    render(<ProviderEditor
+      provider="9router"
+      displayName="9Router"
+      namespace={wireNamespaces().find(view => view.ns === 'llm-pi-ai')!}
+      schema={settingsSchema}
+      settingsPath={['providers', 'openai']}
+      operations={operations}
+      t={t}
+      readOnly={false}
+      onClose={vi.fn()}
+    />)
+    expect(await screen.findByTestId('router-sync-panel')).toBeTruthy()
+  })
+})
