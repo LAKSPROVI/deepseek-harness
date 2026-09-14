@@ -5,8 +5,14 @@ name: Refresh web snapshots (manual)
 # uses, and hands them back as an artifact to review and commit. A refresh on a
 # developer Windows machine would record tool-pwsh in place of tool-bash and is
 # useless for CI; this keeps the recording environment identical to the check.
+# `workflow_dispatch` is only offered for workflows present on the default
+# branch; pushing the branch to refresh as `refresh/<name>` runs it from any
+# branch that carries this file.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'refresh/**'
 
 permissions:
   contents: read
