@@ -22,7 +22,7 @@ import {
 import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/plan-review', import.meta.url))
-const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
+const FIXTURE = join(SNAPSHOT_DIR, 'session.v3.jsonl')
 // The waiting golden owns the decision card; the approved golden owns the
 // transcript the approval leaves behind — the state the card cannot see.
 const REVIEW_EXPECTED = join(SNAPSHOT_DIR, 'review.expected.md')
@@ -85,18 +85,22 @@ describe('web e2e: plan review takeover round trip', () => {
     expect(await page.locator('[data-question-key]').count()).toBe(0)
     await expect.poll(() => card.getByText('Plan review').count(), { timeout: 10_000 }).toBeGreaterThan(0)
 
-    const selectedRow = page.locator('[role="treeitem"][aria-selected="true"]')
+    const selectedRow = page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]')
     await expect.poll(() => selectedRow.locator('[data-state="warning"]').count(), { timeout: 10_000 }).toBe(1)
-    await expect.poll(() => selectedRow.getByText('Plan awaiting review', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => selectedRow.getByText('Aguardando revisão de plano', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
 
     if (MODE !== 'record') {
       const snapshot = await captureStableAria(page, '[data-plan-review-key]', scaffold.workspaceCwd)
       await compareOrRefreshGolden(REVIEW_EXPECTED, snapshot, MODE)
-      const sidebar = await captureStableAria(page, '[role="treeitem"][aria-selected="true"]', scaffold.workspaceCwd)
+      const sidebar = await captureStableAria(page, '[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]', scaffold.workspaceCwd)
       await compareOrRefreshGolden(SIDEBAR_EXPECTED, sidebar, MODE)
     }
 
     await card.getByRole('button', { name: 'Approve' }).click()
+    // Park the pointer: the card unmounts and the ContextMeter ring lands
+    // under the click position, whose 200ms hover delay would arm a tooltip
+    // into the aria captures below.
+    await page.mouse.move(0, 0)
 
     const sessionId = await settled
     if (MODE === 'record') {
@@ -125,7 +129,7 @@ describe('web e2e: plan review takeover round trip', () => {
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
-      'session.jsonl', 'review.expected.md', 'sidebar.expected.md',
+      'session.v3.jsonl', 'review.expected.md', 'sidebar.expected.md',
       'approved.expected.md', 'approved-expanded.expected.md',
     ])
   })

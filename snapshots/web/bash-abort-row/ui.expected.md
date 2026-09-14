@@ -1,8 +1,21 @@
 - banner:
   - navigation "Session hierarchy":
     - 'button "Run two shell commands: wait" [disabled]'
+  - button "Opções de nova conversa e contexto":
+    - img
+    - text: Novo Chat
+    - img
+  - button "Agent Team":
+    - img
+    - text: Agent Team
+  - button "Automações"
   - button "Session log":
     - text: Session log
+    - img
+  - button "Anotações e lembretes da sessão":
+    - img
+    - text: Anotações
+  - button "Open the sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -26,12 +39,21 @@
 - 'button "Failed Bash Error: tool call aborted before dispatch"':
   - img
   - text: "Failed Bash Error: tool call aborted before dispatch"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
+- button "Add attachment":
+  - img
 - 'button "Access mode, current: Full access"': Full access
+- button "Hold to talk"
+- status
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 0% Input 10 tok · Output 10 tok
+- button "1 turns 1 steps":
+  - img
+  - text: 1 turns 1 steps
+- button "20 tok · Cache hit 0%":
+  - img
+  - text: 20 tokCache hit 0%

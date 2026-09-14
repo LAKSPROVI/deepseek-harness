@@ -3,7 +3,7 @@
  * releases a consumer whose config reads `ctx.webStartup` directly.
  */
 
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -12,7 +12,7 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import { internals, provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import { afterEach, describe, expect, it } from 'vitest'
-import { apply, WEB_STARTUP_SERVICE, type WebStartupValues } from '../src/startup.ts'
+import { apply, WEB_PRESET_ROOT, WEB_STARTUP_SERVICE, type WebStartupValues } from '../src/startup.ts'
 
 /** What one fixture boot observed. */
 interface Observed {
@@ -23,8 +23,12 @@ interface Observed {
 
 const disposers: (() => Promise<void>)[] = []
 
+/** Fixture tree roots, removed after their booted tree has been disposed. */
+const tempDirs: string[] = []
+
 afterEach(async () => {
   for (const dispose of disposers.splice(0)) await dispose()
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
   internals.stdout = process.stdout
   internals.stderr = process.stderr
 })
@@ -39,6 +43,7 @@ async function bootProvider(args: string[]): Promise<{
   observed: Observed
 }> {
   const dir = mkdtempSync(join(tmpdir(), 'dsh-web-startup-'))
+  tempDirs.push(dir)
   const observed: Observed = { exits: [], out: '' }
   writeFileSync(join(dir, 'reader.mjs'), `
 export function apply(_ctx, config) { globalThis.__webStartupObserved.readerConfig = config }
@@ -100,14 +105,18 @@ describe('web command-line provider', () => {
       openBrowser: false,
       port: 8080,
       trustedHosts: ['lab.internal', 'lab-2.internal', '10.0.0.9'],
+      presetRoot: WEB_PRESET_ROOT,
     })
-    expect(observed.readerConfig).toEqual(values)
+    // The reader row only names the flag-derived fields; the preset root is
+    // an assembly fact the consumer never reads back.
+    const { presetRoot: _presetRoot, ...flagValues } = values as WebStartupValues
+    expect(observed.readerConfig).toEqual(flagValues)
     expect(observed.exits).toEqual([])
   })
 
   it('leaves deployment values to each consumer when flags omit them', async () => {
     const { values, observed } = await bootProvider([])
-    expect(values).toEqual({ openBrowser: true, trustedHosts: [] })
+    expect(values).toEqual({ openBrowser: true, trustedHosts: [], presetRoot: WEB_PRESET_ROOT })
     expect(observed.readerConfig).toEqual({
       host: '127.0.0.1',
       openBrowser: true,
@@ -140,5 +149,14 @@ describe('web command-line provider', () => {
     expect(values).toBeUndefined()
     expect(observed.readerConfig).toBeUndefined()
     expect(observed.exits).toEqual([1])
+  })
+})
+
+describe('the bundle preset root', () => {
+  it('is the package presets directory and ships the automation preset', async () => {
+    const { existsSync } = await import('node:fs')
+    expect(WEB_PRESET_ROOT.replaceAll('\\', '/')).toMatch(/\/packages\/bundle\/web-app\/presets\/$/)
+    expect(existsSync(join(WEB_PRESET_ROOT, 'automation', 'preset.yml'))).toBe(true)
+    expect(existsSync(join(WEB_PRESET_ROOT, 'automation', 'agent.cordis.yml'))).toBe(true)
   })
 })

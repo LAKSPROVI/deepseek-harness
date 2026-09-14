@@ -10,14 +10,30 @@ import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-
 import type {
   SessionPendingInteractionBase,
 } from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-schedule/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
 import {
   indexSubagentDescendants, type SubagentDescendantSummary,
 } from './subagent-lineage.ts'
+import type { CustomSessionStatus } from './stores.ts'
 
 /** Group key for Sessions outside every Workspace. */
 export const UNGROUPED_KEY = ''
+
+/**
+ * Resolve the Workspace browser group that owns one Session.
+ * @param workspaces - authoritative Workspace membership.
+ * @param sessionId - Session whose browser group is required.
+ * @returns owning Workspace id, or {@link UNGROUPED_KEY} when no Workspace accounts for it.
+ */
+export function owningGroupKey(
+  workspaces: readonly WorkspaceView[],
+  sessionId: SessionId,
+): string {
+  return (workspaces.find(workspace => workspace.sessionIds.includes(sessionId))
+    ?.workspaceId as string | undefined) ?? UNGROUPED_KEY
+}
 
 /** Pending interaction kinds with dedicated Workspace-row presentation. */
 export type SessionPendingInteractionStatus = 'approval' | 'plan-review' | 'question'
@@ -37,6 +53,12 @@ export interface SessionNode {
   runningSubagentCount: number
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
+  /** Browser-local user unread marker. */
+  unread?: boolean
+  /** Explicit status selected by the user. */
+  customStatus?: CustomSessionStatus
+  /** The current list projection contains at least one active Schedule record. */
+  hasActiveSchedule: boolean
   updatedAt: number
 }
 
@@ -74,6 +96,12 @@ export interface SearchResultNode {
   runningSubagentCount: number
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
+  /** Browser-local user unread marker. */
+  unread?: boolean
+  /** Explicit status selected by the user. */
+  customStatus?: CustomSessionStatus
+  /** The current list projection contains at least one active Schedule record. */
+  hasActiveSchedule: boolean
   snippet?: string
 }
 
@@ -88,6 +116,12 @@ export interface TreeView {
   expandedGroups: readonly string[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
+  /** Browser-local completed overrides. */
+  completedSessions?: Readonly<Record<string, boolean>>
+  /** Browser-local unread overrides. */
+  unreadSessions?: Readonly<Record<string, boolean>>
+  /** Explicit browser-local status overrides. */
+  customSessionStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>
 }
 
 interface Group {
@@ -136,6 +170,11 @@ function sessionVisible(session: SessionSummary, current: SessionId | undefined,
  */
 function sessionTitle(session: SessionSummary): string {
   return session.blank ? '' : session.displayTitle
+}
+
+/** The list projection alone owns the best-effort active-Schedule indicator. */
+function hasActiveSchedule(session: SessionSummary): boolean {
+  return (session.projectionValues?.schedule?.length ?? 0) > 0
 }
 
 /** Build one group without projecting session lineage into presentation. */
@@ -235,15 +274,23 @@ function sessionNode(
   s: SessionSummary,
   descendants: ReadonlyMap<SessionId, SubagentDescendantSummary>,
   pendingInteractions: SessionPendingInteractions,
+  completedSessions?: Readonly<Record<string, boolean>>,
+  unreadSessions?: Readonly<Record<string, boolean>>,
+  customSessionStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>,
 ): SessionNode {
   const pendingInteraction = visiblePendingKind(pendingInteractions.get(s.id)?.kind)
+  const customStatus = customSessionStatuses?.[s.id]
   return {
     id: s.id,
     title: sessionTitle(s),
     blank: s.blank,
-    running: s.running,
+    running: customStatus === 'ongoing' || s.running,
     runningSubagentCount: descendants.get(s.id)?.runningCount ?? 0,
-    completed: s.completed === true,
+    completed: customStatus === 'completed' || customStatus === 'finalized'
+      || (completedSessions?.[s.id] ?? s.completed === true),
+    ...(customStatus === 'unread' || unreadSessions?.[s.id] === true ? { unread: true } : {}),
+    ...(customStatus === undefined ? {} : { customStatus }),
+    hasActiveSchedule: hasActiveSchedule(s),
     updatedAt: s.updatedAt,
     ...(pendingInteraction === undefined ? {} : { pendingInteraction }),
   }
@@ -276,8 +323,7 @@ export function deriveGroups(
   const descendants = indexSubagentDescendants(list.byId)
   const currentGroup = list.current === undefined
     ? undefined
-    : (workspaces.find(w => w.sessionIds.includes(list.current as SessionId))?.workspaceId as string | undefined)
-        ?? UNGROUPED_KEY
+    : owningGroupKey(workspaces, list.current)
   const groups: GroupNode[] = []
   for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)) {
     const expanded = expandedGroups.has(g.key)
@@ -291,7 +337,9 @@ export function deriveGroups(
       expanded,
       containsCurrent: g.key === currentGroup,
       sessions: expanded
-        ? g.sessions.map(session => sessionNode(session, descendants, pendingInteractions))
+        ? g.sessions.map(session => sessionNode(
+          session, descendants, pendingInteractions, view.completedSessions, view.unreadSessions, view.customSessionStatuses,
+        ))
         : [],
     })
   }
@@ -306,12 +354,14 @@ export function deriveGroups(
  * @param list - sessions list snapshot.
  * @param archivedSessionIds - registry-global archive set.
  * @param pendingInteractions - pending UI interactions by Session.
+ * @param view - completion, unread, and custom status overlays.
  * @returns flat rows in render order.
  */
 export function deriveFlat(
   list: SessionListState,
   archivedSessionIds: readonly SessionId[],
   pendingInteractions: SessionPendingInteractions,
+  view: Pick<TreeView, 'completedSessions' | 'unreadSessions' | 'customSessionStatuses'> = {},
 ): SessionNode[] {
   const archived = new Set(archivedSessionIds)
   const descendants = indexSubagentDescendants(list.byId)
@@ -322,7 +372,33 @@ export function deriveFlat(
     rows.push(s)
   }
   rows.sort(byRecency)
-  return rows.map(session => sessionNode(session, descendants, pendingInteractions))
+  return rows.map(session => sessionNode(
+    session, descendants, pendingInteractions, view.completedSessions, view.unreadSessions, view.customSessionStatuses,
+  ))
+}
+
+/**
+ * Active and explicitly unread Sessions displayed in the fixed top section.
+ * @param list - sessions list snapshot.
+ * @param archivedSessionIds - registry-global archive set.
+ * @param pendingInteractions - pending UI interactions by Session.
+ * @param view - completion, unread, and custom status overlays.
+ * @param limit - maximum rows in the section.
+ * @returns newest-first rows that are running, unread, waiting, or marked for later.
+ */
+export function deriveRecentAndInProgress(
+  list: SessionListState,
+  archivedSessionIds: readonly SessionId[],
+  pendingInteractions: SessionPendingInteractions,
+  view: Pick<TreeView, 'completedSessions' | 'unreadSessions' | 'customSessionStatuses'> = {},
+  limit = 6,
+): SessionNode[] {
+  return deriveFlat(list, archivedSessionIds, pendingInteractions, view)
+    .filter(node => !node.completed && node.customStatus !== 'idle' && (
+      node.running || node.runningSubagentCount > 0 || node.pendingInteraction !== undefined || node.unread
+      || node.customStatus === 'later' || node.customStatus === 'warning'
+    ))
+    .slice(0, limit)
 }
 
 /**
@@ -407,6 +483,7 @@ export function deriveSearchResults(
           ? {}
           : { pendingInteraction }),
         completed: summary.completed === true,
+        hasActiveSchedule: hasActiveSchedule(summary),
         ...match === undefined ? {} : { snippet: match.snippet },
       }
     }),

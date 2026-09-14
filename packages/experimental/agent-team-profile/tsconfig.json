@@ -12,13 +12,10 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../agent-team/agent-team"
     },
     {
-      "path": "../agent-team"
-    },
-    {
-      "path": "../tool-agent-team"
+      "path": "../../agent-team/tool-agent-team"
     }
   ]
 }

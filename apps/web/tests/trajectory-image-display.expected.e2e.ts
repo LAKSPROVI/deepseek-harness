@@ -8,7 +8,7 @@
 // URL Chat resolved — one sessions.attachment read per session attachment.
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
-import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
+import { installAssembledBootEnv, mountAssembledApp, pageInHistoryUntil } from './assembled-boot.ts'
 
 installAssembledBootEnv()
 
@@ -87,6 +87,14 @@ it('renders durable record images in the Trajectory details panel from the share
   if (chatSrc === null || chatSrc === undefined) throw new Error('chat gallery image missing')
 
   fireEvent.click(screen.getByRole('tab', { name: 'Trajectory' }))
+  await waitFor(() => {
+    if (document.querySelectorAll('tr[data-trajectory-row-key]').length === 0) throw new Error('trajectory rows not mounted')
+  }, { timeout: 10_000 })
+  // The image record sits in an earlier turn than the opening tail reaches.
+  await pageInHistoryUntil(
+    () => document.querySelector('[data-history-load] button') === null,
+    'the complete trajectory history',
+  )
   const userRow = await scrollRowIntoWindow('历史用户图片')
   fireEvent.click(userRow)
 

@@ -14,7 +14,7 @@
 import { resolve } from 'node:path'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, it } from 'vitest'
-import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
+import { installAssembledBootEnv, mountAssembledApp, pageInHistoryUntil } from './assembled-boot.ts'
 
 installAssembledBootEnv()
 
@@ -63,7 +63,7 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
   if (clientBuildValue('DSH_CLIENT_BUILD_PROFILE') === 'official') {
     expect(document.querySelector('svg[viewBox="26 0 156 24"]')).not.toBeNull()
-    expect(screen.queryByText('DSH Local Build')).toBeNull()
+    expect(screen.queryByText('Lakatoss')).toBeNull()
   } else {
     expect(document.querySelector('svg[viewBox="0 0 23.16 17.04"]')).not.toBeNull()
     const version = clientBuildValue('DSH_CLIENT_VERSION')
@@ -72,7 +72,7 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
     const buildVersion = version
       + (commit === undefined ? '' : `-${commit}`)
       + (clientBuildValue('DSH_CLIENT_GIT_DIRTY') === 'true' ? '-dirty' : '')
-    screen.getByText('DSH Local Build')
+    screen.getByText('Lakatoss')
     screen.getByText(buildVersion)
   }
   // The compact layout dropped group session counts; the fixture workspace
@@ -90,13 +90,15 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   if (waitingRow === null) throw new Error('fixture Session title must belong to a tree row')
   expect(waitingRow.querySelector('[data-state="warning"]')).not.toBeNull()
   expect(waitingRow.querySelector('[data-state="ongoing"]')).toBeNull()
-  within(waitingRow).getByText('Waiting for answer')
+  within(waitingRow).getByText('Aguardando resposta')
 
   // Opening a session reaches chat content through the fixture transport.
   fireEvent.click(waitingTitle)
   await waitFor(() => {
-    expect(document.querySelector('[data-sample="bash"]')).not.toBeNull()
+    expect(document.querySelectorAll('[data-tool]').length).toBeGreaterThan(0)
   }, { timeout: 10_000 })
+  // The opening tail stops short of the bash sample turn; page it in.
+  await pageInHistoryUntil(() => document.querySelector('[data-sample="bash"]') !== null, 'the bash sample turn')
   // The generated bundle roster mounts the question UI before the approval UI.
   // Skip the resident fixture's three questions, then resolve its approval so
   // the ordinary composer bar (which owns ContextMeter) resumes.
@@ -112,7 +114,7 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   fireEvent.click(contextTrigger)
   const contextPanel = await screen.findByRole('dialog', { name: 'of context used' })
   within(contextPanel).getByText('System prompt')
-  within(contextPanel).getByText('Tools')
+  within(contextPanel).getByText('Tool definitions')
   within(contextPanel).getByText('Messages')
 
   // The write/edit turns render a real diff card through the assembled graph

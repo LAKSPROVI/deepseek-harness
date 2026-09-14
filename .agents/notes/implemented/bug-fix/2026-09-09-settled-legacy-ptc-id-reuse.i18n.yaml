@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-09-settled-legacy-ptc-id-reuse.md
+2026-09-09-settled-legacy-ptc-id-reuse.md: 6934797481394c3988b3ef0c1179baf8823d1ff2
+2026-09-09-settled-legacy-ptc-id-reuse.zh.md: fa1a2f292de2aa7cea199c88dfc7e829c1d50b1c

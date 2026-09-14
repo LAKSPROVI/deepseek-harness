@@ -1,0 +1,112 @@
+/* Session context quick actions (New chat in-place, summarize context) */
+
+.root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-module-surface);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 150ms var(--ds-ease-in-out), border-color 150ms var(--ds-ease-in-out), color 150ms var(--ds-ease-in-out);
+}
+
+.trigger:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-color: var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.trigger[aria-expanded='true'] {
+  background: var(--dsw-alias-interactive-bg-active);
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  padding: 6px;
+  background: var(--dsw-alias-bg-module-surface);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  animation: menu-in 150ms var(--ds-ease-in-out);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.menuItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms var(--ds-ease-in-out);
+}
+
+.menuItem:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.menuIcon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--dsw-alias-brand-primary);
+}
+
+.menuText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.menuTitle {
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.menuDesc {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  line-height: 1.3;
+}
+
+.divider {
+  height: 0.5px;
+  background: var(--dsw-alias-border-l1);
+  margin: 4px 6px;
+}

@@ -1,0 +1,60 @@
+{
+  "tasks": [
+    {
+      "id": "task-1789354876609-0b465gf",
+      "userId": "user-api",
+      "title": "Tarefa via REST API",
+      "scheduleType": "INTERVAL",
+      "scheduleExpr": "60",
+      "timezone": "America/Sao_Paulo",
+      "maxRuns": null,
+      "totalRunsCompleted": 1,
+      "endAt": null,
+      "actionType": "API_ACTION",
+      "actionPayload": {
+        "param": "teste"
+      },
+      "timeoutSeconds": 300,
+      "retryLimit": 3,
+      "overlapPolicy": "SKIP",
+      "status": "ACTIVE",
+      "lastRunAt": "2026-09-14T03:01:16.844Z",
+      "createdAt": "2026-09-14T03:01:16.609Z",
+      "updatedAt": "2026-09-14T03:01:16.944Z",
+      "nextRunAt": "2026-09-14T03:02:16.609Z",
+      "lastRunStatus": "SUCCESS"
+    }
+  ],
+  "runs": [
+    {
+      "id": "run-1789354876748-ett6hby",
+      "taskId": "task-1789354876609-0b465gf",
+      "runNumber": 1,
+      "status": "SUCCESS",
+      "attemptNumber": 1,
+      "scheduledFor": "2026-09-14T03:01:16.748Z",
+      "executionLogs": [
+        {
+          "timestamp": "2026-09-14T03:01:16.804Z",
+          "level": "info",
+          "message": "Iniciando execução da atividade: \"Tarefa via REST API\" [Ação: API_ACTION]"
+        },
+        {
+          "timestamp": "2026-09-14T03:01:16.844Z",
+          "level": "info",
+          "message": "Atividade finalizada com êxito."
+        }
+      ],
+      "createdAt": "2026-09-14T03:01:16.749Z",
+      "startedAt": "2026-09-14T03:01:16.802Z",
+      "finishedAt": "2026-09-14T03:01:16.844Z",
+      "durationMs": 42,
+      "outputData": {
+        "received": {
+          "param": "teste"
+        }
+      }
+    }
+  ],
+  "notifications": []
+}

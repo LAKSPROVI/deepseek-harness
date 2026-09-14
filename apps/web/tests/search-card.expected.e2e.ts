@@ -18,7 +18,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { hasClass, installAssembledBootEnv, mountAssembledApp, REFRESHING_GOLDEN } from './assembled-boot.ts'
+import { hasClass, installAssembledBootEnv, mountAssembledApp, pageInHistoryUntil, REFRESHING_GOLDEN } from './assembled-boot.ts'
 
 const EXPECTED = join(process.cwd(), 'apps/web/tests/expected/search-card/grep-card.expected.txt')
 
@@ -50,11 +50,13 @@ describe('assembled search card', () => {
 
     const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
     fireEvent.click(await within(tree).findByText('Fixture 历史会话'))
-    // Wait for chat content to reach the fixture's later turns (the bash sample
-    // is turn 66, the grep card turn 67).
+    // Wait for chat content, then page back until the fixture's later turns
+    // are in (the bash sample is turn 66, the grep card turn 67; the opening
+    // tail may stop short of them).
     await waitFor(() => {
-      expect(document.querySelector('[data-sample="bash"]')).not.toBeNull()
+      expect(document.querySelectorAll('[data-tool]').length).toBeGreaterThan(0)
     }, { timeout: 10_000 })
+    await pageInHistoryUntil(() => document.querySelector('[data-sample="bash"]') !== null, 'the bash sample turn')
     // The grep turn's keyed SearchRow composes ToolRow: the card is collapsed
     // by default, so wait for the summary row, then expand it to reach the card.
     await waitFor(() => {

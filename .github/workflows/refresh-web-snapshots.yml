@@ -1,0 +1,96 @@
+name: Refresh web snapshots (manual)
+
+# Regenerates the Web goldens (ARIA trees, system-prompt and tool-schema pins,
+# inline vitest snapshots) on the same hosted Linux image the CI snapshot lane
+# uses, and hands them back as an artifact to review and commit. A refresh on a
+# developer Windows machine would record tool-pwsh in place of tool-bash and is
+# useless for CI; this keeps the recording environment identical to the check.
+# `workflow_dispatch` is only offered for workflows present on the default
+# branch; pushing the branch to refresh as `refresh/<name>` runs it from any
+# branch that carries this file.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'refresh/**'
+
+permissions:
+  contents: read
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      DSH_GATE_CONCURRENCY: '1'
+      DSH_WEB_SNAPSHOT_WORKERS: '2'
+      DSH_SNAPSHOT_MAX_CONCURRENCY: '1'
+    steps:
+      - name: Use runner-owned temporary storage
+        run: |
+          echo "TMPDIR=${{ runner.temp }}" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=${RUNNER_TEMP%/*}/ms-playwright" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Redirect Node compile cache to runner temp
+        run: echo "NODE_COMPILE_CACHE=${{ runner.temp }}/node-compile-cache" >> "$GITHUB_ENV"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+      - name: Install dependencies and prepare bubblewrap
+        run: |
+          pnpm install --frozen-lockfile &
+          install_pid=$!
+          bash scripts/prepare-ci-bubblewrap.sh &
+          sandbox_pid=$!
+          install_status=0
+          wait "$install_pid" || install_status=$?
+          sandbox_status=0
+          wait "$sandbox_pid" || sandbox_status=$?
+          if (( install_status != 0 )); then exit "$install_status"; fi
+          exit "$sandbox_status"
+
+      - name: Install Playwright Chromium and hosted dependencies
+        run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
+
+      # Same build the ci-consumers `build` gate runs before the snapshot lane.
+      - name: Build the assembled Web bundle
+        run: pnpm run build
+
+      # The Web e2e lane (`test:web:built` under DSH_SNAPSHOT=replay in CI) owns the
+      # ARIA goldens and the system-prompt/tool-schema pins; `refresh` rewrites
+      # every golden a scenario reaches and `-u` the inline vitest snapshots the
+      # same files carry. The session corpus lane is left alone: its refresh only
+      # rewrites recording timestamps. Failures are expected while goldens are
+      # stale, so the step never fails the job.
+      - name: Refresh Web goldens and inline snapshots
+        env:
+          DSH_SNAPSHOT: refresh
+        run: pnpm exec vitest run --config vitest.web.config.ts -u || true
+
+      - name: Summarize the refreshed files
+        run: |
+          git status --short -- snapshots apps/web/tests packages | tee "${{ runner.temp }}/refresh-status.txt"
+          git diff --stat -- snapshots apps/web/tests packages | tail -1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: refreshed-web-snapshots
+          if-no-files-found: error
+          path: |
+            snapshots
+            apps/web/tests
+            ${{ runner.temp }}/refresh-status.txt

@@ -10,13 +10,13 @@ import { afterEach, expect, it } from 'vitest'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { canonicalPath, writableRoots } from '@deepseek-ai/dsh-sandbox'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
-// Empty type imports carry the tools/sandboxPolicy/approval Context merges.
-import type {} from '@deepseek-ai/dsh-tools'
+// These imports carry the tools/sandboxPolicy/approval Context merges.
+import { RUN_CODE_NAME } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from '@deepseek-ai/dsh-agent-presets'
+import type {} from '@deepseek-ai/dsh-automation'
 import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { launchWebScaffold, type WebScaffold } from './scaffold.ts'
@@ -51,10 +51,16 @@ const EXPECTED_TOOLS = [
   'read_image',
   'send_message',
   'skill',
+  'spawn_teammate',
   'subagent',
   'subagent_fork',
+  'team_task_create',
+  'team_task_get',
+  'team_task_list',
+  'team_task_update',
   'todo_write',
   'update_goal',
+  'wait_agent',
   'web_fetch',
   'web_search',
   'workflow',
@@ -101,7 +107,7 @@ it('assembles the shipped Web transport, catalog, guidance, and defaults', async
       ],
     }
   `)
-  await ctx.settings.update(settingsNamespace('llm-deepseek'), {
+  await ctx.settings.update('llm-deepseek', {
     retryPolicy: { mode: 'always', maxRetries: 5 },
   })
   expect(ctx.llm.providerRetryPolicy('deepseek-official')).toMatchInlineSnapshot(`
@@ -112,7 +118,7 @@ it('assembles the shipped Web transport, catalog, guidance, and defaults', async
       "mode": "always",
     }
   `)
-  await ctx.settings.update(settingsNamespace('llm-pi-ai'), {
+  await ctx.settings.update('llm-pi-ai', {
     providers: {
       openai: {},
       anthropic: { retryPolicy: { mode: 'always' } },
@@ -192,6 +198,24 @@ it('assembles the shipped Web transport, catalog, guidance, and defaults', async
   }
 }, 120_000)
 
+it('ships PTC with run_code but without the general workflow SDK binding', async () => {
+  scaffold = await launchWebScaffold({ deepSeekMissingCredential: true })
+  const ctx = scaffold.ctx
+  const handle = await ctx.agents.create({
+    sessionId: SessionId('shipped-ptc-composition'),
+    setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'ptc').then(() => undefined),
+  })
+  try {
+    const assembly = await ctx.systemPrompt.assemble({ scope: handle.agent })
+    expect(assembly.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
+    const sdk = assembly.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+    expect(sdk).toContain('  ralph: {')
+    expect(sdk).not.toContain('  workflow: {')
+  } finally {
+    await handle.dispose()
+  }
+}, 120_000)
+
 it('lets a preset producer reach the background-job registry', async () => {
   scaffold = await launchWebScaffold()
   const ctx = scaffold.ctx
@@ -252,3 +276,42 @@ it('lets a preset producer reach the background-job registry', async () => {
     await handle.dispose()
   }
 }, 120_000)
+
+// Every preset the roster lists — the package's shipped set plus the bundle's
+// own root — must mount against THIS composition. A preset row naming a
+// package the bundle does not install, or a config the row's schema no longer
+// accepts, fails here instead of on a user's first session.
+it('mounts every preset the roster lists, and the automation preset carries the task tools', async () => {
+  scaffold = await launchWebScaffold({ deepSeekMissingCredential: true })
+  const ctx = scaffold.ctx
+  const presets = await ctx.agentPresets.list()
+  expect(presets.map(preset => preset.id)).toEqual(expect.arrayContaining(['standard', 'ptc', 'minimal', 'automation']))
+  for (const preset of presets) {
+    expect(preset.broken, preset.id).toBeUndefined()
+    const handle = await ctx.agents.create({
+      sessionId: SessionId(`shipped-preset-${preset.id}`),
+      meta: { cwd: scaffold.workspaceCwd, agentPreset: preset.id },
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, preset.id).then(() => undefined),
+    })
+    try {
+      const names = ctx.tools.schemas(handle.agent).map(schema => schema.name)
+      const automationTools = names.filter(name => name.startsWith('automation_')).sort()
+      if (preset.id === 'automation') {
+        expect(automationTools).toEqual([
+          'automation_create_task',
+          'automation_delete_task',
+          'automation_list_tasks',
+          'automation_pause_task',
+          'automation_resume_task',
+          'automation_trigger_task',
+        ])
+        // The host-plane executor is composed regardless of which preset is open.
+        expect(ctx.automation.worker.hasHandler('CUSTOM_PROMPT')).toBe(true)
+      } else {
+        expect(automationTools, preset.id).toEqual([])
+      }
+    } finally {
+      await handle.dispose()
+    }
+  }
+}, 180_000)

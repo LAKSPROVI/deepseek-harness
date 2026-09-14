@@ -8,8 +8,21 @@
       - img
   - img
   - text: Standard mode
+  - button "Opções de nova conversa e contexto":
+    - img
+    - text: Novo Chat
+    - img
+  - button "Agent Team":
+    - img
+    - text: Agent Team
+  - button "Automações"
   - button "Session log":
     - text: Session log
+    - img
+  - button "Anotações e lembretes da sessão":
+    - img
+    - text: Anotações
+  - button "Open the sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -21,7 +34,7 @@
   - img
   - img
   - text: System prompt
-- text: Explain event sourcing in one sentence. {{clock}}
+- text: "Explain event sourcing in one sentence.Your parent agent id is \"session-{{uuid}}\". Before you finish, send your result to that agent with send_message({ agent_id: \"session-{{uuid}}\", message: \"<self-contained result>\" }). The parent shares your workspace but does not automatically receive your transcript, tool output, or reasoning. Send earlier messages as well when a finding changes what the parent should do next; sending a message does not end your turn. {{clock}}"
 - button "Copy":
   - img
 - button "Thought for a while":
@@ -36,7 +49,10 @@
   - img
 - button "Branch into a new conversation":
   - img
-- text: {{clock}} Ran for {{duration}} TTFT {{duration}} {{throughput}} tok/s
+- button "Ran for {{duration}}":
+  - img
+  - text: Ran for {{duration}}
+- text: {{clock}}
 - button "System prompt":
   - img
   - img
@@ -56,11 +72,23 @@
   - img
 - button "Branch into a new conversation":
   - img
-- text: {{clock}} Ran for {{duration}} TTFT {{duration}} {{throughput}} tok/s
-- textbox "Message or run a task... / commands, @ files or sessions"
+- button "Ran for {{duration}}":
+  - img
+  - text: Ran for {{duration}}
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
+- button "Add attachment" [disabled]:
+  - img
 - 'button "Access mode, current: Custom"': Custom
+- button "Hold to talk"
+- status
 - button "6% of context used"
 - button "Send message" [disabled]
-- text: 2 turns · 2 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 99% Input 15.6K tok · Output 158 tok
+- button "2 turns 2 steps · {{throughput}} tok/s":
+  - img
+  - text: 2 turns 2 steps{{throughput}} tok/s
+- button "15.7K tok · Cache hit 99%":
+  - img
+  - text: 15.7K tokCache hit 99%

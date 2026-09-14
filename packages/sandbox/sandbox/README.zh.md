@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-sandbox` 将同世界子进程限制在文件效果策略之下：命令以 `read-only` 运行、只能写入会话工作区（`workspace-write`）或不受限制地运行（`danger-full-access`），每次受限执行都遵循一份逐调用策略。bash 与 pwsh 执行器直接消费它，因此命令及其派生的所有进程都在限制下运行，消费方无需知道背后是哪个平台 runner。无法强制执行所请求的模式时，调用以 `SANDBOX_UNAVAILABLE` 错误快速失败，绝不会不受限制地运行。被拒绝的调用可以请求一个由人类批准一次、严格更宽的模式。隔离仅限同世界——后端与宿主共享内核和文件系统，容器、microVM 与远程执行器会替换整个能力。
+使用 `dsh-sandbox`，可以让子进程及其派生的所有进程在逐调用文件访问策略下运行。命令可以禁止写入（`read-only`）、只写入工作区（`workspace-write`），或不受限制地运行（`danger-full-access`）。无法强制执行所请求的模式时，调用以 `SANDBOX_UNAVAILABLE` 失败，绝不会不受限制地运行。调用被拒绝后，模型可以请求一个严格更宽的模式，交由人类批准一次。这是同世界隔离：进程仍与宿主共享内核和文件系统；需要隔离整个环境时，请使用容器、microVM 或远程执行器。
 
 ## 目录
 
@@ -63,7 +63,7 @@ kind: "package-reference"
 
 ### 被拒绝的调用与升权
 
-受限调用被拒绝时，操作会报告指明模式的拒绝标记——`[sandbox: file access denied under <mode> mode]`——组合声明升权能力时还会给出升权提示。模型可以用 `sandbox_permissions`（足以放行的最窄更宽模式）加 `justification` 重试一次完全相同的调用；用户会看到一次审批提示，可以选择允许一次、拒绝或取消。升权必须严格宽于调用的生效模式，且只作用于该次调用。
+受限调用被拒绝时，操作会报告指明模式的拒绝标记——`[sandbox: file access denied under <mode> mode]`——组合声明升权能力时还会给出升权提示。模型可以用 `sandbox_permissions`（足以放行的最窄更宽模式）加 `justification` 重试一次完全相同的调用；用户会看到一次审批提示，可以选择允许一次、拒绝或取消。真正的升权必须严格宽于调用的生效模式，且只作用于该次调用。与生效模式相同的合法 schema 目标是幂等无操作：调用无需审批提示或权限变更即可运行。
 
 ### 故障关闭行为
 
@@ -84,7 +84,7 @@ kind: "package-reference"
 - **按约定限同世界。** `ctx.sandbox` 在宿主路径文件策略下包装 argv；容器、microVM 与远程执行会替换周边能力 seam。
 - **策略随调用传递。** `SandboxPolicy` 逐调用携带，绝不在提供方上固定：两个消费方可以同时按不同策略隔离，获批的升权重试只是用更宽策略发起的新调用。默认与解析是消费方显式步骤。
 - **故障关闭。** `confine()` 返回受强制的 argv，或抛出 `SandboxUnavailableError`；绝不允许静默无限制放行，功能探测用于仲裁多 runner 链。
-- **统一的拒绝与升权词汇。** 标记与提示文本以及严格更宽阶梯都放在这里，使 bash 与 fs 家族不会漂移。
+- **统一的拒绝与升权词汇。** 标记与提示文本、严格更宽阶梯以及当前模式规范化都放在这里，使 bash 与 fs 家族不会漂移。
 
 ### 源码地图
 
@@ -93,11 +93,11 @@ kind: "package-reference"
 | [`src/index.ts`](src/index.ts) | 插件入口：`SandboxProvider` 服务、模式/强制执行/策略类型、故障关闭错误 |
 | [`src/escalation.ts`](src/escalation.ts) | 升权词汇：更宽模式阶梯、参数校验、拒绝与提示标记、审批编排 |
 | [`src/roots.ts`](src/roots.ts) | 可写根目录推导，Seatbelt profile 与进程内 fs 栅栏共享 |
-| [`src/invariant.ts`](src/invariant.ts) | 不变式伴生插件（无运行时不变式；抽象 seam 不注册事件或数据关系） |
+| — | 不发布运行时不变式伴生入口；抽象 seam 不注册事件或数据关系。 |
 
 ### 升权编排
 
-阶梯是封闭表——`read-only` 可升权到 `workspace-write` 或 `danger-full-access`，`workspace-write` 只能升权到 `danger-full-access`——在执行时检查，绝不写入工具 schema，schema 的枚举保持封闭的目标词汇。[`approveEscalation`](src/escalation.ts) 校验 `sandbox_permissions`/`justification` 配对、不提示人类就拒绝非加宽请求，并在任何执行前把每个审批结果映射到各自的错误。
+阶梯是封闭表——`read-only` 可升权到 `workspace-write` 或 `danger-full-access`，`workspace-write` 只能升权到 `danger-full-access`——在执行时检查，绝不写入工具 schema，schema 的枚举保持封闭的目标词汇。[`approveEscalation`](src/escalation.ts) 校验 `sandbox_permissions`/`justification` 配对，将合法的当前模式目标视为幂等无操作，不提示人类就拒绝更窄或无效目标，并在任何执行前把每个审批结果映射到各自的错误。
 
 ### 可写根目录
 

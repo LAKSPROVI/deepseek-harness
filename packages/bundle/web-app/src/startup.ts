@@ -6,6 +6,7 @@
  * @module @deepseek-ai/dsh-web-app/startup
  */
 
+import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 import type { Context } from '@deepseek-ai/cordis'
 import { parseCmdline } from '@deepseek-ai/dsh-cmdline'
@@ -29,7 +30,16 @@ export interface WebStartupValues {
   port?: number
   /** Explicit `--trusted-host` authorities, in argument order. */
   trustedHosts: string[]
+  /**
+   * Absolute directory of the presets this bundle ships beside the roster's
+   * built-in ones (`presets/` in the package). An assembly fact, not user
+   * config: the `agent-presets` row reads it as a deployment root.
+   */
+  presetRoot: string
 }
+
+/** The bundle's own preset directory, resolved from this module's location in `src/` or `lib/`. */
+export const WEB_PRESET_ROOT = fileURLToPath(new URL('../presets/', import.meta.url))
 
 /** The web flag family, as commander parsed it. */
 interface WebOptions {
@@ -82,6 +92,7 @@ export function apply(ctx: Context): void {
       ...options.host !== undefined && { host: options.host },
       ...options.port !== undefined && { port: Number(options.port) },
       trustedHosts: options.trustedHost ?? [],
+      presetRoot: WEB_PRESET_ROOT,
     } satisfies WebStartupValues)
   })
   parseCmdline(ctx, program)

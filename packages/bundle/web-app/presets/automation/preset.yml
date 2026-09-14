@@ -1,0 +1,3 @@
+name: Automação (Code Mode)
+description: PTC coding agent plus persistent task tools; a due task opens a new session in its workspace and runs the prompt.
+order: 3

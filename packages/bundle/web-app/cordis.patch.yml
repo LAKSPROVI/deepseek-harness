@@ -15,8 +15,9 @@
 
 - id: system-prompt
   config:
-    persona: >-
-      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+    personaSuffix: Your working directory is {{cwd}}.
+    personaPrefix: >-
+      You are a coding agent powered by the {{model}} model.
 
 # Full-text session search is opt-in (the base row's `openAt: never`). This
 # restatement keeps the Web values on one ephemeral in-memory index; a
@@ -54,9 +55,71 @@
       config:
         maxNoteBytes: 8192
 
+    # Voice input: the transcription seam, its Groq provider, and the Remote
+    # surface the browser's microphone button reaches. Audio never becomes
+    # durable session data; only the transcript the human sends does.
+    - id: transcription
+      name: '@deepseek-ai/dsh-transcription'
+      config:
+        provider: groq
+        maxAudioBytes: 26214400
+
+    - id: transcription-groq
+      name: '@deepseek-ai/dsh-transcription-groq'
+
+    - id: voice-input
+      name: '@deepseek-ai/dsh-voice-input'
+
+    # One persistent Host automation engine. The relative path resolves under
+    # the Harness home (`DSH_HOME`, default `~/.dsh`), not the process cwd.
+    - id: automation
+      name: '@deepseek-ai/dsh-automation'
+      config:
+        storePath: './data/automation/store.json'
+        userId: 'host'
+        enabled: true
+
+    # The one executor the engine ships with: a due `CUSTOM_PROMPT` task opens
+    # a root Session in its workspace and sends the prompt. Presets and
+    # permissions fall back to the roster and deployment defaults.
+    - id: automation-prompt-action
+      name: '@deepseek-ai/dsh-automation-prompt-action'
+      config:
+        actionType: CUSTOM_PROMPT
+
+    # Host-owned Agent Teams domain and model controls. The browser companion
+    # below mounts the generated Remote into the conversation header.
+    - id: agent-team
+      name: '@deepseek-ai/dsh-agent-team'
+      config:
+        maxMembers: 8
+        maxTasks: 256
+        maxPendingMessagesPerMember: 64
+        maxMessageBytes: 65536
+        disposalTimeoutMs: 5000
+
+    - id: tool-agent-team
+      name: '@deepseek-ai/dsh-tool-agent-team'
+      config:
+        freshProvider: spawn
+        forkProvider: fork
+
     # Browser Session export: `/export` command plus the shared download dialog.
     - id: session-log-download
       name: '@deepseek-ai/dsh-session-log-export'
+
+    # Session-header "Open In..." split button over the host application
+    # resolution (macOS/Windows/Linux; a host with no resolved application
+    # renders no button). Two halves: the host routes and the browser surface.
+    - id: open-in-app
+      name: '@deepseek-ai/dsh-host-open-in-app'
+      config:
+        probeTimeoutMs: 10000
+        iconTimeoutMs: 10000
+        launchWatchMs: 1000
+
+    - id: ui-open-in-app
+      name: '@deepseek-ai/dsh-client-ui-open-in-app'
 
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
@@ -72,6 +135,11 @@
     - id: session-stats
       name: '@deepseek-ai/dsh-session-stats'
 
+    # Whole-log turn outline for the chat turn rail (the turnOutline
+    # projection key): every turn stays navigable before its events page in.
+    - id: session-turn-outline
+      name: '@deepseek-ai/dsh-session-turn-outline'
+
     # Resolve bind host, SSH launch, and display once at boot, then mount the
     # matching dual-face directory picker. Mount -native or -browse directly in
     # an overlay to pin the interaction.
@@ -85,6 +153,11 @@
     # Session commands, cold reads, and live control over Typert Remote.
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'
+
+    # Workspace file service: bounded read, directory listing, and the
+    # agent-write change feed inside the session workspace root.
+    - id: workspace-files
+      name: '@deepseek-ai/dsh-api-workspace-files'
 
     # Configuration-surface reads and writes over Typert Remote. Each method
     # reports an actionable error when its settings-domain provider is absent.
@@ -163,6 +236,11 @@
         # its literals, for example: ['app.internal', ...ctx.webRuntime.trustedHosts].
         trustedHosts: !!js ctx.webRuntime.trustedHosts
 
+    # Raw Blob and ReadableStream uploads run independently of Connection's
+    # RPC and generation service.
+    - id: file-upload
+      name: '@deepseek-ai/dsh-client-file-upload'
+
     - id: api-remotes
       name: '@deepseek-ai/dsh-api-remotes'
 
@@ -184,8 +262,26 @@
     - id: ui-session
       name: '@deepseek-ai/dsh-client-ui-session'
 
+    # Unified resource model: protocol providers behind the useResource hook.
+    - id: resources
+      name: '@deepseek-ai/dsh-client-resources'
+
     - id: ui-sidebar
       name: '@deepseek-ai/dsh-client-ui-sidebar'
+
+    # The right Sidebar: one docking surface per session over ui-dockkit.
+    - id: ui-sidebar-right
+      name: '@deepseek-ai/dsh-client-ui-sidebar-right'
+
+
+    # The right Sidebar's first outside tab type: workspace text files, read
+    # through the bounded workspaceFiles endpoint.
+    - id: ui-sidebar-textpreview
+      name: '@deepseek-ai/dsh-client-ui-sidebar-textpreview'
+
+    # The right Sidebar's workspace file tree tab type.
+    - id: ui-sidebar-files
+      name: '@deepseek-ai/dsh-client-ui-sidebar-files'
 
     - id: ui-settings
       name: '@deepseek-ai/dsh-client-ui-settings'
@@ -236,6 +332,12 @@
     - id: ui-workspace
       name: '@deepseek-ai/dsh-client-ui-workspace'
 
+    - id: ui-automation
+      name: '@deepseek-ai/dsh-client-ui-automation'
+
+    - id: ui-agent-team
+      name: '@deepseek-ai/dsh-client-ui-agent-team'
+
     # Input triggers: the '/' | '@' pipeline (ui-input-trigger), the command surface over
     # it (ui-commands), and the reference sources (ui-skill / ui-reference).
     - id: ui-input-trigger
@@ -253,6 +355,13 @@
     - id: ui-reference
       name: '@deepseek-ai/dsh-client-ui-reference'
 
+    # Read-only active Schedule catalog. The shipped Web graph resolves the
+    # client package but leaves it disabled; the explicit Schedule overlay
+    # enables this same row together with the host Schedule services.
+    - id: ui-schedule
+      name: '@deepseek-ai/dsh-client-ui-schedule'
+      disabled: true
+
     # Background jobs: the session-header list over the jobsBySession mirror.
     - id: ui-jobs
       name: '@deepseek-ai/dsh-client-ui-jobs'
@@ -265,6 +374,13 @@
     # assistant-message action strip, over the messageFeedback Remote.
     - id: ui-message-feedback
       name: '@deepseek-ai/dsh-client-ui-message-feedback'
+
+    # Push-to-talk microphone in the composer tool row: records one utterance,
+    # ships it base64 over the voiceInput Remote, and appends the transcript to
+    # the draft. The audio never becomes session data; only the message the
+    # human then sends does.
+    - id: ui-voice-input
+      name: '@deepseek-ai/dsh-client-ui-voice-input'
 
     # Model selection: the /model popupSelect + composer seat over session.models.
     - id: ui-model-selection
@@ -335,9 +451,6 @@
 - id: tool-fs-search
   disabled: true
 
-- id: tool-str-replace-editor
-  disabled: true
-
 # The `skill` REGISTRY stays in the host plane. It is host+per-scope layered
 # (the tools-registry shape): deployment-level providers — repository plugins,
 # a host skill-filesystem row — register into its global layer, while a preset's
@@ -400,12 +513,6 @@
 - id: tool-subagent-fork
   disabled: true
 
-# `tool-subagent-report` is host-plane for the same reason as the registry, not
-# because a preset may not want it: it registers a CONTINUABLE SETUP on that
-# singleton rather than a tool this agent calls, and the setup list is not
-# scope-aware — one copy per mounted preset means every child gets `report`
-# registered once per live session, which throws on the second.
-
 - id: workflow-worker-thread
   disabled: true
 
@@ -434,5 +541,12 @@
 - insert:
     - id: agent-presets
       name: '@deepseek-ai/dsh-agent-presets'
+      inject: [webStartup]
       config:
         default: standard
+        # The bundle's own presets (`presets/` beside this file): versioned with
+        # the deployment and read-only like the shipped set, so a user preset
+        # claiming the same id is shadowed rather than trusted.
+        roots:
+          - path: !!js ctx.webStartup.presetRoot
+            trust: system

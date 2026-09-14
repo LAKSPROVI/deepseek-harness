@@ -3,8 +3,21 @@
     - button "Reply with a one-sentence description" [disabled]
   - img
   - text: Standard mode
+  - button "Opções de nova conversa e contexto":
+    - img
+    - text: Novo Chat
+    - img
+  - button "Agent Team":
+    - img
+    - text: Agent Team
+  - button "Automações"
   - button "Session log":
     - text: Session log
+    - img
+  - button "Anotações e lembretes da sessão":
+    - img
+    - text: Anotações
+  - button "Open the sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -23,12 +36,17 @@
 - status:
   - text: This turn failedAPI key is invalid
   - code: AUTH
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
+- button "Add attachment":
+  - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Hold to talk"
+- status
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps
+- img
+- text: 1 turns 1 steps

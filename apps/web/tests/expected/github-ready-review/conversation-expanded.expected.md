@@ -14,8 +14,21 @@
     - button "Review deepseek-harness/deepseek-harness#314" [disabled]
   - img
   - text: Standard mode
+  - button "Opções de nova conversa e contexto":
+    - img
+    - text: Novo Chat
+    - img
+  - button "Agent Team":
+    - img
+    - text: Agent Team
+  - button "Automações"
   - button "Session log":
     - text: Session log
+    - img
+  - button "Anotações e lembretes da sessão":
+    - img
+    - text: Anotações
+  - button "Open the sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -44,13 +57,22 @@
   - img
 - button "Branch into a new conversation":
   - img
-- text: {{clock}} Ran for {{duration}}
-- textbox "Message or run a task... / commands, @ files or sessions"
+- button "Ran for {{duration}}":
+  - img
+  - text: Ran for {{duration}}
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
+- button "Add attachment":
+  - img
 - 'button "Access mode, current: Read Only"': Read Only
+- button "Hold to talk"
+- status
 - button "Select model, current github-webhook-review-test/reply":
   - text: github-webhook-review-test/reply
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps LLM {{duration}}
+- button "1 turns 1 steps":
+  - img
+  - text: 1 turns 1 steps
