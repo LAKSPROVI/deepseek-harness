@@ -3,9 +3,20 @@
     - button "Read the attached file with" [disabled]
   - img
   - text: Standard mode
+  - button "Opções de nova conversa e contexto":
+    - img
+    - text: Novo Chat
+    - img
+  - button "Agent Team":
+    - img
+    - text: Agent Team
+  - button "Automações"
   - button "Session log":
     - text: Session log
     - img
+  - button "Anotações e lembretes da sessão":
+    - img
+    - text: Anotações
   - button "Open the sidebar":
     - img
   - tablist:
@@ -46,6 +57,8 @@
 - button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Hold to talk"
+- status
 - button "Select model, current DeepSeek-V4-Flash-Vision-Exp, reasoning effort high":
   - text: DeepSeek-V4-Flash-Vision-Exp high
   - img
