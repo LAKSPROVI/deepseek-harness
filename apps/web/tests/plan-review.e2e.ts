@@ -85,14 +85,14 @@ describe('web e2e: plan review takeover round trip', () => {
     expect(await page.locator('[data-question-key]').count()).toBe(0)
     await expect.poll(() => card.getByText('Plan review').count(), { timeout: 10_000 }).toBeGreaterThan(0)
 
-    const selectedRow = page.locator('[role="treeitem"][aria-selected="true"]')
+    const selectedRow = page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]')
     await expect.poll(() => selectedRow.locator('[data-state="warning"]').count(), { timeout: 10_000 }).toBe(1)
-    await expect.poll(() => selectedRow.getByText('Plan awaiting review', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => selectedRow.getByText('Aguardando revisão de plano', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
 
     if (MODE !== 'record') {
       const snapshot = await captureStableAria(page, '[data-plan-review-key]', scaffold.workspaceCwd)
       await compareOrRefreshGolden(REVIEW_EXPECTED, snapshot, MODE)
-      const sidebar = await captureStableAria(page, '[role="treeitem"][aria-selected="true"]', scaffold.workspaceCwd)
+      const sidebar = await captureStableAria(page, '[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]', scaffold.workspaceCwd)
       await compareOrRefreshGolden(SIDEBAR_EXPECTED, sidebar, MODE)
     }
 

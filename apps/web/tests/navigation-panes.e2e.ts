@@ -278,7 +278,7 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     expect(await exportButton.isDisabled()).toBe(false)
     const header = exportButton.locator('xpath=ancestor::header[1]')
     // The right Sidebar's expand button holds the header's corner; the export
-    // control sits immediately to its left.
+    // control sits to its left, with only the session notes trigger between them.
     const sidebarButton = page.getByRole('button', { name: 'Open the sidebar' })
     const [buttonBox, sidebarBox, headerBox] = await Promise.all([
       exportButton.boundingBox(), sidebarButton.boundingBox(), header.boundingBox(),
@@ -287,7 +287,8 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       throw new Error('Session Header export geometry is unavailable')
     }
     expect(headerBox.x + headerBox.width - (sidebarBox.x + sidebarBox.width)).toBeLessThanOrEqual(32)
-    expect(sidebarBox.x - (buttonBox.x + buttonBox.width)).toBeLessThanOrEqual(32)
+    expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(sidebarBox.x)
+    expect(sidebarBox.x - (buttonBox.x + buttonBox.width)).toBeLessThanOrEqual(160)
     const responsePromise = page.waitForResponse(response =>
       response.request().method() === 'HEAD'
       && new URL(response.url()).pathname === '/api/session.export', { timeout: 30_000 })

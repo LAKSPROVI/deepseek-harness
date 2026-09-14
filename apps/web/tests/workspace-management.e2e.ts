@@ -291,10 +291,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       () => page.getByRole('button', { name: `Workspace actions for ${workspace.title}` }).count(),
       { timeout: 10_000 },
     ).toBe(0)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
+    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
       .toBeGreaterThanOrEqual(1)
     await expect.poll(
-      () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
+      () => page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]').count(),
       { timeout: 10_000 },
     ).toBe(1)
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
@@ -319,7 +319,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       { timeout: 10_000 },
     ).not.toEqual([])
     expect(reregistered?.sessionIds).not.toContain(SEED_ID)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
+    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
       .toBeGreaterThanOrEqual(1)
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
     await stat(seededLogPath)
@@ -337,10 +337,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 })
+    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(1)
     await expect.poll(
-      () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
+      () => page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]').count(),
       { timeout: 15_000 },
     ).toBe(1)
     expect(scaffold.ctx.workspaceRegistry.get(workspace.id)).toBeUndefined()
@@ -416,18 +416,18 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     // Flat mode: the section label flips and the seeded session is a
     // top-level row with no group headers above it.
     await expect.poll(() => page.getByText('Sessions', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 5_000 }).toBe(0)
+    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 5_000 }).toBe(0)
     await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
-    expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v5'))).toContain('flat')
+    expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v6'))).toContain('flat')
     // Persisted across reload; then restore grouped for inter-spec hygiene.
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 }).toBe(0)
+    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 }).toBe(0)
     await page.getByRole('button', { name: 'View options' }).click()
     await page.getByRole('menuitem', { name: 'WorkSpace' }).click()
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
@@ -498,19 +498,24 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
+  /** The grouped navigation tree; the Recent & In Progress strip repeats rows and the Ungrouped badge outside it. */
+  function sessionsTree() {
+    return page.getByRole('tree', { name: 'Sessions' })
+  }
+
   /**
    * Expand Ungrouped and return its only non-blank session row. A selected
    * blank Session from a deleted Workspace may also be visible, without actions.
    * @returns the session row locator, already present.
    */
   async function seededSessionRow() {
-    const ungroupedRow = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..')
+    const ungroupedRow = sessionsTree().getByText('Ungrouped', { exact: true }).locator('..').locator('..')
     const ungroupedSection = ungroupedRow.locator('..')
     // Initial-current auto-expansion can race this gesture; converge on
     // expanded rather than assuming which update wins first.
     await expect.poll(async () => {
       if (await ungroupedRow.getAttribute('aria-expanded') !== 'true') {
-        await page.getByText('Ungrouped', { exact: true }).click()
+        await sessionsTree().getByText('Ungrouped', { exact: true }).click()
         await page.waitForTimeout(50)
       }
       return await ungroupedRow.getAttribute('aria-expanded')
@@ -531,14 +536,14 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await sessionRow.hover()
     // Card content: the full title plus the Idle status line (no aria role —
     // text anchors are the stable selector).
-    await expect.poll(() => page.getByText('Idle', { exact: true }).count(), { timeout: 5_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('Ociosa', { exact: true }).count(), { timeout: 5_000 }).toBeGreaterThanOrEqual(1)
     // The card is REACHABLE: it sits 8px off the row, so getting to it means
     // crossing ground that belongs to neither. Hovering it must not dismiss
     // it — the hazard this scenario pins.
     const card = page.getByRole('button', { name: `Copy: ${rowTitle}` })
     await card.hover()
     await page.waitForTimeout(POINTER_HOLD_MS)
-    expect(await page.getByText('Idle', { exact: true }).count()).toBeGreaterThanOrEqual(1)
+    expect(await page.getByText('Ociosa', { exact: true }).count()).toBeGreaterThanOrEqual(1)
     // The full title is the card's primary value: activating anywhere on the
     // card writes it through the browser clipboard and localizes the success
     // feedback through the English locale seat.
@@ -594,7 +599,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     // so archiving this last visible Ungrouped Session must remove the bucket.
     await sessionRow.click()
     await expect.poll(() => sessionRow.getAttribute('aria-selected'), { timeout: 10_000 }).toBe('true')
-    const ungroupedSection = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..').locator('..')
+    const ungroupedSection = sessionsTree().getByText('Ungrouped', { exact: true }).locator('..').locator('..').locator('..')
     await expect.poll(() => ungroupedSection.locator('[role="treeitem"]').count(), { timeout: 10_000 }).toBe(2)
     const rowTitle = await sessionRow.locator('[class*="title"]').innerText()
     // Row menu: hover reveals the actions button; Archive session commits
@@ -604,7 +609,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     // The row disappears on the archive-set echo; with no other visible
     // stray, the whole Ungrouped bucket withdraws.
     await expect.poll(() => page.getByText(rowTitle, { exact: true }).count(), { timeout: 10_000 }).toBe(0)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
     // Durable on the host: the registry-global set carries the id while the
     // session log itself stays in persistence untouched.
     expect([...scaffold.ctx.workspaceRegistry.archivedSessionIds]).toEqual([SessionId(SEED_ID)])

@@ -260,12 +260,10 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
         scaffold.workspaceCwd,
       )
       await compareOrRefreshGolden(LOAD_MORE_EXPECTED, loadMoreSnapshot, MODE)
+      // The opening snapshot is a short tail (FIRST_PAGE_MESSAGES), so the
+      // first older page already crosses the wire — and is the one held above.
       // Avoid Playwright scrolling the offscreen first row into the automatic-load threshold.
-      await loadMore.evaluate((button: HTMLButtonElement) => { button.click() })
-      await expect.poll(() => logicalRows(page), { timeout: 15_000 }).toBeGreaterThan(initialRows)
-      const residentRows = await logicalRows(page)
-      expect(held).toBe(false)
-      await expect.poll(() => loadMore.isDisabled(), { timeout: 15_000 }).toBe(false)
+      const residentRows = initialRows
       await loadMore.evaluate((button: HTMLButtonElement) => { button.click() })
       await expect.poll(() => held, { timeout: 15_000 }).toBe(true)
       await expect.poll(async () => ({

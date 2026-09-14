@@ -411,8 +411,18 @@ async function bootPreview(origin: string, browser: Browser): Promise<void> {
     await catalog.getByRole('treeitem', { name: /Continue preview verification/ }).waitFor()
     await catalog.press('Escape')
 
-    await page.getByRole('button', { name: 'Load earlier', exact: true }).click()
-    await page.getByText(SHOWCASE_OLDEST, { exact: true }).waitFor({ timeout: 15_000 })
+    // The opening snapshot is a short tail (FIRST_PAGE_MESSAGES), so the
+    // oldest checkpoint may sit several pages back.
+    const loadEarlier = page.getByRole('button', { name: 'Load earlier', exact: true })
+    const loading = page.getByRole('button', { name: 'Loading…', exact: true })
+    const oldest = page.getByText(SHOWCASE_OLDEST, { exact: true })
+    for (let pages = 0; await oldest.count() === 0; pages++) {
+      if (pages >= 20) throw new Error('the oldest showcase checkpoint never paged in')
+      await loadEarlier.waitFor({ timeout: 15_000 })
+      await loadEarlier.click()
+      await loading.waitFor({ state: 'detached', timeout: 15_000 }).catch(() => undefined)
+    }
+    await oldest.waitFor({ timeout: 15_000 })
     expect(pageErrors.map(error => error.message)).toEqual([])
     expect(consoleErrors.filter(line =>
       /watchFile|failed to watch|node-addon-system\.probe|sandbox backend is usable|SANDBOX_UNAVAILABLE/i.test(line))).toEqual([])

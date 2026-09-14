@@ -303,3 +303,34 @@ export function hasClass(el: Element, name: string): boolean {
  * scratch, `refresh` re-derives the expected text from the existing ones).
  */
 export const REFRESHING_GOLDEN = process.env.DSH_SNAPSHOT === 'record' || process.env.DSH_SNAPSHOT === 'refresh'
+
+/**
+ * Page older history in until `mounted` holds. An ordinary Session opens on a
+ * short tail (`FIRST_PAGE_MESSAGES`), so a record from an earlier turn only
+ * renders after the load-earlier control has been driven, possibly more than
+ * once. Chat exposes it as the "Load earlier" button; the Trajectory ledger as
+ * the `[data-history-load]` row.
+ * @param mounted - the condition to reach.
+ * @param label - what the caller waited for, named by the failure.
+ */
+export async function pageInHistoryUntil(mounted: () => boolean, label: string): Promise<void> {
+  for (let pages = 0; !mounted(); pages++) {
+    if (pages >= 20) throw new Error(`${label} never paged in`)
+    const button = document.querySelector<HTMLButtonElement>('[data-history-load] button')
+      ?? [...document.querySelectorAll<HTMLButtonElement>('button')]
+        .find(candidate => candidate.textContent?.trim() === 'Load earlier')
+    if (button === undefined || button === null) throw new Error(`${label} is absent and no earlier history remains`)
+    await act(async () => {
+      button.click()
+      // Let the page round trip settle before probing again.
+      await new Promise(resolve => setTimeout(resolve, 50))
+    })
+    const started = Date.now()
+    while (!mounted() && Date.now() - started < 10_000) {
+      const busy = document.querySelector('[data-history-load] button[disabled]')
+        ?? [...document.querySelectorAll<HTMLButtonElement>('button')].find(candidate => candidate.textContent?.trim() === 'Loading…')
+      if (busy === null || busy === undefined) break
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
+    }
+  }
+}

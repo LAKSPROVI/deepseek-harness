@@ -738,7 +738,9 @@ describe.skipIf(MODE === 'record')('web e2e: active Schedule catalog', () => {
     expect(lightLayout.position).toBe('fixed')
     expect(lightLayout.width).toBe(336)
     expect(lightLayout.catalogLeft).toBe(lightLayout.expectedLeft)
-    expect(lightLayout.catalogLeft).toBeLessThan(lightLayout.triggerLeft)
+    // The Lakatoss header seats the trigger far enough left that the catalog
+    // may fit without the viewport clamp, in which case both edges coincide.
+    expect(lightLayout.catalogLeft).toBeLessThanOrEqual(lightLayout.triggerLeft)
     expect(lightLayout.catalogRight).toBeLessThanOrEqual(lightLayout.viewport - 16)
     expect(lightLayout.scrollWidth).toBeLessThanOrEqual(lightLayout.viewport)
     expect(lightLayout.background).not.toBe('rgba(0, 0, 0, 0)')

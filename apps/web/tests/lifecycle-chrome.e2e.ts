@@ -255,7 +255,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
       () => page.locator('[role="treeitem"][aria-expanded]').filter({ hasText: 'workspace' }).count(),
       { timeout: 15_000 },
     ).toBeGreaterThanOrEqual(1)
-    await expect.poll(() => page.locator('[role="treeitem"][aria-selected="true"]').count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]').count(), { timeout: 10_000 }).toBe(1)
     await expect.poll(() => page.getByText('LIGHTHOUSE', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
     // The usage pill's one label span concatenates the billed total and the cache-hit share.
     await expect.poll(() => page.getByRole('button', { name: /Cache hit 99\.5%/ }).count(), { timeout: 15_000 }).toBe(1)
@@ -281,7 +281,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     // the replay cursor was fully consumed before the reload, so any stray
     // request would fail the scenario loudly at close().
     await expect.poll(() => page.getByText('LIGHTHOUSE', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
-    await expect.poll(() => page.locator('[role="treeitem"][aria-selected="true"]').count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]').count(), { timeout: 10_000 }).toBe(1)
     // Golden of the recovered conversation region: rebuilt from the log, it
     // must render the same settled transcript the live turn produced.
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
@@ -416,7 +416,9 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
       rejectConnections = false
       await recoveryPage.clock.fastForward(10_000)
       await expect.poll(() => sockets.length).toBe(10)
-      const automaticRecovery = recoveryPage.getByRole('status')
+      // The voice control keeps an idle live region mounted; the connection
+      // indicator is the status that carries the recovery copy.
+      const automaticRecovery = recoveryPage.getByRole('status').filter({ hasText: 'Connected' })
       await automaticRecovery.waitFor({ timeout: 10_000 })
       expect(await automaticRecovery.innerText()).toBe('Connected')
       await recoveryPage.clock.fastForward(2_000)
@@ -439,7 +441,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
       await recoveryPage.mouse.up()
 
       await expect.poll(() => sockets.length).toBe(12)
-      const recovered = recoveryPage.getByRole('status')
+      const recovered = recoveryPage.getByRole('status').filter({ hasText: 'Connected' })
       await recovered.waitFor({ timeout: 10_000 })
       expect(await recovered.innerText()).toBe('Connected')
       expect(await connectionIndicatorGeometry(recovered)).toEqual(connectingGeometry)

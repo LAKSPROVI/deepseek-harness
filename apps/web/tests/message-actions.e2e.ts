@@ -230,16 +230,16 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
       { timeout: 10_000 },
     ).toBe(3)
     await expect.poll(
-      () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
+      () => page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]').count(),
       { timeout: 10_000 },
     ).toBe(1)
     await expect.poll(
-      () => page.locator('[role="treeitem"][aria-selected="true"]').textContent(),
+      () => page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]').textContent(),
       { timeout: 10_000 },
     ).toContain('Use the read tool twice (1)')
     // The row action owns a distinct ui-workspace injection from the message
     // action above, so exercise both through the loaded app before capture.
-    const sourceRow = page.locator('[role="treeitem"][aria-selected="true"]')
+    const sourceRow = page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]')
     const rowBox = await sourceRow.boundingBox()
     if (rowBox === null) throw new Error('fork source row has no layout box')
     const actionButton = sourceRow.locator('button[aria-label^="Session actions for "]')
@@ -258,13 +258,13 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
       { timeout: 10_000 },
     ).toBe(4)
     await expect.poll(
-      () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
+      () => page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]').count(),
       { timeout: 10_000 },
     ).toBe(1)
     // The child row is published before its inherited title rename settles;
     // wait for that second RPC projection before freezing the ARIA tree.
     await expect.poll(
-      () => page.locator('[role="treeitem"][aria-selected="true"]').textContent(),
+      () => page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]').textContent(),
       { timeout: 10_000 },
     ).toContain('Use the read tool twice (2)')
     const tree = await captureStableAria(
