@@ -70,14 +70,16 @@ jobs:
       - name: Build the assembled Web bundle
         run: pnpm run build
 
-      # `refresh` rewrites every golden a scenario reaches; `-u` rewrites the
-      # inline vitest snapshots the same files carry. Failures are expected
-      # while goldens are stale, so the step never fails the job.
-      - name: Refresh goldens and inline snapshots
+      # The Web e2e lane (`test:web:built` under DSH_SNAPSHOT=replay in CI) owns the
+      # ARIA goldens and the system-prompt/tool-schema pins; `refresh` rewrites
+      # every golden a scenario reaches and `-u` the inline vitest snapshots the
+      # same files carry. The session corpus lane is left alone: its refresh only
+      # rewrites recording timestamps. Failures are expected while goldens are
+      # stale, so the step never fails the job.
+      - name: Refresh Web goldens and inline snapshots
         env:
           DSH_SNAPSHOT: refresh
-          DSH_EXAMPLE_MODE: lib
-        run: pnpm exec vitest run --config vitest.snapshot.config.ts -u || true
+        run: pnpm exec vitest run --config vitest.web.config.ts -u || true
 
       - name: Summarize the refreshed files
         run: |
