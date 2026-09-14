@@ -221,6 +221,7 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
     await openSeed(page)
 
     let held = false
+    let olderPages = 0
     let releaseHistory: () => void = () => {}
     let finishHeldRequest: () => void = () => {}
     const gate = new Promise<void>((resolve) => { releaseHistory = resolve })
@@ -230,8 +231,12 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
         method?: string
         payload?: { args?: { request?: { beforeSeq?: number } } }
       }
+      // The opening snapshot is a short tail (FIRST_PAGE_MESSAGES), so the
+      // first older page crosses the wire before the ledger can scroll; the
+      // second one is the prepend whose anchor geometry this scenario pins.
       if (!held && request.method === 'session/page'
-        && request.payload?.args?.request?.beforeSeq !== undefined) {
+        && request.payload?.args?.request?.beforeSeq !== undefined
+        && ++olderPages === 2) {
         held = true
         await gate
         try {
@@ -260,10 +265,12 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
         scaffold.workspaceCwd,
       )
       await compareOrRefreshGolden(LOAD_MORE_EXPECTED, loadMoreSnapshot, MODE)
-      // The opening snapshot is a short tail (FIRST_PAGE_MESSAGES), so the
-      // first older page already crosses the wire — and is the one held above.
       // Avoid Playwright scrolling the offscreen first row into the automatic-load threshold.
-      const residentRows = initialRows
+      await loadMore.evaluate((button: HTMLButtonElement) => { button.click() })
+      await expect.poll(() => logicalRows(page), { timeout: 15_000 }).toBeGreaterThan(initialRows)
+      const residentRows = await logicalRows(page)
+      expect(held).toBe(false)
+      await expect.poll(() => loadMore.isDisabled(), { timeout: 15_000 }).toBe(false)
       await loadMore.evaluate((button: HTMLButtonElement) => { button.click() })
       await expect.poll(() => held, { timeout: 15_000 }).toBe(true)
       await expect.poll(async () => ({

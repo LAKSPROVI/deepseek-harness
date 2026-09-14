@@ -14,7 +14,7 @@
 import { resolve } from 'node:path'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, it } from 'vitest'
-import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
+import { installAssembledBootEnv, mountAssembledApp, pageInHistoryUntil } from './assembled-boot.ts'
 
 installAssembledBootEnv()
 
@@ -95,8 +95,10 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   // Opening a session reaches chat content through the fixture transport.
   fireEvent.click(waitingTitle)
   await waitFor(() => {
-    expect(document.querySelector('[data-sample="bash"]')).not.toBeNull()
+    expect(document.querySelectorAll('[data-tool]').length).toBeGreaterThan(0)
   }, { timeout: 10_000 })
+  // The opening tail stops short of the bash sample turn; page it in.
+  await pageInHistoryUntil(() => document.querySelector('[data-sample="bash"]') !== null, 'the bash sample turn')
   // The generated bundle roster mounts the question UI before the approval UI.
   // Skip the resident fixture's three questions, then resolve its approval so
   // the ordinary composer bar (which owns ContextMeter) resumes.
