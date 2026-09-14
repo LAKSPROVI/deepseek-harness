@@ -185,6 +185,19 @@ jobs:
       - name: Run exhaustive coverage
         run: pnpm run check:ci:coverage
 
+      # The per-file gate names only line:column pairs; the merged istanbul
+      # report is what tells a genuinely unexecuted statement from a source-map
+      # duplicate. Kept only when the lane fails.
+      - name: Keep the merged coverage report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-linux
+          if-no-files-found: ignore
+          path: |
+            coverage/coverage-final.json
+            coverage/.partitioned/*.report.json
+
   node-24-bench:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
@@ -575,6 +588,16 @@ jobs:
       - name: Run Windows coverage
         shell: pwsh
         run: pnpm run check:ci:coverage
+
+      - name: Keep the merged coverage report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-windows
+          if-no-files-found: ignore
+          path: |
+            coverage/coverage-final.json
+            coverage/.partitioned/*.report.json
       - name: Save coverage duration history
         # Coverage flakes must not prevent the cache from building; the
         # measured durations remain useful even when a partition failed. The

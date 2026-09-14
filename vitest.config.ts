@@ -376,8 +376,11 @@ export default defineConfig({
           },
       reporter: coveragePartitionMode
         ? []
+        // CI also keeps the istanbul JSON: the workflow uploads it when the
+        // per-file gate fails, so a reported location can be traced to its
+        // statement range without re-running the lane.
         : process.env.CI
-          ? ['text', uncoveredLocationsReporter]
+          ? ['text', 'json', uncoveredLocationsReporter]
           : ['text', 'html', uncoveredLocationsReporter],
     },
   },
