@@ -1,21 +1,9 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Use the read tool twice" [disabled]
-  - button "Opções de nova conversa e contexto":
+  - button "More actions":
     - img
-    - text: Novo Chat
-    - img
-  - button "Agent Team":
-    - img
-    - text: Agent Team
-  - button "Automações"
-  - button "Session log":
-    - text: Session log
-    - img
-  - button "Anotações e lembretes da sessão":
-    - img
-    - text: Anotações
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -76,13 +64,9 @@
   - text: "feedback Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}."
 - text: "Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}."
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Commands":
-  - img
-- button "Add attachment":
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Read Only"': Read Only
-- button "Hold to talk"
-- status
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

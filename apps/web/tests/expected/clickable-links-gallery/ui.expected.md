@@ -1,21 +1,9 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Clickable links gallery" [disabled]
-  - button "Opções de nova conversa e contexto":
+  - button "More actions":
     - img
-    - text: Novo Chat
-    - img
-  - button "Agent Team":
-    - img
-    - text: Agent Team
-  - button "Automações"
-  - button "Session log":
-    - text: Session log
-    - img
-  - button "Anotações e lembretes da sessão":
-    - img
-    - text: Anotações
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -155,6 +143,16 @@
   - superscript: "1"
   - text: .
 - paragraph:
+  - text: "Preview:"
+  - link "plain HTTP":
+    - /url: http://docs.example.test/plain
+  - text: .
+- paragraph:
+  - text: "Upstream:"
+  - link "the repository":
+    - /url: https://github.com/example/link-gallery
+  - text: .
+- paragraph:
   - text: "Inert contrasts:"
   - code: curl https://docs.example.test/api
   - text: ","
@@ -165,7 +163,7 @@
 - paragraph:
   - text: Wrote
   - code:
-    - button "Open site/report.html": report.html
+    - button "Open site/report.html in sidebar": report.html
   - text: plus two
   - code: style.css
   - text: copies;
@@ -181,14 +179,6 @@
 - list:
   - listitem:
     - paragraph: Footnote references stay inert superscripts. ↩
-- text: Produced
-- button "Open site/report.html": report.html
-- button "Open a/style.css": style.css
-- button "Open b/style.css": style.css
-- button "Open site/index.html": index.html
-- button "Open site/app.js": app.js
-- button "Open src/tokens.css": tokens.css
-- text: + 1 file
 - button "Copy":
   - img
 - button "Good response":
@@ -204,13 +194,9 @@
 - button "Back to bottom":
   - img
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Commands":
-  - img
-- button "Add attachment":
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Hold to talk"
-- status
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

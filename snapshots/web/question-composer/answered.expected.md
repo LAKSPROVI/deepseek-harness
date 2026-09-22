@@ -3,21 +3,9 @@
     - button "Use the ask_user_question tool to" [disabled]
   - img
   - text: Standard mode
-  - button "Opções de nova conversa e contexto":
+  - button "More actions":
     - img
-    - text: Novo Chat
-    - img
-  - button "Agent Team":
-    - img
-    - text: Agent Team
-  - button "Automações"
-  - button "Session log":
-    - text: Session log
-    - img
-  - button "Anotações e lembretes da sessão":
-    - img
-    - text: Anotações
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -46,17 +34,12 @@
   - text: Ran for {{duration}}
 - text: {{clock}}
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Commands":
-  - img
-- button "Add attachment":
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Hold to talk"
-- status
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img
-- button "3% of context used"
 - button "Send message" [disabled]
 - button "1 turns 2 steps · {{throughput}} tok/s":
   - img
@@ -64,3 +47,4 @@
 - button "8.8K tok · Cache hit 95%":
   - img
   - text: 8.8K tokCache hit 95%
+- button "3% of context used": 3%

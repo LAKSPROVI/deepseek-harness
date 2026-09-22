@@ -4,7 +4,7 @@
 // typed draft, same-basename directory adoption, the rename round
 // trip over the real wire (workspace.rename RPC + durable registry), the
 // duplicate-name pre-check, the
-// flat "In one list" view with its persisted group-by preference, the session
+// flat "In one list" and opt-in Workspace tree views with persisted grouping, the session
 // hover card and row action menu, and the session archive round trip (row
 // menu → workspace.archiveSession RPC → durable global set → row hidden
 // across reload). Zero model calls: workspace.create/rename/archiveSession
@@ -37,7 +37,7 @@ const SEED_ID = 'workspace-management-web-e2e'
 const POINTER_TRANSIT_MS = 300
 const POINTER_HOLD_MS = 600
 
-describe('web e2e: workspace management (create / rename / flat view / hover affordances)', () => {
+describe('web e2e: workspace management (create / rename / grouping / hover affordances)', () => {
   let scaffold: WebScaffold
   let browser: Browser
   let page: Page
@@ -210,6 +210,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     await expect.poll(() => page.getByText('gamma-ws', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
+    // Session restoration focuses the composer; the Workspace list can arrive
+    // first. Do not let that focus cancel the next directory dialog's path draft.
+    const composer = page.locator('[data-composer-input][contenteditable="true"]')
+    await expect.poll(() => composer.evaluate(element => document.activeElement === element), { timeout: 10_000 }).toBe(true)
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
@@ -291,10 +295,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       () => page.getByRole('button', { name: `Workspace actions for ${workspace.title}` }).count(),
       { timeout: 10_000 },
     ).toBe(0)
-    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
       .toBeGreaterThanOrEqual(1)
     await expect.poll(
-      () => page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]').count(),
+      () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
       { timeout: 10_000 },
     ).toBe(1)
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
@@ -319,7 +323,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       { timeout: 10_000 },
     ).not.toEqual([])
     expect(reregistered?.sessionIds).not.toContain(SEED_ID)
-    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
       .toBeGreaterThanOrEqual(1)
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
     await stat(seededLogPath)
@@ -337,10 +341,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 })
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(1)
     await expect.poll(
-      () => page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]').count(),
+      () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
       { timeout: 15_000 },
     ).toBe(1)
     expect(scaffold.ctx.workspaceRegistry.get(workspace.id)).toBeUndefined()
@@ -416,18 +420,18 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     // Flat mode: the section label flips and the seeded session is a
     // top-level row with no group headers above it.
     await expect.poll(() => page.getByText('Sessions', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
-    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 5_000 }).toBe(0)
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 5_000 }).toBe(0)
     await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
-    expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v6'))).toContain('flat')
+    expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v5'))).toContain('flat')
     // Persisted across reload; then restore grouped for inter-spec hygiene.
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 }).toBe(0)
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 }).toBe(0)
     await page.getByRole('button', { name: 'View options' }).click()
-    await page.getByRole('menuitem', { name: 'WorkSpace' }).click()
-    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
+    await page.getByRole('menuitem', { name: 'WorkSpace', exact: true }).click()
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
@@ -498,24 +502,19 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  /** The grouped navigation tree; the Recent & In Progress strip repeats rows and the Ungrouped badge outside it. */
-  function sessionsTree() {
-    return page.getByRole('tree', { name: 'Sessions' })
-  }
-
   /**
    * Expand Ungrouped and return its only non-blank session row. A selected
    * blank Session from a deleted Workspace may also be visible, without actions.
    * @returns the session row locator, already present.
    */
   async function seededSessionRow() {
-    const ungroupedRow = sessionsTree().getByText('Ungrouped', { exact: true }).locator('..').locator('..')
+    const ungroupedRow = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..')
     const ungroupedSection = ungroupedRow.locator('..')
     // Initial-current auto-expansion can race this gesture; converge on
     // expanded rather than assuming which update wins first.
     await expect.poll(async () => {
       if (await ungroupedRow.getAttribute('aria-expanded') !== 'true') {
-        await sessionsTree().getByText('Ungrouped', { exact: true }).click()
+        await page.getByText('Ungrouped', { exact: true }).click()
         await page.waitForTimeout(50)
       }
       return await ungroupedRow.getAttribute('aria-expanded')
@@ -536,14 +535,14 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await sessionRow.hover()
     // Card content: the full title plus the Idle status line (no aria role —
     // text anchors are the stable selector).
-    await expect.poll(() => page.getByText('Ociosa', { exact: true }).count(), { timeout: 5_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('Idle', { exact: true }).count(), { timeout: 5_000 }).toBeGreaterThanOrEqual(1)
     // The card is REACHABLE: it sits 8px off the row, so getting to it means
     // crossing ground that belongs to neither. Hovering it must not dismiss
     // it — the hazard this scenario pins.
     const card = page.getByRole('button', { name: `Copy: ${rowTitle}` })
     await card.hover()
     await page.waitForTimeout(POINTER_HOLD_MS)
-    expect(await page.getByText('Ociosa', { exact: true }).count()).toBeGreaterThanOrEqual(1)
+    expect(await page.getByText('Idle', { exact: true }).count()).toBeGreaterThanOrEqual(1)
     // The full title is the card's primary value: activating anywhere on the
     // card writes it through the browser clipboard and localizes the success
     // feedback through the English locale seat.
@@ -594,22 +593,29 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
 
   it('archives the seeded session from its row menu, hiding it durably across reload', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-archive'))
-    const sessionRow = await seededSessionRow()
+    const initialRow = await seededSessionRow()
     // Selecting the seed hides any blank stray left by Workspace deletion,
     // so archiving this last visible Ungrouped Session must remove the bucket.
-    await sessionRow.click()
+    await initialRow.click()
+    const { title } = await scaffold.ctx.sessionController.rename({
+      sessionId: SessionId(SEED_ID), title: `Archive target ${SEED_ID}`,
+    })
+    // A user-owned title binds the locator to this seed across restoration.
+    const sessionRow = page.getByRole('treeitem').filter({
+      has: page.getByText(title, { exact: true }),
+    })
+    await expect.poll(() => sessionRow.count(), { timeout: 10_000 }).toBe(1)
     await expect.poll(() => sessionRow.getAttribute('aria-selected'), { timeout: 10_000 }).toBe('true')
-    const ungroupedSection = sessionsTree().getByText('Ungrouped', { exact: true }).locator('..').locator('..').locator('..')
+    const ungroupedSection = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..').locator('..')
     await expect.poll(() => ungroupedSection.locator('[role="treeitem"]').count(), { timeout: 10_000 }).toBe(2)
-    const rowTitle = await sessionRow.locator('[class*="title"]').innerText()
     // Row menu: hover reveals the actions button; Archive session commits
     // without a confirmation dialog (non-destructive: log + accounting stay).
-    await clickHoverAction(sessionRow, `Session actions for ${rowTitle}`)
+    await clickHoverAction(sessionRow, `Session actions for ${title}`)
     await page.getByRole('menuitem', { name: 'Archive session' }).click()
     // The row disappears on the archive-set echo; with no other visible
     // stray, the whole Ungrouped bucket withdraws.
-    await expect.poll(() => page.getByText(rowTitle, { exact: true }).count(), { timeout: 10_000 }).toBe(0)
-    await expect.poll(() => sessionsTree().getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => sessionRow.count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
     // Durable on the host: the registry-global set carries the id while the
     // session log itself stays in persistence untouched.
     expect([...scaffold.ctx.workspaceRegistry.archivedSessionIds]).toEqual([SessionId(SEED_ID)])
@@ -620,10 +626,18 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    // Initial Workspace reconnection can focus the composer after the tree renders.
+    // Finish that navigation before the next test opens a path editor.
+    await page.locator('[role="treeitem"][aria-selected="true"]').waitFor({ timeout: 15_000 })
+    await expect.poll(
+      () => page.locator('[data-composer-input][contenteditable="true"]')
+        .evaluate(element => element === document.activeElement),
+      { timeout: 15_000 },
+    ).toBe(true)
     // The archived row must not resurface (the Ungrouped bucket itself may
     // reappear if selection restore lands on another stray — not this test's
     // concern).
-    expect(await page.getByText(rowTitle, { exact: true }).count()).toBe(0)
+    expect(await sessionRow.count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
@@ -647,6 +661,96 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     ).toBe(2)
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
+
+  it('opts into Workspace tree grouping and preserves the parent Workspace session', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-parent-folders'))
+    const parentPath = join(scaffold.workspaceCwd, 'folder-group')
+    await mkdir(parentPath)
+    await addNewFolderWorkspace(parentPath, 'project-one')
+    const childWorkspace = (await scaffold.ctx.workspaceRegistry.resolveByPath(join(parentPath, 'project-one')))!
+    const childSessionIds = [...childWorkspace.sessionIds]
+    const workspaceCount = scaffold.ctx.workspaceRegistry.list().length
+    const agentCount = scaffold.ctx.agents.list().length
+    await adoptDirectory(parentPath, { waitForAgent: true })
+    expect(await page.getByRole('dialog', { name: 'Add workspace', exact: true }).count()).toBe(0)
+    expect(scaffold.ctx.workspaceRegistry.list()).toHaveLength(workspaceCount + 1)
+    expect(scaffold.ctx.agents.list()).toHaveLength(agentCount + 1)
+    expect([...childWorkspace.sessionIds]).toEqual(childSessionIds)
+    const parentWorkspace = (await scaffold.ctx.workspaceRegistry.resolveByPath(parentPath))!
+    expect(parentWorkspace.sessionIds).toHaveLength(1)
+    const parent = page.getByRole('treeitem').filter({ has: page.getByText('folder-group', { exact: true }) })
+    const section = parent.locator('xpath=ancestor::*[contains(@class, "groupSection")][1]')
+    await page.getByRole('tree', { name: 'Sessions', exact: true }).getByText('project-one', { exact: true }).waitFor()
+    expect(await section.getByText('project-one', { exact: true }).count()).toBe(0)
+    await page.getByRole('button', { name: 'View options', exact: true }).click()
+    const optionsExpected = fileURLToPath(new URL('./expected/workspace-management/grouping-options.expected.md', import.meta.url))
+    await compareOrRefreshGolden(optionsExpected, await captureStableAria(page, '[role="menu"]', scaffold.workspaceCwd), MODE)
+    await page.getByRole('menuitem', { name: 'Workspace Tree', exact: true }).click()
+    await section.getByText('project-one', { exact: true }).waitFor()
+    await addNewFolderWorkspace(parentPath, 'project-two')
+    const project = section.getByRole('treeitem', { name: 'project-two', exact: true })
+    const session = section.locator('[aria-selected="true"]')
+    await session.waitFor()
+    const parentBounds = (await parent.boundingBox())!
+    for (const row of [project, session]) {
+      const bounds = (await row.boundingBox())!
+      expect(bounds.x).toBeCloseTo(parentBounds.x, 0)
+      expect(bounds.width).toBeCloseTo(parentBounds.width, 0)
+    }
+    const parentLabel = (await parent.getByText('folder-group', { exact: true }).boundingBox())!
+    const projectLabel = (await project.getByText('project-two', { exact: true }).boundingBox())!
+    expect(projectLabel.x - parentLabel.x).toBeCloseTo(12, 0)
+    const expected = fileURLToPath(new URL('./expected/workspace-management/parent-folders.expected.md', import.meta.url))
+    await compareOrRefreshGolden(expected, await captureStableAria(
+      page, '[aria-label="Workspace actions for folder-group"] >> xpath=ancestor::*[contains(@class, "groupSection")][1]',
+      scaffold.workspaceCwd,
+    ), MODE)
+    const sourceWorkspace = scaffold.ctx.workspaceRegistry.list().find(workspace => workspace.title === 'xx')!
+    await sourceWorkspace.setTitle('drag-source')
+    const dragSource = page.getByRole('treeitem').filter({ has: page.getByText('drag-source', { exact: true }) })
+    await dragSource.waitFor()
+    await dragSource.dragTo(parent, { targetPosition: { x: 10, y: 3 } })
+    await expect.poll(() => {
+      const ordered = scaffold.ctx.workspaceRegistry.list()
+      return ordered.findIndex(workspace => workspace.id === sourceWorkspace.id)
+        < ordered.findIndex(workspace => workspace.id === parentWorkspace.id)
+    }, { timeout: 10_000 }).toBe(true)
+    const lastChild = section.getByRole('treeitem', { name: 'project-one', exact: true })
+    const targetBounds = (await lastChild.boundingBox())!
+    const sectionBounds = (await section.boundingBox())!
+    expect(targetBounds.y + targetBounds.height / 2).toBeGreaterThan(sectionBounds.y + sectionBounds.height / 2)
+    await dragSource.dragTo(lastChild)
+    await expect.poll(() => {
+      const ordered = scaffold.ctx.workspaceRegistry.list()
+      return ordered.findIndex(workspace => workspace.id === sourceWorkspace.id)
+        > ordered.findIndex(workspace => workspace.id === parentWorkspace.id)
+    }, { timeout: 10_000 }).toBe(true)
+    await section.getByText('project-two', { exact: true }).waitFor()
+    await parent.click()
+    expect(await parent.locator('[class*="folderActive"]').count()).toBe(1)
+    expect(await section.getByText('project-two', { exact: true }).count()).toBe(0)
+    const warningStart = tripwire.warnings.length
+    await page.reload({ waitUntil: 'load' })
+    await parent.waitFor()
+    acknowledgeReloadConnectionLoss(tripwire, warningStart)
+    expect(await parent.getAttribute('aria-expanded')).toBe('false')
+    await parent.click()
+    await section.getByText('project-two', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'View options', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'WorkSpace', exact: true }).click()
+    await page.getByRole('tree', { name: 'Sessions', exact: true }).getByText('project-two', { exact: true }).waitFor()
+    expect(await section.getByText('project-two', { exact: true }).count()).toBe(0)
+    await page.getByRole('button', { name: 'View options', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Workspace Tree', exact: true }).click()
+    await section.getByText('project-two', { exact: true }).waitFor()
+    await clickHoverAction(parent, 'New session in folder-group')
+    await expect.poll(() => section.locator('[aria-selected="true"]').evaluate(row =>
+      row.closest('[class*="groupSection"]')?.querySelector('[role="treeitem"]')?.textContent,
+    ), { timeout: 10_000 }).toBe('folder-group')
+    expect(parentWorkspace.sessionIds).toHaveLength(1)
+    expect([...childWorkspace.sessionIds]).toEqual(childSessionIds)
+    expect(tripwire.pageErrors).toEqual([])
+  })
 
   it.skipIf(MODE === 'record')('issued zero model calls and stayed clean', async () => {
     expect(tripwire.warnings).toEqual([])

@@ -1,21 +1,9 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Use the read tool twice" [disabled]
-  - button "Opções de nova conversa e contexto":
+  - button "More actions":
     - img
-    - text: Novo Chat
-    - img
-  - button "Agent Team":
-    - img
-    - text: Agent Team
-  - button "Automações"
-  - button "Session log":
-    - text: Session log
-    - img
-  - button "Anotações e lembretes da sessão":
-    - img
-    - text: Anotações
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]

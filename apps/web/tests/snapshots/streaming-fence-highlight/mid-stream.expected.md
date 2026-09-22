@@ -3,21 +3,9 @@
     - button "Stream one TypeScript fence for" [disabled]
   - img
   - text: Standard mode
-  - button "Opções de nova conversa e contexto":
+  - button "More actions":
     - img
-    - text: Novo Chat
-    - img
-  - button "Agent Team":
-    - img
-    - text: Agent Team
-  - button "Automações"
-  - button "Session log":
-    - text: Session log
-    - img
-  - button "Anotações e lembretes da sessão":
-    - img
-    - text: Anotações
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -38,13 +26,9 @@
 - code: "const first: number = 1 const second = \"two\" let tail"
 - status: Deep diving...
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Commands":
-  - img
-- button "Add attachment":
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Hold to talk"
-- status
 - button "Select model, current streaming-fence-highlight-test/streaming-fence":
   - text: streaming-fence-highlight-test/streaming-fence
   - img

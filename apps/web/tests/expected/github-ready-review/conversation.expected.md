@@ -2,33 +2,21 @@
   - treeitem "{{workspace}}" [expanded]:
     - img
     - text: {{workspace}}
-  - treeitem "Review deepseek-harness/deepseek-harness#314 Session actions for Review deepseek-harness/deepseek-harness#314" [selected]:
-    - text: Review deepseek-harness/deepseek-harness#314
-    - button "Session actions for Review deepseek-harness/deepseek-harness#314":
+  - treeitem "Review deepseek-ai/deepseek-harness#314 Session actions for Review deepseek-ai/deepseek-harness#314" [selected]:
+    - text: Review deepseek-ai/deepseek-harness#314
+    - button "Session actions for Review deepseek-ai/deepseek-harness#314":
       - img
 
 ---
 
 - banner:
   - navigation "Session hierarchy":
-    - button "Review deepseek-harness/deepseek-harness#314" [disabled]
+    - button "Review deepseek-ai/deepseek-harness#314" [disabled]
   - img
   - text: Standard mode
-  - button "Opções de nova conversa e contexto":
+  - button "More actions":
     - img
-    - text: Novo Chat
-    - img
-  - button "Agent Team":
-    - img
-    - text: Agent Team
-  - button "Automações"
-  - button "Session log":
-    - text: Session log
-    - img
-  - button "Anotações e lembretes da sessão":
-    - img
-    - text: Anotações
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -54,13 +42,9 @@
   - text: Ran for {{duration}}
 - text: {{clock}}
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Commands":
-  - img
-- button "Add attachment":
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Read Only"': Read Only
-- button "Hold to talk"
-- status
 - button "Select model, current github-webhook-review-test/reply":
   - text: github-webhook-review-test/reply
   - img

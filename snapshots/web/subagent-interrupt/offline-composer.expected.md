@@ -5,21 +5,9 @@
     - 'button "Switch subagent: event-sourcing researcher"': event-sourcing researcher
   - img
   - text: Standard mode
-  - button "Opções de nova conversa e contexto":
+  - button "More actions":
     - img
-    - text: Novo Chat
-    - img
-  - button "Agent Team":
-    - img
-    - text: Agent Team
-  - button "Automações"
-  - button "Session log":
-    - text: Session log
-    - img
-  - button "Anotações e lembretes da sessão":
-    - img
-    - text: Anotações
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -47,12 +35,8 @@
     - button "Steer queued message":
       - img
 - textbox "Parent session offline; sending is unavailable but you can still stop the run" [disabled]
-- button "Commands" [disabled]:
-  - img
-- button "Add attachment" [disabled]:
+- button "Add files or run commands" [disabled]:
   - img
 - 'button "Access mode, current: Custom" [disabled]': Custom
-- button "Hold to talk"
-- status
 - button "Stop generating"
 - button "Send message" [disabled]

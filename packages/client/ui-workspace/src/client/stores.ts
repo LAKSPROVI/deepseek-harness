@@ -10,29 +10,19 @@ import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-sto
 /** Browser-local order account for the hierarchy-free flat Session list. */
 export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
 
-/** Session-list grouping mode: workspace sections or one flat recency list. */
-export type SessionGroupBy = 'workspace' | 'flat'
-/** Session order: user-arranged only, or user-arranged plus activity promotion. */
+/** Session-list grouping mode: sibling Workspace sections, a Workspace tree, or one flat list. */
+export type SessionGroupBy = 'workspace' | 'workspace-tree' | 'flat'
+/** Session order: saved manual positions or current recency. */
 export type SessionOrderBy = 'manual' | 'updated'
-/** Browser-local status selected by the user for one session. */
-export type CustomSessionStatus = 'ongoing' | 'warning' | 'unread' | 'later' | 'completed' | 'finalized' | 'idle'
 
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
 type WorkspaceViewState = {
   groupBy: SessionGroupBy
   orderBy: SessionOrderBy
-  /** Explicit zero-or-five-session state keyed by Workspace group identity. */
+  /** Explicit group expansion keyed by Workspace identity, including descendants in tree mode. */
   groupExpansion: Record<string, boolean>
-  /** Shared editable order per Workspace group plus the browser-local flat-list account. */
+  /** Saved manual order per Workspace group plus the browser-local flat-list account. */
   sessionOrderByAccount: Record<string, string[]>
-  /** Last observed update timestamps per order account for one-time promotion events. */
-  sessionUpdatedAtByAccount: Record<string, Record<string, number>>
-  /** User-marked completed sessions. */
-  completedSessions: Record<string, boolean>
-  /** User-marked unread sessions. */
-  unreadSessions: Record<string, boolean>
-  /** Explicit user status, kept independently from live Host activity. */
-  customSessionStatuses: Record<string, CustomSessionStatus | undefined>
 }
 
 /**
@@ -41,34 +31,30 @@ type WorkspaceViewState = {
  */
 type WorkspaceViewActions = {
   setGroupBy: (draft: WorkspaceViewState, mode: SessionGroupBy) => void
-  setOrderBy: (draft: WorkspaceViewState, mode: SessionOrderBy) => void
+  setOrderBy: (
+    draft: WorkspaceViewState,
+    mode: SessionOrderBy,
+    initialOrders: Readonly<Record<string, readonly string[]>>,
+  ) => void
   setGroupExpanded: (draft: WorkspaceViewState, key: string, expanded: boolean) => void
   retainAccountKeys: (draft: WorkspaceViewState, workspaceKeys: readonly string[]) => void
-  syncSessionOrderAccount: (
+  syncSessionOrders: (
+    draft: WorkspaceViewState,
+    orders: Readonly<Record<string, readonly string[]>>,
+  ) => void
+  setSessionOrder: (
     draft: WorkspaceViewState,
     accountKey: string,
-    order: string[],
-    updatedAt: Record<string, number>,
+    order: readonly string[],
+    initialOrders: Readonly<Record<string, readonly string[]>>,
   ) => void
-  setSessionOrder: (draft: WorkspaceViewState, accountKey: string, order: string[]) => void
-  toggleCompletedSession: (draft: WorkspaceViewState, sessionId: string) => void
-  setSessionCompleted: (draft: WorkspaceViewState, sessionId: string, completed: boolean) => void
-  toggleUnreadSession: (draft: WorkspaceViewState, sessionId: string) => void
-  setSessionUnread: (draft: WorkspaceViewState, sessionId: string, unread: boolean) => void
-  setSessionStatus: (draft: WorkspaceViewState, sessionId: string, status: CustomSessionStatus) => void
 }
 
-/**
- * Persistence rehydrates by replacing the whole state with the stored JSON, so a
- * `dsh.workspace.view.v6` blob written before the completed/unread maps existed
- * arrives without them. Actions that write those maps normalize first; the
- * `Partial` view is what makes the fill-in visible to the compiler.
- * @param draft - the mutable state an action received.
- */
-function ensureSessionMaps(draft: WorkspaceViewState): void {
-  const persisted: Partial<WorkspaceViewState> = draft
-  persisted.completedSessions ??= {}
-  persisted.unreadSessions ??= {}
+/** Copy read-only projections into the persisted mutable store representation. */
+function copySessionOrders(
+  orders: Readonly<Record<string, readonly string[]>>,
+): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(orders).map(([key, order]) => [key, [...order]]))
 }
 
 /**
@@ -82,15 +68,15 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       orderBy: 'updated',
       groupExpansion: {},
       sessionOrderByAccount: {},
-      sessionUpdatedAtByAccount: {},
-      completedSessions: {},
-      unreadSessions: {},
-      customSessionStatuses: {},
     }),
-    persist: 'dsh.workspace.view.v6',
+    persist: 'dsh.workspace.view.v5',
     actions: {
       setGroupBy: (d, mode: SessionGroupBy) => { d.groupBy = mode },
-      setOrderBy: (d, mode: SessionOrderBy) => { d.orderBy = mode },
+      setOrderBy: (d, mode: SessionOrderBy, initialOrders) => {
+        if (mode === d.orderBy) return
+        d.sessionOrderByAccount = mode === 'manual' ? copySessionOrders(initialOrders) : {}
+        d.orderBy = mode
+      },
       setGroupExpanded: (d, key: string, expanded: boolean) => { d.groupExpansion[key] = expanded },
       retainAccountKeys: (d, workspaceKeys: readonly string[]) => {
         const retained = new Set(workspaceKeys)
@@ -100,49 +86,16 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         d.sessionOrderByAccount = Object.fromEntries(
           Object.entries(d.sessionOrderByAccount).filter(([key]) => retained.has(key)),
         )
-        d.sessionUpdatedAtByAccount = Object.fromEntries(
-          Object.entries(d.sessionUpdatedAtByAccount).filter(([key]) => retained.has(key)),
-        )
+        delete (d as WorkspaceViewState & { sessionUpdatedAtByAccount?: unknown }).sessionUpdatedAtByAccount
       },
-      syncSessionOrderAccount: (d, accountKey: string, order: string[], updatedAt: Record<string, number>) => {
-        d.sessionOrderByAccount[accountKey] = order
-        d.sessionUpdatedAtByAccount[accountKey] = updatedAt
+      syncSessionOrders: (d, orders) => {
+        if (d.orderBy !== 'manual') return
+        Object.assign(d.sessionOrderByAccount, copySessionOrders(orders))
       },
-      setSessionOrder: (d, accountKey: string, order: string[]) => {
-        d.sessionOrderByAccount[accountKey] = order
-      },
-      toggleCompletedSession: (d, sessionId: string) => {
-        ensureSessionMaps(d)
-        if (d.completedSessions[sessionId]) {
-          d.completedSessions[sessionId] = false
-        } else {
-          d.completedSessions[sessionId] = true
-          d.unreadSessions[sessionId] = false
-        }
-      },
-      setSessionCompleted: (d, sessionId: string, completed: boolean) => {
-        ensureSessionMaps(d)
-        d.completedSessions[sessionId] = completed
-        if (completed) d.unreadSessions[sessionId] = false
-      },
-      toggleUnreadSession: (d, sessionId: string) => {
-        ensureSessionMaps(d)
-        if (d.unreadSessions[sessionId]) {
-          d.unreadSessions[sessionId] = false
-        } else {
-          d.unreadSessions[sessionId] = true
-          d.completedSessions[sessionId] = false
-        }
-      },
-      setSessionUnread: (d, sessionId: string, unread: boolean) => {
-        ensureSessionMaps(d)
-        d.unreadSessions[sessionId] = unread
-        if (unread) d.completedSessions[sessionId] = false
-      },
-      setSessionStatus: (d, sessionId: string, status: CustomSessionStatus) => {
-        d.customSessionStatuses[sessionId] = status === 'idle' ? undefined : status
-        d.completedSessions[sessionId] = status === 'completed' || status === 'finalized'
-        d.unreadSessions[sessionId] = status === 'unread'
+      setSessionOrder: (d, accountKey, order, initialOrders) => {
+        if (d.orderBy === 'updated') d.sessionOrderByAccount = copySessionOrders(initialOrders)
+        d.orderBy = 'manual'
+        d.sessionOrderByAccount[accountKey] = [...order]
       },
     },
   })

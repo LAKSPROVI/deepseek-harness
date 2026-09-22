@@ -3,21 +3,9 @@
     - button "Use the ask_user_question tool to" [disabled]
   - img
   - text: Standard mode
-  - button "Opções de nova conversa e contexto":
+  - button "More actions":
     - img
-    - text: Novo Chat
-    - img
-  - button "Agent Team":
-    - img
-    - text: Agent Team
-  - button "Automações"
-  - button "Session log":
-    - text: Session log
-    - img
-  - button "Anotações e lembretes da sessão":
-    - img
-    - text: Anotações
-  - button "Open the sidebar":
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -59,5 +47,5 @@
   - button "Next question" [disabled]:
     - img
   - status
-  - button "Skip this question"
+  - button "Skip"
   - button "Submit" [disabled]
