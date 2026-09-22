@@ -202,7 +202,7 @@ export async function openPromptSession(
         runId: run.runId,
         form: 'notice',
         summary: boundContextSummary(`automation task "${run.taskTitle}" run ${run.runId}`),
-      } satisfies AutomationMessageSource as MessageSource,
+      } satisfies AutomationMessageSource as unknown as MessageSource,
     }))
   } catch (error: unknown) {
     // Same unwind order as the webhook Session bootstrap (see the note above).

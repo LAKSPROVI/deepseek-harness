@@ -355,7 +355,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/automation/automation-prompt-action/src/index.ts:53`](../packages/automation/automation-prompt-action/src/index.ts)
+Source: [`packages/automation/automation-prompt-action/src/index.ts:55`](../packages/automation/automation-prompt-action/src/index.ts)
 
 <a id="deepseek-aidsh-bash-local"></a>
 
