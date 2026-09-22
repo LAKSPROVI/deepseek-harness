@@ -330,22 +330,22 @@
     {
       "doc": "docs/subsystems/agent-team.md",
       "symbol": "TeamMemberSnapshot",
-      "source": "packages/agent-team/agent-team/src/types.ts"
+      "source": "packages/experimental/agent-team/src/types.ts"
     },
     {
       "doc": "docs/subsystems/agent-team.md",
       "symbol": "TeamMessageSnapshot",
-      "source": "packages/agent-team/agent-team/src/types.ts"
+      "source": "packages/experimental/agent-team/src/types.ts"
     },
     {
       "doc": "docs/subsystems/agent-team.md",
       "symbol": "TeamMessageSource",
-      "source": "packages/agent-team/agent-team/src/types.ts"
+      "source": "packages/experimental/agent-team/src/types.ts"
     },
     {
       "doc": "docs/subsystems/agent-team.md",
       "symbol": "TeamTaskSnapshot",
-      "source": "packages/agent-team/agent-team/src/types.ts"
+      "source": "packages/experimental/agent-team/src/types.ts"
     },
     {
       "doc": "docs/subsystems/commands.md",

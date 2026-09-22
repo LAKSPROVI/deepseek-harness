@@ -17,25 +17,27 @@ import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-agent-presets'
 import type { TaskExecutionContext } from '@deepseek-ai/dsh-automation'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { boundContextSummary, createUserMessage, errorChain, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import { boundContextSummary, createUserMessage, errorChain, type LlmCallConfig, type MessageSource } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type {} from '@deepseek-ai/dsh-workspace'
 
-declare module '@deepseek-ai/dsh-llm' {
-  interface MessageSourceMap {
-    /** Programmatic input admitted by one automation run. */
-    automation: {
-      readonly kind: 'automation'
-      readonly taskId: string
-      readonly runId: string
-      readonly form: 'notice'
-      readonly summary: string
-    }
-  }
+/**
+ * Automation run identity carried by the `source` of the prompt `user/message`.
+ * Registering this member on `MessageSourceMap` adds a union variant to a
+ * persisted event payload, which the persistence type history classifies as a
+ * Session format version bump; until that adjacent V3→V4 edge ships, the
+ * producer emits the object through the opaque `MessageSource` seam so old and
+ * new readers agree on replay.
+ */
+interface AutomationMessageSource {
+  readonly kind: 'automation'
+  readonly taskId: string
+  readonly runId: string
+  readonly form: 'notice'
+  readonly summary: string
 }
-
 /** Cordis plugin name. */
 export const name = 'automation-prompt-action'
 /** Services one run needs: the engine that hosts the handler and the Session-creation seams. */
@@ -158,7 +160,7 @@ function reportRollbackFailure(ctx: Context, subject: string, error: unknown): v
  * @param ctx - untraced runtime context that owns the resulting Agent.
  * @param config - deployment policy with every default applied.
  * @param payload - validated task payload.
- * @param run - identity and title of the run, used for provenance and the Session title fallback.
+ * @param run - identity and title of the run, used for the message `source` and the Session title fallback.
  * @returns the new Session id.
  */
 export async function openPromptSession(
@@ -200,7 +202,7 @@ export async function openPromptSession(
         runId: run.runId,
         form: 'notice',
         summary: boundContextSummary(`automation task "${run.taskTitle}" run ${run.runId}`),
-      },
+      } satisfies AutomationMessageSource as MessageSource,
     }))
   } catch (error: unknown) {
     // Same unwind order as the webhook Session bootstrap (see the note above).

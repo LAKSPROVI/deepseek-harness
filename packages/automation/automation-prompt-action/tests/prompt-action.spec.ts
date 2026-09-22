@@ -122,7 +122,7 @@ describe('resolvePayload', () => {
 })
 
 describe('openPromptSession', () => {
-  it('preflights, mounts, attaches, titles with the task title, and prompts with automation provenance', async () => {
+  it('preflights, mounts, attaches, titles with the task title, and prompts with the automation run identity', async () => {
     const test = harness()
     const result = await openPromptSession(test.ctx, { actionType: 'CUSTOM_PROMPT' }, { prompt: 'Faça X', workspacePath: '/workspace' }, run)
     expect(result.sessionId).toMatch(/^automation-/)
