@@ -12,10 +12,10 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../../agent-team/agent-team"
+      "path": "../agent-team"
     },
     {
-      "path": "../../agent-team/tool-agent-team"
+      "path": "../tool-agent-team"
     }
   ]
 }
