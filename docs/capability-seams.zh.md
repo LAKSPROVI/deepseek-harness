@@ -9,6 +9,15 @@
 
 ```mermaid
 flowchart LR
+  pkg_automation["automation"]
+  svc_automation["ctx.automation<br/>Persistent automation scheduler and Remote controller"]
+  pkg_client_ui_automation["client-ui-automation"]
+  pkg_transcription["transcription"]
+  svc_transcription["ctx.transcription<br/>Audio transcription provider registry"]
+  pkg_transcription_groq["transcription-groq"]
+  pkg_voice_input["voice-input"]
+  svc_voiceInput["ctx.voiceInput<br/>Browser voice-input Remote controller"]
+  pkg_client_ui_voice_input["client-ui-voice-input"]
   pkg_hmr["hmr"]
   svc_hmr["ctx.hmr<br/>Serialized module and configuration reloads"]
   pkg_app_boot["app-boot"]
@@ -274,6 +283,7 @@ flowchart LR
   pkg_attachment --> svc_attachments
   pkg_attachment_local --> svc_attachments
   pkg_authorization --> svc_authorization
+  pkg_automation --> svc_automation
   pkg_bash_local --> svc_shell
   pkg_bash_sandbox --> svc_shell
   pkg_browser_use --> svc_browserUse
@@ -380,9 +390,12 @@ flowchart LR
   pkg_token_meter --> svc_tokenMeter
   pkg_tool_subagent --> svc_subagentModelSelection
   pkg_tools --> svc_tools
+  pkg_transcription --> svc_transcription
+  pkg_transcription_groq --> svc_transcription
   pkg_typert_registry --> svc_typert
   pkg_user_approval --> svc_approval
   pkg_user_questions --> svc_userQuestions
+  pkg_voice_input --> svc_voiceInput
   pkg_web --> svc_web
   pkg_web_fetch_http --> svc_web
   pkg_web_search_deepseek --> svc_web
@@ -410,6 +423,7 @@ flowchart LR
   svc_attachments --> pkg_llm_pi_ai
   svc_attachments --> pkg_tool_fs
   svc_authorization --> pkg_llm_pi_ai
+  svc_automation --> pkg_client_ui_automation
   svc_browserUse --> pkg_experimental_browser_use_chrome_devtools_mcp
   svc_browserUse --> pkg_experimental_browser_use_playwright_mcp
   svc_browserUse --> pkg_experimental_browser_use_stagehand_native
@@ -522,9 +536,11 @@ flowchart LR
   svc_tools --> pkg_tool_terminal
   svc_tools --> pkg_tool_todo
   svc_tools --> pkg_tool_web
+  svc_transcription --> pkg_voice_input
   svc_typert --> pkg_api_gateway
   svc_typert --> pkg_typert_loader
   svc_userQuestions --> pkg_tool_ask_user
+  svc_voiceInput --> pkg_client_ui_voice_input
   svc_web --> pkg_tool_web
   svc_webServer --> pkg_client_connection
   svc_webServer --> pkg_client_hmr
@@ -539,6 +555,9 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.automation` | `core` | [`automation`](../packages/automation/automation) | - | [`client-ui-automation`](../packages/client/ui-automation) | - | 负责任务持久状态、重复调度计算、执行分发以及浏览器安全的 Remote 操作。 |
+| `ctx.transcription` | `seam` | [`transcription`](../packages/transcription/transcription) | [`transcription-groq`](../packages/transcription/transcription-groq) | [`voice-input`](../packages/transcription/voice-input) | - | 提供方注册音频转录实现；voice-input 服务为浏览器录音选择一个提供方。 |
+| `ctx.voiceInput` | `core` | [`voice-input`](../packages/transcription/voice-input) | - | [`client-ui-voice-input`](../packages/client/ui-voice-input) | - | 校验浏览器音频请求，并通过生成的 Remote 命名空间投影转录结果。 |
 | `ctx.hmr` | `core` | [`hmr`](../packages/boot/hmr) | - | [`app-boot`](../packages/boot/app-boot) | - | 负责模块和精确配置监听；应用修改共用其队列，自动重载等待应用文件锁。 |
 | `ctx.pluginManager` | `core` | [`plugin-manager`](../packages/boot/plugin-manager) | - | [`plugin-manager`](../packages/boot/plugin-manager), `ui-settings-plugin-inventory` | - | 与 CLI 共享 profile 包操作，并向 Web 和 Agent 调用方分别报告持久状态与运行状态。 |
 | `ctx.profileContext` | `core` | [`app-boot`](../packages/boot/app-boot) | - | [`plugin-manager`](../packages/boot/plugin-manager) | - | dsh launcher 提供纯数据形式的 profile 位置与组合输入；重载调度由 dsh-hmr 负责。 |

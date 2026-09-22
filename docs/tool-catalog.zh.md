@@ -23,6 +23,7 @@
 | `@deepseek-ai/dsh-mcp-resources` | `list_mcp_resource_templates`, `list_mcp_resources`, `read_mcp_resource` | `ctx.tools`, `ctx.mcpResources` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-experimental-browser-use-stagehand-native` | `stagehand_act`、`stagehand_extract`、`stagehand_navigate`、`stagehand_observe`、`stagehand_screenshot`、`stagehand_tabs` | `ctx.browserUse`、`ctx.agents`、`ctx.tools`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`、`ctx.userQuestions` | `tool/call`、`tool/result after a UI/provider answers the question` | - | ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类答案。 |
+| `@deepseek-ai/dsh-tool-automation` | `automation_create_task`、`automation_delete_task`、`automation_list_tasks`、`automation_pause_task`、`automation_resume_task`、`automation_trigger_task` | `ctx.tools`、`ctx.automation` | `tool/call`、`tool/result after the engine store or controller answers` | - | automation_create_task 默认使用 CUSTOM_PROMPT 动作；运行本身是即发即忘，只会在之后的列表中到达模型。 |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`、`ctx.ptcRuntime (execution time)`、`ctx.systemPrompt` | `tool/call`、`one tool/ptc-dispatch-start + tool/ptc-dispatch pair per bridged sub-call`、`tool/result` | - | 在 `mode: ptc`／`mode: both` 下，它由工具注册表所有，作为可过滤能力层之外的保留传输机制（参见 PTC mode Agent Note）。在 `ptc` 下，它是注册表对协议格式（wire format）的唯一贡献；其他可见能力在使用已加载运行时语言生成的 SDK 章节中声明。程序通过 binding 调用这些能力，调用按照原生并发约定调度：启动顺序和策略遵循提交顺序，并发安全的函数体最多重叠执行 `maxParallelSubCalls` 个。调用会重新进入完整且受守卫保护的工具流水线，并将每个嵌套执行关联到此外层结果。 |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`、`ctx.systemPrompt`、`ctx.userQuestions (execution time, opportunistic)` | `tool/call`、`plan/mode inactive on an approved review`、`tool/result` | - | 规划未激活时，exit_plan_mode 仍保留在面向模型的 schema 中，这样状态转换不会在规划策略变更之外额外造成工具目录变动。其执行路径会拒绝规划模式之外的调用；在规划模式下，它通过用户交互 seam 提交计划（批准／根据反馈继续规划），批准后会在步骤边界记录规划模式已停用。 |
 | `@deepseek-ai/dsh-tool-bash` | `bash` | `ctx.tools`、`ctx.shell`、`ctx.systemPrompt`、`ctx.shellEnv`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | bash 工具是 bash 执行器 seam 面向模型的消费方。使用 `run_in_background` 的运行会注册到通用 `ctx.jobs` 运行时，并通过 `job_*` 工具（来自 `@deepseek-ai/dsh-tool-jobs`）收集／停止；禁用 `enableRunInBackground` 配置（默认为 true）后，该参数会被完全移除。 |
@@ -505,6 +506,176 @@
 来源：[`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts)
 
 ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类答案。
+
+<a id="deepseek-aidsh-tool-automation"></a>
+
+## `@deepseek-ai/dsh-tool-automation`
+
+### `automation_create_task`
+
+调度一个在重启后仍然保留的持久任务。默认情况下，任务到期时会在某个工作区打开新 Session 并向其发送 `prompt`（action_type CUSTOM_PROMPT）；工作区默认为当前 Session 的目录。schedule_expr 的含义取决于 schedule_type：ONCE 为 ISO-8601 时刻，INTERVAL 为秒数，CRON 为五字段 UTC cron 行，RRULE 为 RRULE 字符串。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Short human-readable task title."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional longer explanation shown in the task list."
+    },
+    "schedule_type": {
+      "type": "string",
+      "description": "How schedule_expr is read.",
+      "enum": [
+        "ONCE",
+        "INTERVAL",
+        "CRON",
+        "RRULE"
+      ]
+    },
+    "schedule_expr": {
+      "type": "string",
+      "description": "ISO instant, seconds, cron line, or RRULE, per schedule_type."
+    },
+    "timezone": {
+      "type": "string",
+      "description": "IANA zone for RRULE evaluation, e.g. America/Sao_Paulo. Defaults to UTC."
+    },
+    "max_runs": {
+      "type": "integer",
+      "description": "Stop after this many completed runs. Omit for an open-ended schedule."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Instruction the new session receives on each run. Required when action_type is CUSTOM_PROMPT."
+    },
+    "workspace_path": {
+      "type": "string",
+      "description": "Absolute workspace directory the run's session opens in. Defaults to this session's directory."
+    },
+    "action_type": {
+      "type": "string",
+      "description": "Executor key; defaults to CUSTOM_PROMPT. Another key needs a deployment-registered handler."
+    },
+    "action_payload": {
+      "type": "object",
+      "description": "Extra fields passed verbatim to the executor. For CUSTOM_PROMPT they merge with prompt and workspace_path.",
+      "additionalProperties": true,
+      "properties": {}
+    }
+  },
+  "required": [
+    "title",
+    "schedule_type",
+    "schedule_expr"
+  ]
+}
+```
+
+来源：[`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_delete_task`
+
+删除一个持久任务及其运行历史。此操作不可撤销。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+来源：[`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_list_tasks`
+
+列出此部署拥有的持久任务，包含状态和下次运行时间。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_pause_task`
+
+暂停一个持久任务，调度器将跳过它，直到恢复。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+来源：[`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_resume_task`
+
+恢复一个已暂停的持久任务；其下次运行时间从现在重新计算。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+来源：[`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_trigger_task`
+
+立即运行一个持久任务，忽略其排程。返回运行 id；运行本身在后台进行。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+来源：[`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+automation_create_task 默认使用 CUSTOM_PROMPT 动作；运行本身是即发即忘，只会在之后的列表中到达模型。
 
 <a id="deepseek-aidsh-tools"></a>
 

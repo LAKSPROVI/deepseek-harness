@@ -6,7 +6,8 @@
  * `.agents/notes/archived/process/2026-07-02-tool-schema-catalog.md`.
  */
 
-import { globSync, readFileSync, writeFileSync } from 'node:fs'
+import { globSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { basename, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
@@ -26,6 +27,8 @@ import { PwshLocalExecutor } from '@deepseek-ai/dsh-pwsh-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import AutomationService from '@deepseek-ai/dsh-automation'
+import * as ToolAutomation from '@deepseek-ai/dsh-tool-automation'
 import type { ImageAttachmentLimits, ImageAttachmentRef, SaveImageAttachment, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import PlanModeController from '@deepseek-ai/dsh-plan-mode'
@@ -254,6 +257,23 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'ask_user_question pauses the tool call until the active UI provider returns a human answer.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-automation',
+    dir: 'tool-automation',
+    source: 'packages/automation/tool-automation/src/index.ts',
+    requires: ['ctx.tools', 'ctx.automation'],
+    writes: ['tool/call', 'tool/result after the engine store or controller answers'],
+    async mount(ctx) {
+      // Scheduler off: the harvest needs the service shape, not a live engine.
+      await ctx.plugin(AutomationService, {
+        storePath: resolve(mkdtempSync(resolve(tmpdir(), 'dsh-tool-catalog-automation-')), 'store.json'),
+        enabled: false,
+      })
+      await ctx.plugin(ToolAutomation)
+    },
+    note:
+      'automation_create_task defaults to the CUSTOM_PROMPT action; the run itself is fire-and-forget and reaches the model only through a later list.',
   },
   {
     pkg: '@deepseek-ai/dsh-tools',

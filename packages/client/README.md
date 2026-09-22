@@ -50,7 +50,6 @@ The kernel packages boot and serve the page; the UI feature packages present it.
 | [`ui-sidebar-files/`](ui-sidebar-files/README.md) | Right-Sidebar workspace file tree tab type | — |
 | [`ui-brand-official/`](ui-brand-official/README.md) | Fills the generic browser-brand slots with the official name and marks | — |
 | [`ui-workspace/`](ui-workspace/README.md) | Provides workspace selection and creation surfaces | — |
-| [`ui-agent-team/`](ui-agent-team/README.md) | Team roster, task board, and teammate navigation in the conversation header | — |
 | [`ui-automation/`](ui-automation/README.md) | Header panel listing Host automations with trigger, pause, and resume | — |
 | [`ui-conversation/`](ui-conversation/README.md) | Presents the active conversation and its input surface | — |
 | [`ui-chat/`](ui-chat/README.md) | Projects and renders the Chat conversation target | — |

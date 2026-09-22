@@ -595,6 +595,99 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'automation',
+    summary: 'One Host-owned engine that keeps its store, scheduler, and controls together.',
+    description: 'One Host-owned engine that keeps its store, scheduler, and controls together.',
+    methods: [
+      {
+        signature: 'readonly store: FileAutomationStore',
+        description: 'Existing store identity shared by Chat tools and Remote methods.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly notifier: NotificationService',
+        description: 'Existing notification service shared by the scheduler and worker.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly worker: TaskWorker',
+        description: 'Existing worker with deployment-registered action handlers.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly scheduler: AutomationScheduler',
+        description: 'Existing periodic scheduler.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly reaper: StaleTaskReaper',
+        description: 'Existing stale-run reaper.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly owner: string',
+        description: 'Store owner every Host-side caller (Chat tools, embedders) writes tasks for.',
+        parameters: [],
+      },
+      {
+        signature: '@Remote(\'list\') async list(): Promise<readonly AutomationTaskView[]>',
+        description: 'List the deployment owner\'s persisted tasks without modifying the store.',
+        parameters: [],
+        returns: 'Persisted automation tasks projected for the browser client.',
+      },
+      {
+        signature: '@Remote(\'trigger\') async trigger(taskId: string): Promise<AutomationTriggerReceipt>',
+        description: 'Queue one owned task immediately while leaving its recurrence unchanged.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Identifier of the queued automation run.',
+      },
+      {
+        signature: '@Remote(\'pause\') async pause(taskId: string): Promise<AutomationTaskView>',
+        description: 'Pause one owned task.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Updated task projected for the browser client.',
+      },
+      {
+        signature: '@Remote(\'resume\') async resume(taskId: string): Promise<AutomationTaskView>',
+        description: 'Resume one owned task and calculate its next run.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Updated task projected for the browser client.',
+      },
+      {
+        signature: 'async triggerNow(taskId: string): Promise<AutomationTriggerReceipt>',
+        description: 'Existing Chat-tool entrypoint for a manual run.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Receipt identifying the queued automation run.',
+      },
+      {
+        signature: 'async resumeTask(taskId: string): Promise<AutomationTaskView>',
+        description: 'Existing Chat-tool entrypoint for a resumed schedule.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Updated automation task view.',
+      },
+      {
+        signature: 'async pauseTask(taskId: string): Promise<AutomationTaskView>',
+        description: 'Existing Chat-tool entrypoint for a paused schedule.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Updated automation task view.',
+      },
+      {
+        signature: 'async taskView(taskId: string): Promise<AutomationTaskView>',
+        description: 'Read one owned task as its Client projection.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Automation task view.',
+        throws: ['AutomationTaskNotFoundError when the task is absent or owned by someone else.'],
+      },
+      {
+        signature: 'async deleteTask(taskId: string): Promise<boolean>',
+        description: 'Delete one owned task and its runs; the ownership check runs before any write.',
+        parameters: [{ name: 'taskId', description: 'Persisted automation task identifier.' }],
+        returns: 'Whether the store held the task.',
+        throws: ['AutomationTaskNotFoundError when the task is absent or owned by someone else.'],
+      },
+    ],
+  },
+  {
     key: 'browserUse',
     summary: 'Owns one optional provider registration in the shared browser-use service.',
     description: 'Owns one optional provider registration in the shared browser-use service.',
@@ -1303,6 +1396,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'settingsNs', description: 'namespace whose registered discovery serves this draft.' }, { name: 'request', description: 'endpoint, protocol, and one-shot credential to use.' }, { name: 'signal', description: 'caller cancellation supplied by the Remote carrier.' }],
         returns: 'advertised models in endpoint order.',
         throws: ['RemoteError with `llm/model-discovery-rejected` when discovery refuses or fails.'],
+      },
+      {
+        signature: '@Remote async routerSyncStatus(): Promise<RouterSyncStatus>',
+        description: 'Read current 9Router models synchronization telemetry and state.',
+        parameters: [],
+        returns: 'latest status including timestamps, route counts, and telemetry.',
+      },
+      {
+        signature: '@Remote async triggerRouterSync(): Promise<RouterSyncStatus>',
+        description: 'Trigger immediate execution of the 9Router models synchronization script.',
+        parameters: [],
+        returns: 'updated status after synchronization completes.',
       },
       {
         signature: 'providerRetryPolicy(provider: string): ResolvedRetryPolicy',
@@ -2995,6 +3100,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'transcription',
+    summary: 'The transcription service.',
+    description: 'The transcription service. Registered as `ctx.transcription` (one instance per context).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `TRANSCRIPTION_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `TRANSCRIPTION_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `TRANSCRIPTION_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `TRANSCRIPTION_PROVIDER_UNAVAILABLE`.',
+    methods: [
+      {
+        signature: 'registerProvider(provider: TranscriptionProvider): () => void',
+        description: 'Register a speech-to-text provider. Throws TranscriptionError `TRANSCRIPTION_DUPLICATE_PROVIDER` if its id is already registered. Returns a disposer; disposed with the calling fiber.',
+        parameters: [{ name: 'provider', description: 'the provider; its `id` is the registry key.' }],
+        returns: 'the disposer that unregisters the provider.',
+      },
+      {
+        signature: 'async transcribe(request: TranscriptionRequest, signal?: AbortSignal): Promise<TranscriptionResult>',
+        description: 'Transcribe one utterance through the selected provider. Enforces the payload bound and rejects an empty payload before dispatch, resolves the provider with the selection rules above, and trims the returned transcript. Throws TranscriptionError when the capability cannot run.',
+        parameters: [{ name: 'request', description: 'the audio payload, its format, and an optional language hint.' }, { name: 'signal', description: 'optional cancellation signal forwarded to the provider.' }],
+        returns: 'the transcript, with surrounding whitespace removed.',
+      },
+    ],
+  },
+  {
     key: 'typert',
     summary: 'Registry of generated schemas, package reflection, invocations, and Remote dependency providers.',
     description: 'Registry of generated schemas, package reflection, invocations, and Remote dependency providers.',
@@ -3086,6 +3210,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'Questions, owner agent, and abort signal.' }],
         returns: 'The answer chosen or typed by the human.',
         throws: ['{UserQuestionError} code `ASK_ABORTED` when the supplied signal is already or becomes aborted, `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when that live agent is owned by another agent.'],
+      },
+    ],
+  },
+  {
+    key: 'voiceInput',
+    summary: 'The Remote namespace one browser recording reaches.',
+    description: 'The Remote namespace one browser recording reaches. It owns no transcription policy of its own: the ceiling, provider selection, and trimming all belong to `ctx.transcription`, so a headless deployment enforces the same rules.',
+    methods: [
+      {
+        signature: '@Remote(\'transcribe\') async transcribe( request: VoiceInputTranscribeRequest, signal?: AbortSignal, ): Promise<VoiceInputTranscribeResult>',
+        description: 'Transcribe one uploaded utterance.',
+        parameters: [{ name: 'request', description: 'the recorded audio, its declared container format, and an optional language hint.' }, { name: 'signal', description: 'abort signal cancelling the upload\'s transcription.' }],
+        returns: 'the transcript, or a stable business failure.',
       },
     ],
   },
@@ -3989,6 +4126,10 @@ export const EVENT_API: readonly EventApiEntry[] = [
 /** Shapes of every exported type the Service and Event signatures reference (transitively), sorted by name. */
 export const TYPE_API: readonly TypeApiEntry[] = [
   {
+    name: 'ActionHandler',
+    declaration: 'export type ActionHandler = (payload: Record<string, unknown>, context: TaskExecutionContext) => Promise<Record<string, unknown>>;',
+  },
+  {
     name: 'AdapterRegistrationHandle',
     declaration: 'export interface AdapterRegistrationHandle {\n    (): void;\n    replace(providers: string[]): void;\n}',
   },
@@ -4207,6 +4348,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AuthorizationStatus',
     declaration: 'export type AuthorizationStatus = \'authorized\' | \'cancelled\';',
+  },
+  {
+    name: 'AutomationScheduler',
+    declaration: 'export class AutomationScheduler {\n    constructor(private readonly store: IAutomationStore, private readonly worker: TaskWorker, private readonly pollIntervalMs: number = 1000);\n    public start(): void;\n    public stop(): void;\n    public async tick(currentTime: Date = new Date()): Promise<number>;\n}',
+  },
+  {
+    name: 'AutomationTask',
+    declaration: 'export interface AutomationTask {\n    readonly id: string;\n    readonly userId: string;\n    readonly title: string;\n    readonly description?: string;\n    readonly scheduleType: TaskScheduleType;\n    readonly scheduleExpr: string;\n    readonly timezone: string;\n    readonly maxRuns: number | null;\n    readonly totalRunsCompleted: number;\n    readonly endAt: Date | null;\n    readonly actionType: string;\n    readonly actionPayload: Record<string, unknown>;\n    readonly model?: string;\n    readonly modelProvider?: string;\n    readonly promptTemplate?: string;\n    readonly timeoutSeconds: number;\n    readonly retryLimit: number;\n    readonly overlapPolicy: TaskOverlapPolicy;\n    readonly status: TaskStatus;\n    readonly nextRunAt: Date | null;\n    readonly lastRunAt: Date | null;\n    readonly lastRunStatus?: RunStatus;\n    readonly createdAt: Date;\n    readonly updatedAt: Date;\n}',
+  },
+  {
+    name: 'AutomationTaskView',
+    declaration: 'export interface AutomationTaskView {\n    readonly id: string;\n    readonly title: string;\n    readonly description?: string;\n    readonly scheduleType: \'ONCE\' | \'INTERVAL\' | \'CRON\' | \'RRULE\';\n    readonly status: \'ACTIVE\' | \'PAUSED\' | \'COMPLETED\' | \'ERROR\' | \'ARCHIVED\';\n    readonly nextRunAt: string | null;\n    readonly lastRunAt: string | null;\n    readonly totalRunsCompleted: number;\n    readonly maxRuns: number | null;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+  },
+  {
+    name: 'AutomationTriggerReceipt',
+    declaration: 'export interface AutomationTriggerReceipt {\n    readonly runId: string;\n}',
   },
   {
     name: 'BackendRegistry',
@@ -4497,6 +4654,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface CreateSessionOptions {\n    readonly seed?: readonly SessionEvent[];\n    readonly inheritedEventCount?: SessionLogOffset;\n    readonly meta?: {\n        readonly cwd?: string;\n        readonly parentSession?: SessionId;\n        readonly createdAt?: number;\n        readonly isSeeded?: boolean;\n        readonly origin?: \'subagent\';\n        readonly delegationDepth?: number;\n        readonly agentPreset?: string;\n    };\n}',
   },
   {
+    name: 'CreateTaskDTO',
+    declaration: 'export interface CreateTaskDTO {\n    readonly userId: string;\n    readonly title: string;\n    readonly description?: string;\n    readonly scheduleType: TaskScheduleType;\n    readonly scheduleExpr: string;\n    readonly timezone?: string;\n    readonly maxRuns?: number | null;\n    readonly endAt?: Date | null;\n    readonly actionType: string;\n    readonly actionPayload?: Record<string, unknown>;\n    readonly model?: string;\n    readonly modelProvider?: string;\n    readonly promptTemplate?: string;\n    readonly timeoutSeconds?: number;\n    readonly retryLimit?: number;\n    readonly overlapPolicy?: TaskOverlapPolicy;\n}',
+  },
+  {
     name: 'CreateTeamTaskRequest',
     declaration: 'export interface CreateTeamTaskRequest {\n    readonly subject: string;\n    readonly description: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n}',
   },
@@ -4661,6 +4822,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface EncodedImageAttachment {\n    mediaType: ImageMediaType;\n    data: string;\n    name?: string;\n}',
   },
   {
+    name: 'EnqueuedJobData',
+    declaration: 'export interface EnqueuedJobData {\n    runId: string;\n    taskId: string;\n    userId: string;\n    title: string;\n    actionType: string;\n    actionPayload: Record<string, unknown>;\n    model?: string;\n    modelProvider?: string;\n    promptTemplate?: string;\n    timeoutSeconds: number;\n    retryLimit: number;\n    attemptNumber: number;\n}',
+  },
+  {
     name: 'EpochHeader',
     declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    tools?: ToolSchema[];\n}',
   },
@@ -4675,6 +4840,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FileAttachmentRef',
     declaration: 'export interface FileAttachmentRef {\n    attachmentId: AttachmentId;\n    name: string;\n    bytes: number;\n}',
+  },
+  {
+    name: 'FileAutomationStore',
+    declaration: 'export class FileAutomationStore extends InMemoryAutomationStore {\n    constructor(filePath: string);\n    public override createTask(dto: CreateTaskDTO): Promise<AutomationTask>;\n    public override getTask(id: string): Promise<AutomationTask | null>;\n    public override listTasks(userId?: string): Promise<AutomationTask[]>;\n    public override updateTask(id: string, updates: Partial<AutomationTask>): Promise<AutomationTask>;\n    public override deleteTask(id: string): Promise<boolean>;\n    public override findDueTasks(now: Date, limit?: number): Promise<AutomationTask[]>;\n    public override createRun(taskId: string, scheduledFor: Date): Promise<TaskRun>;\n    public override getRun(id: string): Promise<TaskRun | null>;\n    public override listRunsByTask(taskId: string): Promise<TaskRun[]>;\n    public override updateRun(id: string, updates: {\n        status?: RunStatus;\n        startedAt?: Date;\n        finishedAt?: Date;\n        durationMs?: number;\n        outputData?: Record<string, unknown>;\n        errorMessage?: string;\n        errorStack?: string;\n        logs?: TaskLogEntry[];\n    }): Promise<TaskRun>;\n    public override hasActiveRun(taskId: string): Promise<boolean>;\n    public override createNotification(notif: Omit<TaskNotification, \'id\' | \'createdAt\' | \'isRead\'>): Promise<TaskNotification>;\n    public override listNotifications(userId: string, unreadOnly?: boolean): Promise<TaskNotification[]>;\n    public override listNotificationsByTask(taskId: string): Promise< /* …truncated — full shape in source */',
   },
   {
     name: 'FileBlock',
@@ -4817,6 +4986,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface HostConnectionRpc {\n    handle(channel: string, handler: ConnectionRpcHandler): () => Promise<void>;\n    intercept(channel: \'/api\', matches: ConnectionRpcEndpointMatcher, handler: ConnectionRpcHandler): () => Promise<void>;\n}',
   },
   {
+    name: 'IAutomationStore',
+    declaration: 'export interface IAutomationStore {\n    createTask(dto: CreateTaskDTO): Promise<AutomationTask>;\n    getTask(id: string): Promise<AutomationTask | null>;\n    listTasks(userId?: string): Promise<AutomationTask[]>;\n    updateTask(id: string, updates: Partial<AutomationTask>): Promise<AutomationTask>;\n    deleteTask(id: string): Promise<boolean>;\n    findDueTasks(now: Date, limit?: number): Promise<AutomationTask[]>;\n    createRun(taskId: string, scheduledFor: Date): Promise<TaskRun>;\n    getRun(id: string): Promise<TaskRun | null>;\n    listRunsByTask(taskId: string): Promise<TaskRun[]>;\n    updateRun(id: string, updates: {\n        status?: RunStatus;\n        startedAt?: Date;\n        finishedAt?: Date;\n        durationMs?: number;\n        outputData?: Record<string, unknown>;\n        errorMessage?: string;\n        errorStack?: string;\n        logs?: TaskLogEntry[];\n    }): Promise<TaskRun>;\n    hasActiveRun(taskId: string): Promise<boolean>;\n    createNotification(notif: Omit<TaskNotification, \'id\' | \'createdAt\' | \'isRead\'>): Promise<TaskNotification>;\n    listNotifications(userId: string, unreadOnly?: boolean): Promise<TaskNotification[]>;\n    listNotificationsByTask(taskId: string): Promise<TaskNotification[]>;\n    markNotificationRead(id: string): Promise<boolean>;\n}',
+  },
+  {
     name: 'ImageAttachmentLimits',
     declaration: 'export interface ImageAttachmentLimits {\n    maxImageBytes: number;\n    maxImagesPerMessage: number;\n    maxMessageImageBytes: number;\n    maxImagePixels: number;\n    maxImageDimension: number;\n    mediaTypes: readonly ImageMediaType[];\n}',
   },
@@ -4847,6 +5020,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'IndexInjectionPlacement',
     declaration: 'export type IndexInjectionPlacement = \'head\' | \'body\';',
+  },
+  {
+    name: 'InMemoryAutomationStore',
+    declaration: 'export class InMemoryAutomationStore implements IAutomationStore {\n    public createTask(dto: CreateTaskDTO): Promise<AutomationTask>;\n    public getTask(id: string): Promise<AutomationTask | null>;\n    public listTasks(userId?: string): Promise<AutomationTask[]>;\n    public async updateTask(id: string, updates: Partial<AutomationTask>): Promise<AutomationTask>;\n    public deleteTask(id: string): Promise<boolean>;\n    public findDueTasks(now: Date, limit: number = 50): Promise<AutomationTask[]>;\n    public async createRun(taskId: string, scheduledFor: Date): Promise<TaskRun>;\n    public getRun(id: string): Promise<TaskRun | null>;\n    public listRunsByTask(taskId: string): Promise<TaskRun[]>;\n    public async updateRun(id: string, updates: {\n        status?: RunStatus;\n        startedAt?: Date;\n        finishedAt?: Date;\n        durationMs?: number;\n        outputData?: Record<string, unknown>;\n        errorMessage?: string;\n        errorStack?: string;\n        logs?: TaskLogEntry[];\n    }): Promise<TaskRun>;\n    public hasActiveRun(taskId: string): Promise<boolean>;\n    public createNotification(notif: Omit<TaskNotification, \'id\' | \'createdAt\' | \'isRead\'>): Promise<TaskNotification>;\n    public listNotifications(userId: string, unreadOnly?: boolean): Promise<TaskNotification[]>;\n    public listNotificationsByTask(taskId: string): Promise<TaskNotification[]>;\n    public markNotificationRead(id: string): Promise<boolean>;\n}',
   },
   {
     name: 'InspectorId',
@@ -5038,7 +5215,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmRuntime',
-    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions) /* …truncated — full shape in source */',
+    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote\n    async routerSyncStatus(): Promise<RouterSyncStatus>;\n    @Remote\n    async triggerRouterSync(): Promise<RouterSyncStatus>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCall /* …truncated — full shape in source */',
   },
   {
     name: 'LspHover',
@@ -5223,6 +5400,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ModelReasoningEffort',
     declaration: 'export interface ModelReasoningEffort {\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n}',
+  },
+  {
+    name: 'NotificationEventListener',
+    declaration: 'export type NotificationEventListener = (notification: TaskNotification) => void;',
+  },
+  {
+    name: 'NotificationLevel',
+    declaration: 'export type NotificationLevel = \'INFO\' | \'SUCCESS\' | \'WARNING\' | \'ERROR\';',
+  },
+  {
+    name: 'NotificationService',
+    declaration: 'export class NotificationService {\n    constructor(private readonly store: IAutomationStore);\n    public subscribe(listener: NotificationEventListener): () => void;\n    public async notifyTaskFinished(params: {\n        taskId: string;\n        runId: string;\n        userId: string;\n        level: NotificationLevel;\n        title: string;\n        message: string;\n        summaryData?: Record<string, unknown>;\n    }): Promise<TaskNotification>;\n}',
   },
   {
     name: 'ObjectJsonSchema',
@@ -5525,10 +5714,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ReplayEnvelope {\n    response: unknown;\n    blocks?: readonly unknown[];\n}',
   },
   {
-    name: 'RequestContext',
-    declaration: 'export interface RequestContext {\n    provider: string;\n    model: string;\n    contextWindow?: number;\n    systemPromptUpdate?: SystemPromptUpdate;\n}',
-  },
-  {
     name: 'RequestErrorAction',
     declaration: 'export type RequestErrorAction = {\n    kind: \'retry\';\n} | undefined;',
   },
@@ -5577,12 +5762,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ResumeAgentOptions {\n    readonly resumeSessionId: SessionId;\n    readonly parentAgent?: Agent;\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
   },
   {
+    name: 'RouterSyncStatus',
+    declaration: 'export interface RouterSyncStatus {\n    synchronizedAt?: string;\n    monitorUpdatedAt?: string;\n    totalRoutes: number;\n    availableRoutes: number;\n    publishedChatModels: number;\n    visionModels?: number;\n    reasoningModels?: number;\n    averageLatencySeconds?: number;\n    isStale: boolean;\n    lastTaskResult?: number;\n    lastTaskRunTime?: string;\n    taskState?: string;\n    error?: string;\n}',
+  },
+  {
     name: 'RpcId',
     declaration: 'export type RpcId = Branded<\'rpc-id\'>;',
   },
   {
     name: 'RunnerFailureRule',
     declaration: 'export interface RunnerFailureRule {\n    allowedExitCodes?: readonly number[];\n    fatalSignatures: readonly string[];\n    informationalLines?: readonly string[];\n}',
+  },
+  {
+    name: 'RunStatus',
+    declaration: 'export type RunStatus = \'QUEUED\' | \'RUNNING\' | \'SUCCESS\' | \'FAILED\' | \'TIMED_OUT\' | \'CANCELLED\';',
   },
   {
     name: 'SandboxEnforcement',
@@ -6333,6 +6526,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SshStreamEndpoint = z.infer<typeof streamEndpointSchema>;',
   },
   {
+    name: 'StaleTaskReaper',
+    declaration: 'export class StaleTaskReaper {\n    constructor(private readonly store: IAutomationStore, private readonly notifier: NotificationService, private readonly checkIntervalMs: number = 60000, private readonly defaultStaleThresholdMs: number = 15 * 60000);\n    public start(): void;\n    public stop(): void;\n    public async reap(customThresholdMs?: number): Promise<number>;\n}',
+  },
+  {
     name: 'StorageBackend',
     declaration: 'export interface StorageBackend {\n    readonly kv?: KvFacet;\n    close(): Promise<void>;\n}',
   },
@@ -6531,6 +6728,38 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TableValueOf',
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
+  },
+  {
+    name: 'TaskExecutionContext',
+    declaration: 'export interface TaskExecutionContext {\n    readonly runId: string;\n    readonly taskId: string;\n    readonly taskTitle: string;\n    readonly attemptNumber: number;\n    readonly model?: string;\n    readonly modelProvider?: string;\n    readonly promptTemplate?: string;\n    log(message: string, level?: \'info\' | \'warn\' | \'error\'): void;\n}',
+  },
+  {
+    name: 'TaskLogEntry',
+    declaration: 'export interface TaskLogEntry {\n    readonly timestamp: string;\n    readonly level: \'info\' | \'warn\' | \'error\';\n    readonly message: string;\n}',
+  },
+  {
+    name: 'TaskNotification',
+    declaration: 'export interface TaskNotification {\n    readonly id: string;\n    readonly taskId: string;\n    readonly runId: string;\n    readonly userId: string;\n    readonly level: NotificationLevel;\n    readonly title: string;\n    readonly message: string;\n    readonly summaryData?: Record<string, unknown>;\n    readonly isRead: boolean;\n    readonly readAt?: Date;\n    readonly createdAt: Date;\n}',
+  },
+  {
+    name: 'TaskOverlapPolicy',
+    declaration: 'export type TaskOverlapPolicy = \'ALLOW\' | \'SKIP\' | \'QUEUE\';',
+  },
+  {
+    name: 'TaskRun',
+    declaration: 'export interface TaskRun {\n    readonly id: string;\n    readonly taskId: string;\n    readonly runNumber: number;\n    readonly status: RunStatus;\n    readonly attemptNumber: number;\n    readonly scheduledFor: Date;\n    readonly startedAt?: Date;\n    readonly finishedAt?: Date;\n    readonly durationMs?: number;\n    readonly outputData?: Record<string, unknown>;\n    readonly errorMessage?: string;\n    readonly errorStack?: string;\n    readonly executionLogs: readonly TaskLogEntry[];\n    readonly createdAt: Date;\n}',
+  },
+  {
+    name: 'TaskScheduleType',
+    declaration: 'export type TaskScheduleType = \'ONCE\' | \'INTERVAL\' | \'CRON\' | \'RRULE\';',
+  },
+  {
+    name: 'TaskStatus',
+    declaration: 'export type TaskStatus = \'ACTIVE\' | \'PAUSED\' | \'COMPLETED\' | \'ERROR\' | \'ARCHIVED\';',
+  },
+  {
+    name: 'TaskWorker',
+    declaration: 'export class TaskWorker {\n    constructor(private readonly store: IAutomationStore, private readonly notifier: NotificationService);\n    public registerHandler(actionType: string, handler: ActionHandler): () => void;\n    public hasHandler(actionType: string): boolean;\n    public async executeJob(job: EnqueuedJobData): Promise<void>;\n}',
   },
   {
     name: 'TeamId',
@@ -6805,6 +7034,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolSchema {\n    name: string;\n    description: string;\n    parameters: Record<string, unknown>;\n}',
   },
   {
+    name: 'TranscriptionAudioFormat',
+    declaration: 'export type TranscriptionAudioFormat = \'audio/webm\' | \'audio/ogg\' | \'audio/wav\' | \'audio/mp4\' | \'audio/mpeg\';',
+  },
+  {
+    name: 'TranscriptionProvider',
+    declaration: 'export interface TranscriptionProvider {\n    readonly id: string;\n    available(): boolean;\n    transcribe(request: TranscriptionRequest, signal?: AbortSignal): Promise<TranscriptionResult>;\n}',
+  },
+  {
+    name: 'TranscriptionRequest',
+    declaration: 'export interface TranscriptionRequest {\n    readonly audio: Uint8Array;\n    readonly format: TranscriptionAudioFormat;\n    readonly language?: string;\n}',
+  },
+  {
+    name: 'TranscriptionResult',
+    declaration: 'export interface TranscriptionResult {\n    readonly text: string;\n    readonly language?: string;\n}',
+  },
+  {
     name: 'TurnEndCancelCause',
     declaration: 'export type TurnEndCancelCause = AgentCancelCause | {\n    readonly kind: \'legacy\';\n};',
   },
@@ -6931,6 +7176,58 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'VerifiedWebhookDelivery',
     declaration: 'export interface VerifiedWebhookDelivery<K extends string = string> {\n    readonly kind: K;\n    readonly source: WebhookSourceId;\n    readonly deliveryId: WebhookDeliveryId;\n    readonly event: WebhookEventOf<K>;\n    readonly receivedAt: number;\n}',
+  },
+  {
+    name: 'VoiceInputAborted',
+    declaration: 'export interface VoiceInputAborted {\n    readonly code: \'aborted\';\n}',
+  },
+  {
+    name: 'VoiceInputAudioEmpty',
+    declaration: 'export interface VoiceInputAudioEmpty {\n    readonly code: \'audio-empty\';\n}',
+  },
+  {
+    name: 'VoiceInputAudioTooLarge',
+    declaration: 'export interface VoiceInputAudioTooLarge {\n    readonly code: \'audio-too-large\';\n    readonly actualBytes: number;\n}',
+  },
+  {
+    name: 'VoiceInputAudioUndecodable',
+    declaration: 'export interface VoiceInputAudioUndecodable {\n    readonly code: \'audio-undecodable\';\n}',
+  },
+  {
+    name: 'VoiceInputFailure',
+    declaration: 'export type VoiceInputFailure = VoiceInputAudioEmpty | VoiceInputAudioUndecodable | VoiceInputAudioTooLarge | VoiceInputProviderUnavailable | VoiceInputProviderUnconfigured | VoiceInputProviderFailed | VoiceInputAborted;',
+  },
+  {
+    name: 'VoiceInputProviderFailed',
+    declaration: 'export interface VoiceInputProviderFailed {\n    readonly code: \'provider-failed\';\n    readonly detail: string;\n}',
+  },
+  {
+    name: 'VoiceInputProviderUnavailable',
+    declaration: 'export interface VoiceInputProviderUnavailable {\n    readonly code: \'provider-unavailable\';\n    readonly detail: string;\n}',
+  },
+  {
+    name: 'VoiceInputProviderUnconfigured',
+    declaration: 'export interface VoiceInputProviderUnconfigured {\n    readonly code: \'provider-unconfigured\';\n    readonly detail: string;\n}',
+  },
+  {
+    name: 'VoiceInputRejected',
+    declaration: 'export interface VoiceInputRejected<E extends VoiceInputFailure> {\n    readonly ok: false;\n    readonly error: E;\n}',
+  },
+  {
+    name: 'VoiceInputSuccess',
+    declaration: 'export interface VoiceInputSuccess<T> {\n    readonly ok: true;\n    readonly value: T;\n}',
+  },
+  {
+    name: 'VoiceInputTranscribeRequest',
+    declaration: 'export interface VoiceInputTranscribeRequest {\n    readonly mediaType: \'audio/webm\' | \'audio/ogg\' | \'audio/mp4\' | \'audio/mpeg\' | \'audio/wav\';\n    readonly data: string;\n    readonly language?: string;\n}',
+  },
+  {
+    name: 'VoiceInputTranscribeResult',
+    declaration: 'export type VoiceInputTranscribeResult = VoiceInputSuccess<VoiceInputTranscribeValue> | VoiceInputRejected<VoiceInputFailure>;',
+  },
+  {
+    name: 'VoiceInputTranscribeValue',
+    declaration: 'export interface VoiceInputTranscribeValue {\n    readonly text: string;\n    readonly language?: string;\n}',
   },
   {
     name: 'WebBootBatch',

@@ -100,6 +100,31 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'automation',
+    pkg: 'automation',
+    title: 'Persistent automation scheduler and Remote controller',
+    mode: 'core',
+    consumers: ['client-ui-automation'],
+    note: 'Owns durable task state, recurring schedule calculation, execution dispatch, and browser-safe Remote operations.',
+  },
+  {
+    key: 'transcription',
+    pkg: 'transcription',
+    title: 'Audio transcription provider registry',
+    mode: 'seam',
+    implementations: ['transcription-groq'],
+    consumers: ['voice-input'],
+    note: 'Providers register audio transcription implementations; the voice-input service selects one provider for browser recordings.',
+  },
+  {
+    key: 'voiceInput',
+    pkg: 'voice-input',
+    title: 'Browser voice-input Remote controller',
+    mode: 'core',
+    consumers: ['client-ui-voice-input'],
+    note: 'Validates browser audio requests and projects transcription results through the generated Remote namespace.',
+  },
+  {
     key: 'hmr',
     pkg: 'hmr',
     title: 'Serialized module and configuration reloads',
