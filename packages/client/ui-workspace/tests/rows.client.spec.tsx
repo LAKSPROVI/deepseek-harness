@@ -6,7 +6,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { RowDragProps } from '../src/client/rows/Rows.tsx'
-import { ProjectRowItem, RecentSessionNodeItem, SearchResultItem, SessionNodeItem } from '../src/client/rows/Rows.tsx'
+import { ProjectRowItem, SearchResultItem, SessionNodeItem } from '../src/client/rows/Rows.tsx'
 import type { GroupNode, SearchResultNode, SessionNode } from '../src/client/tree.ts'
 import { zh } from '../src/client/locales.ts'
 
@@ -498,26 +498,20 @@ describe('workspace browser rows', () => {
     }
   })
 
-  it('session row menu opens without opening the session and dispatches rename, fork, archive, and markUnread', () => {
+  it('session row menu opens without opening the session and dispatches rename, fork, and archive', () => {
     const onOpen = vi.fn()
     const onRename = vi.fn()
     const onFork = vi.fn()
     const onArchive = vi.fn()
-    const onMarkUnread = vi.fn()
     const node: SessionNode = {
       id: sid('s1'), title: 'One', blank: false, running: false,
       runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0,
     }
     render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen}
-      onRename={onRename} onFork={onFork} onArchive={onArchive} onMarkUnread={onMarkUnread} t={t} />)
+      onRename={onRename} onFork={onFork} onArchive={onArchive} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: '会话“One”的操作' }))
-    expect(onOpen).not.toHaveBeenCalled()
-    // Mark unread dispatches without opening the session.
-    fireEvent.click(screen.getByRole('menuitem', { name: '标为未读' }))
-    expect(onMarkUnread).toHaveBeenCalledWith(node.id)
     expect(onOpen).not.toHaveBeenCalled()
     // Archive is not destructive (log and accounting slot remain): no danger styling.
-    fireEvent.click(screen.getByRole('button', { name: '会话“One”的操作' }))
     expect(screen.getByRole('menuitem', { name: '归档会话' }).className).not.toMatch(/danger/)
     // Rename dispatches with the current display title (dialog prefill).
     fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
@@ -678,157 +672,5 @@ describe('workspace browser rows', () => {
         onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} drag={after} t={t} />,
     )
     expect(screen.getByRole('treeitem').className).toMatch(/dropAfter/)
-  })
-
-  it('renders RecentSessionNodeItem with workspace badge, status, and menu toggles', () => {
-    const onOpen = vi.fn()
-    const onToggleUnread = vi.fn()
-    const onToggleCompleted = vi.fn()
-    const node: SessionNode = {
-      id: sid('recent-1'),
-      title: 'Active Task',
-      blank: false,
-      running: true,
-      runningSubagentCount: 0,
-      hasActiveSchedule: false,
-      completed: false,
-      unread: false,
-      updatedAt: 1000,
-    }
-
-    render(
-      <RecentSessionNodeItem
-        node={node}
-        workspaceName="My Project"
-        currentId={undefined}
-        now={2000}
-        onOpen={onOpen}
-        onRename={vi.fn()}
-        onFork={vi.fn()}
-        onArchive={vi.fn()}
-        onToggleUnread={onToggleUnread}
-        onToggleCompleted={onToggleCompleted}
-        t={t}
-      />,
-    )
-
-    expect(screen.getByText('Active Task')).toBeTruthy()
-    expect(screen.getByText('My Project')).toBeTruthy()
-    expect(screen.getByRole('treeitem').querySelector('[data-state="ongoing"]')).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('treeitem'))
-    expect(onOpen).toHaveBeenCalledWith(sid('recent-1'))
-
-    // Test menu
-    fireEvent.click(screen.getByLabelText('会话“Active Task”的操作'))
-    expect(screen.getByRole('menuitem', { name: '标为未读', hidden: true })).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: '标为已完成', hidden: true })).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('menuitem', { name: '标为未读', hidden: true }))
-    expect(onToggleUnread).toHaveBeenCalledWith(sid('recent-1'))
-  })
-
-  it('renders unread and completed status dots correctly in SessionNodeItem and toggles them', () => {
-    const onToggleUnread = vi.fn()
-    const onToggleCompleted = vi.fn()
-    const unreadNode: SessionNode = {
-      id: sid('unread-1'),
-      title: 'Unread Task',
-      blank: false,
-      running: false,
-      runningSubagentCount: 0,
-      hasActiveSchedule: false,
-      completed: false,
-      unread: true,
-      updatedAt: 1000,
-    }
-
-    const { rerender } = render(
-      <SessionNodeItem
-        node={unreadNode}
-        currentId={undefined}
-        now={2000}
-        onOpen={vi.fn()}
-        onRename={vi.fn()}
-        onFork={vi.fn()}
-        onArchive={vi.fn()}
-        onToggleUnread={onToggleUnread}
-        onToggleCompleted={onToggleCompleted}
-        t={t}
-      />,
-    )
-
-    // Unread dot has data-state="unread"
-    expect(screen.getByRole('treeitem').querySelector('[data-state="unread"]')).toBeTruthy()
-
-    // Menu shows "标为已读" when currently unread
-    fireEvent.click(screen.getByLabelText('会话“Unread Task”的操作'))
-    fireEvent.click(screen.getByRole('menuitem', { name: '标为已读', hidden: true }))
-    expect(onToggleUnread).toHaveBeenCalledWith(sid('unread-1'))
-
-    // Completed node
-    const completedNode: SessionNode = {
-      id: sid('completed-1'),
-      title: 'Done Task',
-      blank: false,
-      running: false,
-      runningSubagentCount: 0,
-      hasActiveSchedule: false,
-      completed: true,
-      unread: false,
-      updatedAt: 1000,
-    }
-
-    rerender(
-      <SessionNodeItem
-        node={completedNode}
-        currentId={undefined}
-        now={2000}
-        onOpen={vi.fn()}
-        onRename={vi.fn()}
-        onFork={vi.fn()}
-        onArchive={vi.fn()}
-        onToggleUnread={onToggleUnread}
-        onToggleCompleted={onToggleCompleted}
-        t={t}
-      />,
-    )
-
-    expect(screen.getByRole('treeitem').querySelector('[data-state="done"]')).toBeTruthy()
-
-    // Menu shows "标为未完成" when currently completed
-    fireEvent.click(screen.getByLabelText('会话“Done Task”的操作'))
-    fireEvent.click(screen.getByRole('menuitem', { name: '标为未完成', hidden: true }))
-    expect(onToggleCompleted).toHaveBeenCalledWith(sid('completed-1'))
-  })
-  // Custom "waiting decision" status: a user-set marker with no live pending
-  // interaction still surfaces as the warning dot, not as an idle row.
-  it('renders the custom waiting-decision status as a warning dot', () => {
-    const node: SessionNode = {
-      id: sid('warning-1'),
-      title: 'Decide Task',
-      blank: false,
-      running: false,
-      runningSubagentCount: 0,
-      hasActiveSchedule: false,
-      completed: false,
-      customStatus: 'warning',
-      updatedAt: 1000,
-    }
-    render(
-      <SessionNodeItem
-        node={node}
-        currentId={undefined}
-        now={2000}
-        onOpen={vi.fn()}
-        onRename={vi.fn()}
-        onFork={vi.fn()}
-        onArchive={vi.fn()}
-        t={t}
-      />,
-    )
-    const row = screen.getByRole('treeitem')
-    expect(row.querySelector('[data-state="warning"]')).toBeTruthy()
-    expect(row.querySelector('[data-state="done"]')).toBeNull()
   })
 })

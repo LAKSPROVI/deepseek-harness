@@ -167,9 +167,10 @@ export function apply(ctx: Context): void {
   const contextActionsInjected = (): SessionContextActionsInjected => ({
     startSession: (workspaceId) => { uiWorkspace.startSession(workspaceId) },
     forkSession: (sessionId) => {
-      sessions.fork({ sessionId, increaseTitle: true })
-        .then((childId) => { sessions.open(childId) })
-        .catch(() => {})
+      uiWorkspace.forkSession(sessionId)
+        .catch(() => {
+          // Fork or child-rename failure keeps the current selection.
+        })
     },
   })
   ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register(
