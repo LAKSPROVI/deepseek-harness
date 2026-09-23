@@ -9,8 +9,10 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import { writeFile } from 'node:fs/promises'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
+import FileSettingsProvider from '@deepseek-ai/dsh-settings-file'
 import SubagentService from '@deepseek-ai/dsh-subagent'
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
@@ -19,7 +21,10 @@ import * as ToolSubagentControl from '@deepseek-ai/dsh-tool-subagent-control'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import { serializeRequest } from '@deepseek-ai/dsh-llm-deepseek/src/protocols/chat-completions/serialize.ts'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
-import TeamService from '../../agent-team/src/index.ts'
+import TeamService, {
+  TeamTemplateSettingsSchema, validateTeamTemplateSettings,
+} from '../../agent-team/src/index.ts'
+import { TEAM_TEMPLATE_SETTINGS_NAMESPACE } from '../../agent-team/src/index.ts'
 import * as toolTeam from '../src/index.ts'
 
 const SIGNAL = new AbortController().signal
@@ -33,6 +38,14 @@ const TOOL_NAMES = [
   'team_task_list',
   'team_task_get',
   'team_task_update',
+  'team_template_list',
+  'team_template_save',
+  'team_template_delete',
+  'team_squad_list',
+  'team_squad_save',
+  'team_squad_delete',
+  'team_squad_spawn',
+  'team_roster_dismiss',
 ].sort()
 
 const roots: string[] = []
@@ -62,6 +75,10 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legac
   await mountAgentLoopTestDependencies(ctx)
   const storageRoot = mkdtempSync(join(tmpdir(), 'dsh-tool-team-'))
   roots.push(storageRoot)
+  const settingsRoot = mkdtempSync(join(tmpdir(), 'dsh-tool-team-settings-'))
+  roots.push(settingsRoot)
+  const settingsFile = join(settingsRoot, 'settings.yaml')
+  await writeFile(settingsFile, '{}\n')
   await ctx.plugin(JsonlSessionPersistence, { root: storageRoot })
   await ctx.plugin(TestSessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
@@ -70,6 +87,16 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legac
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
   await ctx.plugin(TeamService)
+  await ctx.plugin(FileSettingsProvider, { path: settingsFile })
+  // Register the agent-team-templates namespace with its schema; the
+  // template/squad tools read it and write through the same registration.
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.register(
+      TEAM_TEMPLATE_SETTINGS_NAMESPACE,
+      TeamTemplateSettingsSchema,
+      { validate: validateTeamTemplateSettings },
+    )
+  })
   const fiber = await ctx.plugin(toolTeam)
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -644,4 +671,173 @@ describe('dsh-tool-team', () => {
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
     expect(ctx.agentTeams.listMembers(lead)[1]).toMatchObject({ provider: 'team-fresh' })
   })
+
+  it('manages reusable teammate templates via team_template_save, list, delete', async () => {
+    const { ctx, lead } = await setup([])
+
+    const emptyList = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    expect(emptyList).toEqual({ templates: [] })
+
+    const saved = JSON.parse(text(await execute(ctx, lead, 'team_template_save', {
+      title: 'Pesquisador Juridico Senior',
+      name: 'pesquisador-juridico-senior',
+      description: 'Pesquisa doutrina e jurisprudencia',
+      prompt: 'Pesquise o tema e retorne citacoes',
+      context: 'fresh',
+      llm_provider: 'deepseek',
+      model: 'deepseek-chat',
+      persona: 'Especialista em pesquisa juridica',
+    })))
+    expect(saved.template).toMatchObject({
+      title: 'Pesquisador Juridico Senior',
+      name: 'pesquisador-juridico-senior',
+      description: 'Pesquisa doutrina e jurisprudencia',
+      prompt: 'Pesquise o tema e retorne citacoes',
+      context: 'fresh',
+      llmProvider: 'deepseek',
+      model: 'deepseek-chat',
+      persona: 'Especialista em pesquisa juridica',
+    })
+    expect(saved.template.id).toBeTruthy()
+
+    const list = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    expect(list.templates).toHaveLength(1)
+    expect(list.templates[0].title).toBe('Pesquisador Juridico Senior')
+
+    const saved2 = JSON.parse(text(await execute(ctx, lead, 'team_template_save', {
+      title: 'Pesquisador Juridico Senior',
+      name: 'pesquisador-juridico-senior',
+      description: 'Atualizado: pesquisa doutrina, jurisprudencia e legislacao',
+      prompt: 'Pesquise completamente',
+      context: 'fork',
+    })))
+    expect(saved2.template.description).toContain('Atualizado')
+    expect(saved2.template.context).toBe('fork')
+
+    const list2 = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    expect(list2.templates).toHaveLength(1)
+    expect(list2.templates[0].description).toContain('Atualizado')
+
+    const deleted = JSON.parse(text(await execute(ctx, lead, 'team_template_delete', {
+      id: saved2.template.id,
+    })))
+    expect(deleted.deletedId).toBe(saved2.template.id)
+
+    const emptyAgain = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    expect(emptyAgain.templates).toHaveLength(0)
+  })
+
+  it('spawns teammate from saved template via template_id', async () => {
+    const { ctx, lead } = await setup(['hang'])
+
+    const saved = JSON.parse(text(await execute(ctx, lead, 'team_template_save', {
+      title: 'Revisor de Contratos',
+      description: 'Revisa clausulas contratuais',
+      prompt: 'Revise o contrato enviado',
+      context: 'fresh',
+      llm_provider: 'deepseek',
+      model: 'deepseek-chat',
+    })))
+    const templateId = saved.template.id
+
+    const spawned = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+      template_id: templateId,
+    })))
+    expect(spawned.member).toMatchObject({
+      name: 'revisor-de-contratos',
+      description: 'Revisa clausulas contratuais',
+    })
+
+    const spawned2 = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+      template_id: templateId,
+      name: 'revisor-especial',
+      description: 'Revisao especial',
+      prompt: 'Prompt customizado',
+      context: 'fork',
+    })))
+    expect(spawned2.member).toMatchObject({
+      name: 'revisor-especial',
+      description: 'Revisao especial',
+    })
+  }, 15000)
+
+  it('manages and spawns multi-agent squads via team_squad_save, list, spawn, delete', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang'])
+
+    const saved = JSON.parse(text(await execute(ctx, lead, 'team_squad_save', {
+      title: 'Esquadrao Juridico Rapido',
+      description: 'Pesquisador e Revisor trabalhando em conjunto',
+      members: [
+        {
+          name: 'Pesquisador',
+          description: 'Busca precedentes',
+          prompt: 'Pesquise a jurisprudencia',
+          context: 'fresh',
+          llm_provider: 'deepseek',
+          model: 'deepseek-chat',
+        },
+        {
+          name: 'Revisor',
+          description: 'Audita minutas',
+          prompt: 'Revise o texto final',
+          context: 'fresh',
+        },
+      ],
+    })))
+    expect(saved.squad).toMatchObject({
+      title: 'Esquadrao Juridico Rapido',
+      description: 'Pesquisador e Revisor trabalhando em conjunto',
+    })
+    expect(saved.squad.members).toHaveLength(2)
+    expect(saved.squad.members[0].name).toBe('pesquisador')
+    expect(saved.squad.members[1].name).toBe('revisor')
+
+    const list = JSON.parse(text(await execute(ctx, lead, 'team_squad_list', {})))
+    expect(list.squads).toHaveLength(1)
+    expect(list.squads[0].title).toBe('Esquadrao Juridico Rapido')
+
+    const spawned = JSON.parse(text(await execute(ctx, lead, 'team_squad_spawn', {
+      squad_id: saved.squad.id,
+    })))
+    expect(spawned.spawnedMembers).toHaveLength(2)
+    expect(spawned.spawnedMembers[0].name).toBe('pesquisador')
+    expect(spawned.spawnedMembers[1].name).toBe('revisor')
+
+    const dismissed = JSON.parse(text(await execute(ctx, lead, 'team_roster_dismiss', {})))
+    expect(dismissed.dismissedCount).toBe(2)
+    expect(dismissed.dismissedNames).toEqual(['pesquisador', 'revisor'])
+
+    const deleted = JSON.parse(text(await execute(ctx, lead, 'team_squad_delete', {
+      id: saved.squad.id,
+    })))
+    expect(deleted.deletedId).toBe(saved.squad.id)
+
+    const listAfter = JSON.parse(text(await execute(ctx, lead, 'team_squad_list', {})))
+    expect(listAfter.squads).toHaveLength(0)
+  }, 20000)
+
+  it('normalizes natural names in spawn_teammate to lower-kebab-case', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'])
+
+    const spawned = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+      name: 'Revisor de Contratos - Senior',
+      description: 'Test normalization',
+      prompt: 'Test prompt',
+    })))
+    expect(spawned.member.name).toBe('revisor-de-contratos-senior')
+
+    const spawned2 = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+      name: 'pesquisador_juridico (tributario)',
+      description: 'Test normalization 2',
+      prompt: 'Test prompt 2',
+    })))
+    expect(spawned2.member.name).toBe('pesquisador-juridico-tributario')
+
+    const spawned3 = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+      name: 'valid-name-123',
+      description: 'Test normalization 3',
+      prompt: 'Test prompt 3',
+    })))
+    expect(spawned3.member.name).toBe('valid-name-123')
+  }, 20000)
 })

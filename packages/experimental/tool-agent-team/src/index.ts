@@ -5,12 +5,23 @@ import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { TeamTaskId } from '@deepseek-ai/dsh-experimental-agent-team'
 import type { TeamMemberView } from '@deepseek-ai/dsh-experimental-agent-team'
+import type {
+  SavedTeamSquad, SavedTeamTemplate, TeamTemplateSettings,
+} from '@deepseek-ai/dsh-experimental-agent-team'
+import {
+  normalizeTeamMemberName, TEAM_TEMPLATE_SETTINGS_NAMESPACE,
+} from '@deepseek-ai/dsh-experimental-agent-team'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { InferValue, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 
 /** Cordis plugin name. */
 export const name = 'tool-agent-team'
-/** Services required by the Team tool plugin. */
+/**
+ * Services required by the Team tool plugin. The settings namespace is read
+ * through `ctx.get` at call time: a composition without the settings service
+ * keeps every Team tool installed, and template tools fail with a clear error
+ * when called.
+ */
 export const inject = ['agents', 'agentTeams', 'tools', 'systemPrompt']
 
 /** Tool routing configuration. */
@@ -131,6 +142,113 @@ const TASK_LIST_VALUE_SCHEMA = {
   },
 } as const
 
+const TEMPLATE_VIEW_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', required: true },
+    title: { type: 'string', required: true },
+    name: { type: 'string', required: true },
+    description: { type: 'string', required: true },
+    prompt: { type: 'string', required: true },
+    context: { type: 'string', required: true, enum: ['fresh', 'fork'] },
+    llmProvider: { type: 'string' },
+    model: { type: 'string' },
+    persona: { type: 'string' },
+  },
+} as const
+
+const TEMPLATE_LIST_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    templates: { type: 'array', required: true, items: TEMPLATE_VIEW_SCHEMA },
+  },
+} as const
+
+const TEMPLATE_SAVE_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    template: { ...TEMPLATE_VIEW_SCHEMA, required: true },
+  },
+} as const
+
+const TEMPLATE_DELETE_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    deletedId: { type: 'string', required: true },
+  },
+} as const
+
+const SQUAD_MEMBER_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    name: { type: 'string', required: true },
+    description: { type: 'string', required: true },
+    prompt: { type: 'string', required: true },
+    context: { type: 'string', required: true, enum: ['fresh', 'fork'] },
+    llmProvider: { type: 'string' },
+    model: { type: 'string' },
+    persona: { type: 'string' },
+  },
+} as const
+
+const SQUAD_VIEW_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', required: true },
+    title: { type: 'string', required: true },
+    description: { type: 'string', required: true },
+    members: { type: 'array', required: true, items: SQUAD_MEMBER_SCHEMA },
+  },
+} as const
+
+const SQUAD_LIST_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    squads: { type: 'array', required: true, items: SQUAD_VIEW_SCHEMA },
+  },
+} as const
+
+const SQUAD_SAVE_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    squad: { ...SQUAD_VIEW_SCHEMA, required: true },
+  },
+} as const
+
+const SQUAD_DELETE_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    deletedId: { type: 'string', required: true },
+  },
+} as const
+
+const SQUAD_SPAWN_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    squadId: { type: 'string', required: true },
+    spawnedMembers: { type: 'array', required: true, items: MEMBER_VIEW_SCHEMA },
+  },
+} as const
+
+const ROSTER_DISMISS_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    dismissedCount: { type: 'integer', required: true },
+    dismissedNames: { type: 'array', required: true, items: { type: 'string' } },
+  },
+} as const
+
 /**
  * Declare one canonical output schema with compact model-facing JSON. Every
  * Team result is a fixed record, so the declared schema is what makes the
@@ -169,30 +287,76 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
 
     register(scoped.tools.register(defineTool({
       name: 'spawn_teammate',
-      description: 'Create one named, durable teammate. Only the Team Lead may call this tool.',
+      description: 'Create one named, durable teammate from custom parameters or from a saved template. Only the Team Lead may call this tool.',
       parameters: {
-        name: { type: 'string', required: true, description: 'Unique lower-kebab-case teammate name.' },
-        description: { type: 'string', required: true, description: 'Short description of the delegated responsibility.' },
-        prompt: { type: 'string', required: true, description: 'Complete initial task for the teammate.' },
+        name: { type: 'string', description: 'Unique teammate name or natural label (e.g. "revisor"). Required unless template_id is used.' },
+        description: { type: 'string', description: 'Short description of the delegated responsibility. Required unless template_id is used.' },
+        prompt: { type: 'string', description: 'Complete initial task for the teammate. Required unless template_id is used.' },
+        template_id: { type: 'string', description: 'Optional saved teammate template ID. When provided, missing fields are populated from the saved template.' },
         context: {
           type: 'string',
           enum: ['fresh', 'fork'],
           description: 'fresh starts without Lead history; fork inherits completed Lead turns. Defaults to fresh.',
         },
+        llm_provider: {
+          type: 'string',
+          description: 'Optional LLM adapter route (e.g. "openai", "deepseek", "anthropic"). Omit to inherit the Lead provider or template value.',
+        },
+        model: {
+          type: 'string',
+          description: 'Optional provider-owned model id (e.g. "gpt-5", "deepseek-chat"). Omit to inherit the Lead model or template value.',
+        },
+        persona: {
+          type: 'string',
+          description: 'Optional teammate-only system persona describing its role and constraints.',
+        },
       },
       output: jsonOutput(SPAWN_VALUE_SCHEMA),
       async execute(args, exec) {
         const agent = callingAgent(exec.agent, 'spawn_teammate')
-        const context = args.context ?? 'fresh'
+        let name = args.name
+        let description = args.description
+        let prompt = args.prompt
+        let context = args.context
+        let llmProvider = args.llm_provider
+        let model = args.model
+        let persona = args.persona
+
+        if (args.template_id !== undefined) {
+          const settings = ctx.get('settings')
+          const settingsVal = settings?.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
+          const found = settingsVal?.templates.find((t: SavedTeamTemplate) =>
+            t.id === args.template_id || t.title.toLowerCase() === args.template_id?.toLowerCase(),
+          )
+          if (found === undefined) {
+            throw new Error(`Template "${args.template_id}" not found in saved templates`)
+          }
+          name = name ?? found.name
+          description = description ?? found.description
+          prompt = prompt ?? found.prompt
+          context = context ?? found.context
+          llmProvider = llmProvider ?? found.llmProvider
+          model = model ?? found.model
+          persona = persona ?? found.persona
+        }
+
+        if (name === undefined || description === undefined || prompt === undefined) {
+          throw new Error('spawn_teammate requires name, description, and prompt (either directly or via template_id)')
+        }
+
+        const resolvedContext = context ?? 'fresh'
         return await ctx.agentTeams.spawnTeammate(agent, {
-          name: args.name,
-          description: args.description,
+          name: normalizeTeamMemberName(name),
+          description,
           prompt: [
-            { type: 'text', text: `<system-reminder>\nYou are teammate "${args.name.trim()}".\n</system-reminder>\n\n` },
-            { type: 'text', text: args.prompt },
+            { type: 'text', text: `<system-reminder>\nYou are teammate "${normalizeTeamMemberName(name).trim()}".\n</system-reminder>\n\n` },
+            { type: 'text', text: prompt },
           ],
-          context,
-          provider: context === 'fork' ? config.forkProvider : config.freshProvider,
+          context: resolvedContext,
+          provider: resolvedContext === 'fork' ? config.forkProvider : config.freshProvider,
+          ...(llmProvider === undefined ? {} : { llmProvider }),
+          ...(model === undefined ? {} : { model }),
+          ...(persona === undefined ? {} : { persona }),
           signal: exec.signal,
         })
       },
@@ -376,6 +540,225 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           ...args.write_scopes === undefined ? {} : { writeScopes: args.write_scopes },
           ...args.owner === undefined ? {} : { owner: args.owner },
         })
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_template_list',
+      description: 'List all reusable teammate templates saved in system settings.',
+      parameters: {},
+      output: jsonOutput(TEMPLATE_LIST_VALUE_SCHEMA),
+      async execute(_args, _exec) {
+        const settings = ctx.get('settings')
+        const settingsVal = settings?.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
+        return { templates: settingsVal?.templates ?? [] }
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_template_save',
+      description: 'Save or update a reusable teammate template in settings so it can be reused across sessions and teams.',
+      parameters: {
+        id: { type: 'string', description: 'Optional unique template ID. If omitted, derived from title.' },
+        title: { type: 'string', required: true, description: 'User-facing title for the template (e.g. "Pesquisador Jurídico Sênior").' },
+        name: { type: 'string', description: 'Default member name. If omitted, derived from title.' },
+        description: { type: 'string', required: true, description: 'Short description of the responsibility.' },
+        prompt: { type: 'string', required: true, description: 'Default initial prompt/instructions for teammates created with this template.' },
+        context: { type: 'string', enum: ['fresh', 'fork'], description: 'Default context mode (fresh or fork). Defaults to fresh.' },
+        llm_provider: { type: 'string', description: 'Optional default LLM provider.' },
+        model: { type: 'string', description: 'Optional default model ID.' },
+        persona: { type: 'string', description: 'Optional default persona.' },
+      },
+      output: jsonOutput(TEMPLATE_SAVE_VALUE_SCHEMA),
+      async execute(args, _exec) {
+        const settings = ctx.get('settings')
+        if (settings === undefined) throw new Error('Settings service is unavailable')
+        const current = (settings.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined)?.templates ?? []
+        const normalizedName = normalizeTeamMemberName(args.name || args.title)
+        const normalizedId = normalizeTeamMemberName(args.id || args.title)
+        const template: SavedTeamTemplate = {
+          id: normalizedId,
+          title: args.title,
+          name: normalizedName,
+          description: args.description,
+          prompt: args.prompt,
+          context: args.context ?? 'fresh',
+          ...(args.llm_provider === undefined ? {} : { llmProvider: args.llm_provider }),
+          ...(args.model === undefined ? {} : { model: args.model }),
+          ...(args.persona === undefined ? {} : { persona: args.persona }),
+        }
+        const updated = [...current.filter((item: SavedTeamTemplate) => item.id !== normalizedId), template]
+        await settings.update(TEAM_TEMPLATE_SETTINGS_NAMESPACE, { templates: updated })
+        return { template }
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_template_delete',
+      description: 'Delete a reusable teammate template from settings by id or title.',
+      parameters: {
+        id: { type: 'string', required: true, description: 'Template id or title to delete.' },
+      },
+      output: jsonOutput(TEMPLATE_DELETE_VALUE_SCHEMA),
+      async execute(args, _exec) {
+        const settings = ctx.get('settings')
+        if (settings === undefined) throw new Error('Settings service is unavailable')
+        const settingsVal = settings.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
+        const currentTemplates = settingsVal?.templates ?? []
+        const currentSquads = settingsVal?.squads ?? []
+        const target = currentTemplates.find((item: SavedTeamTemplate) =>
+          item.id === args.id || item.title.toLowerCase() === args.id.toLowerCase())
+        if (target === undefined) throw new Error(`Template "${args.id}" not found in saved templates`)
+        const updated = currentTemplates.filter((item: SavedTeamTemplate) => item.id !== target.id)
+        await settings.update(TEAM_TEMPLATE_SETTINGS_NAMESPACE, { templates: updated, squads: currentSquads })
+        return { deletedId: target.id }
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_squad_list',
+      description: 'List all reusable multi-agent squad presets saved in system settings.',
+      parameters: {},
+      output: jsonOutput(SQUAD_LIST_VALUE_SCHEMA),
+      async execute(_args, _exec) {
+        const settings = ctx.get('settings')
+        const settingsVal = settings?.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
+        return { squads: settingsVal?.squads ?? [] }
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_squad_save',
+      description: 'Save or update a reusable multi-agent squad preset (1-9 members) in settings.',
+      parameters: {
+        id: { type: 'string', description: 'Optional unique squad ID. If omitted, derived from title.' },
+        title: { type: 'string', required: true, description: 'User-facing title for the squad preset.' },
+        description: { type: 'string', required: true, description: 'What this squad does when instantiated.' },
+        members: {
+          type: 'array', required: true,
+          description: 'One to nine squad members with name, description, prompt, context, and optional provider/model/persona.',
+        },
+      },
+      output: jsonOutput(SQUAD_SAVE_VALUE_SCHEMA),
+      async execute(args, _exec) {
+        const settings = ctx.get('settings')
+        if (settings === undefined) throw new Error('Settings service is unavailable')
+        const settingsVal = settings.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
+        const currentSquads = settingsVal?.squads ?? []
+        const currentTemplates = settingsVal?.templates ?? []
+        const members = (args.members as Array<Record<string, unknown>>).map((member) => {
+          const name = normalizeTeamMemberName(String(member.name ?? member.description ?? ''))
+          return {
+            name,
+            description: String(member.description ?? ''),
+            prompt: String(member.prompt ?? ''),
+            context: (member.context === 'fork' ? 'fork' : 'fresh') as 'fresh' | 'fork',
+            ...(member.llm_provider === undefined ? {} : { llmProvider: String(member.llm_provider) }),
+            ...(member.model === undefined ? {} : { model: String(member.model) }),
+            ...(member.persona === undefined ? {} : { persona: String(member.persona) }),
+          }
+        })
+        const normalizedId = normalizeTeamMemberName(args.id || args.title)
+        const squad = { id: normalizedId, title: args.title, description: args.description, members }
+        const updated = [...currentSquads.filter((item: SavedTeamSquad) => item.id !== normalizedId), squad]
+        await settings.update(TEAM_TEMPLATE_SETTINGS_NAMESPACE, { templates: currentTemplates, squads: updated })
+        return { squad }
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_squad_delete',
+      description: 'Delete a reusable squad preset from settings by id or title.',
+      parameters: {
+        id: { type: 'string', required: true, description: 'Squad id or title to delete.' },
+      },
+      output: jsonOutput(SQUAD_DELETE_VALUE_SCHEMA),
+      async execute(args, _exec) {
+        const settings = ctx.get('settings')
+        if (settings === undefined) throw new Error('Settings service is unavailable')
+        const settingsVal = settings.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
+        const currentTemplates = settingsVal?.templates ?? []
+        const currentSquads = settingsVal?.squads ?? []
+        const target = currentSquads.find((item: SavedTeamSquad) =>
+          item.id === args.id || item.title.toLowerCase() === args.id.toLowerCase())
+        if (target === undefined) throw new Error(`Squad preset "${args.id}" not found in saved squads`)
+        const updated = currentSquads.filter((item: SavedTeamSquad) => item.id !== target.id)
+        await settings.update(TEAM_TEMPLATE_SETTINGS_NAMESPACE, { templates: currentTemplates, squads: updated })
+        return { deletedId: target.id }
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_squad_spawn',
+      description: 'Spawn an entire multi-agent squad preset in this session in one batch operation.',
+      parameters: {
+        squad_id: { type: 'string', required: true, description: 'Saved squad preset ID or title to instantiate.' },
+      },
+      output: jsonOutput(SQUAD_SPAWN_VALUE_SCHEMA),
+      async execute(args, exec) {
+        const agent = callingAgent(exec.agent, 'team_squad_spawn')
+        const settings = ctx.get('settings')
+        const settingsVal = settings?.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
+        const found = settingsVal?.squads?.find((s: SavedTeamSquad) =>
+          s.id === args.squad_id || s.title.toLowerCase() === args.squad_id?.toLowerCase(),
+        )
+        if (found === undefined) {
+          throw new Error(`Squad preset "${args.squad_id}" not found in saved squads`)
+        }
+        const spawnedMembers: TeamMemberView[] = []
+        for (const member of found.members) {
+          const res = await ctx.agentTeams.spawnTeammate(agent, {
+            name: normalizeTeamMemberName(member.name),
+            description: member.description,
+            prompt: [{ type: 'text', text: member.prompt }],
+            context: member.context,
+            provider: member.context === 'fork' ? config.forkProvider : config.freshProvider,
+            ...(member.llmProvider === undefined ? {} : { llmProvider: member.llmProvider }),
+            ...(member.model === undefined ? {} : { model: member.model }),
+            ...(member.persona === undefined ? {} : { persona: member.persona }),
+            signal: exec.signal,
+          })
+          spawnedMembers.push(res.member)
+        }
+        return {
+          squadId: found.id,
+          spawnedMembers,
+        }
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_roster_dismiss',
+      description: 'Interrupt and dismiss all active teammates, or specific named teammates, in one batch call to clean up the team.',
+      parameters: {
+        names: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional list of specific teammate names to dismiss. If omitted, all active teammates are dismissed.',
+        },
+      },
+      output: jsonOutput(ROSTER_DISMISS_VALUE_SCHEMA),
+      async execute(args, exec) {
+        const agent = callingAgent(exec.agent, 'team_roster_dismiss')
+        const membersList = ctx.agentTeams.listMembers(agent)
+        const teammates = membersList.filter(m => m.role === 'teammate')
+        const targetNames = args.names !== undefined && args.names.length > 0
+          ? args.names.map(normalizeTeamMemberName)
+          : teammates.map(m => m.name)
+
+        const dismissedNames: string[] = []
+        for (const name of targetNames) {
+          try {
+            ctx.agentTeams.interrupt(agent, name)
+            dismissedNames.push(name)
+          } catch {
+            // Teammates already inactive are already dismissed.
+          }
+        }
+        return {
+          dismissedCount: dismissedNames.length,
+          dismissedNames,
+        }
       },
     })))
   } catch (error: unknown) {

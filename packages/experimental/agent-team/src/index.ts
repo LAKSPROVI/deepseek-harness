@@ -34,6 +34,11 @@ export type * from './types.ts'
 export type { TeamMembership } from './roster.ts'
 export { TeamId, TeamMessageId, TeamTaskId } from './types.ts'
 export { TeamError } from './error.ts'
+export type { SavedSquadMember, SavedTeamSquad, SavedTeamTemplate, TeamTemplateSettings } from './templates.ts'
+export {
+  MAX_TEAM_SQUAD_COUNT, MAX_TEAM_TEMPLATE_COUNT, TEAM_TEMPLATE_SETTINGS_NAMESPACE,
+  normalizeTeamMemberName, TeamTemplateSettingsSchema, validateTeamTemplateSettings,
+} from './templates.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
