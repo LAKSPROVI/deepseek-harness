@@ -241,6 +241,7 @@
       "@deepseek-ai/dsh-client-ui-subagent": ["./packages/client/ui-subagent/src"],
       "@deepseek-ai/dsh-experimental-client-ui-agent-team": ["./packages/experimental/client-ui-agent-team/src"],
       "@deepseek-ai/dsh-client-ui-automation": ["./packages/client/ui-automation/src"],
+      "@deepseek-ai/dsh-experimental-client-ui-agent-team/client": ["./packages/experimental/client-ui-agent-team/src/client/index.ts"],
       "@deepseek-ai/dsh-client-ui-voice-input": ["./packages/client/ui-voice-input/src"],
       "@deepseek-ai/dsh-client-ui-settings-plugins": ["./packages/client/ui-settings-plugins/src"],
       "@deepseek-ai/dsh-client-ui-jobs": ["./packages/client/ui-jobs/src"],
