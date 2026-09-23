@@ -23,10 +23,10 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SessionNode, SessionOrderBy } from '../tree.ts'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
+  deriveFlat, deriveGroups, deriveRecentAndInProgress, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
   pinCurrentBlank, reconcileManualOrder, UNGROUPED_KEY, visibleSessionIds,
 } from '../tree.ts'
-import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
+import { ProjectRowItem, RecentSessionNodeItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import { FLAT_SESSION_ORDER_KEY, type SessionGroupBy } from '../stores.ts'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
@@ -845,6 +845,11 @@ export function WorkspaceBrowser({
       currentBlank !== undefined && flatMemberIds.includes(currentBlank) ? currentBlank : undefined,
     )
   }, [currentBlank, flatMemberIds, list.byId, orderBy, sessionOrderByAccount])
+  const customSessionStatuses = useStore(s => s.customSessionStatuses)
+  const recentStatuses = useSessionStatus(s => s)
+  const recentNodes = useMemo(() => deriveRecentAndInProgress(
+    list, archivedSessionIds, recentStatuses, customSessionStatuses,
+  ), [archivedSessionIds, customSessionStatuses, list, recentStatuses])
   const activeSessionOrders = useMemo<Readonly<Record<string, readonly string[]>>>(() => Object.fromEntries([
     ...orderedWorkspaces.map(workspace => [workspace.workspaceId, workspace.sessionIds] as const),
     [UNGROUPED_KEY, orderedUngroupedSessionIds] as const,
@@ -1243,6 +1248,30 @@ export function WorkspaceBrowser({
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
       <div className={css.listArea}>
+        {wide && normalizedQuery === '' && recentNodes.length > 0 && (
+          <section className={css.recentSection} aria-label={t('section.recentAndInProgress')}>
+            <div className={css.recentSectionHeader}>
+              <span className={css.recentSectionLabel}>{t('section.recentAndInProgress')}</span>
+              <span className={css.recentCount}>{recentNodes.length}</span>
+            </div>
+            <div className={css.recentList} role="tree">
+              {recentNodes.map(node => (
+                <RecentSessionNodeItem
+                  key={`recent-${node.id}`}
+                  node={node}
+                  workspaceName={workspaces.find(workspace => workspace.sessionIds.includes(node.id))?.title ?? t('group.ungrouped')}
+                  currentId={mainSessionId}
+                  now={Date.now()}
+                  onOpen={open}
+                  onRename={onSessionRename}
+                  onFork={forkSession}
+                  onArchive={onSessionArchive}
+                  t={t}
+                />
+              ))}
+            </div>
+          </section>
+        )}
         {wide && (normalizedQuery !== ''
           ? (
             <SearchResults

@@ -14,6 +14,8 @@ export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
 export type SessionGroupBy = 'workspace' | 'workspace-tree' | 'flat'
 /** Session order: saved manual positions or current recency. */
 export type SessionOrderBy = 'manual' | 'updated'
+/** Browser-local status the user selects for one Session, kept independently from live Host activity. */
+export type CustomSessionStatus = 'ongoing' | 'warning' | 'unread' | 'later' | 'completed' | 'finalized' | 'idle'
 
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
 type WorkspaceViewState = {
@@ -23,6 +25,8 @@ type WorkspaceViewState = {
   groupExpansion: Record<string, boolean>
   /** Saved manual order per Workspace group plus the browser-local flat-list account. */
   sessionOrderByAccount: Record<string, string[]>
+  /** Explicit user status per Session; derived views read it, never live Host facts. */
+  customSessionStatuses: Record<string, CustomSessionStatus | undefined>
 }
 
 /**
@@ -48,6 +52,7 @@ type WorkspaceViewActions = {
     order: readonly string[],
     initialOrders: Readonly<Record<string, readonly string[]>>,
   ) => void
+  setSessionStatus: (draft: WorkspaceViewState, sessionId: string, status: CustomSessionStatus) => void
 }
 
 /** Copy read-only projections into the persisted mutable store representation. */
@@ -68,6 +73,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       orderBy: 'updated',
       groupExpansion: {},
       sessionOrderByAccount: {},
+      customSessionStatuses: {},
     }),
     persist: 'dsh.workspace.view.v5',
     actions: {
@@ -96,6 +102,13 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         if (d.orderBy === 'updated') d.sessionOrderByAccount = copySessionOrders(initialOrders)
         d.orderBy = 'manual'
         d.sessionOrderByAccount[accountKey] = [...order]
+      },
+      setSessionStatus: (d, sessionId: string, status: CustomSessionStatus) => {
+        // Persistence replaces the whole state with stored JSON, so a
+        // `dsh.workspace.view.v5` blob written before this map existed arrives
+        // without it; fill it in before the write.
+        d.customSessionStatuses ??= {}
+        d.customSessionStatuses[sessionId] = status === 'idle' ? undefined : status
       },
     },
   })

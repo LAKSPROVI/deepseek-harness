@@ -13,9 +13,8 @@ import type {
 import type {} from '@deepseek-ai/dsh-schedule/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
-import {
-  indexSubagentDescendants, type SubagentDescendantSummary,
-} from './subagent-lineage.ts'
+import { indexSubagentDescendants, type SubagentDescendantSummary } from './subagent-lineage.ts'
+import type { CustomSessionStatus } from './stores.ts'
 
 /** Group key for Sessions outside every Workspace. */
 export const UNGROUPED_KEY = ''
@@ -57,6 +56,8 @@ export interface SessionNode {
   runningSubagentCount: number
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
+  /** Browser-local status the user selected; live Host facts stay in the other fields. */
+  customStatus?: CustomSessionStatus
   /** The current list projection contains at least one active Schedule record. */
   hasActiveSchedule: boolean
   updatedAt: number
@@ -112,6 +113,8 @@ export interface TreeView {
   expandedGroups: readonly string[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
+  /** Browser-local user status per Session, carried onto each row node. */
+  customStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>
 }
 
 interface Group {
@@ -316,9 +319,11 @@ function sessionNode(
   s: SessionSummary,
   descendants: ReadonlyMap<SessionId, SubagentDescendantSummary>,
   statuses: SessionStatuses,
+  customStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>,
 ): SessionNode {
   const status = statuses.get(s.id)
   const pendingInteraction = visiblePendingKind(status?.pendingInteraction?.kind)
+  const customStatus = customStatuses?.[s.id]
   return {
     id: s.id,
     title: sessionTitle(s),
@@ -326,6 +331,7 @@ function sessionNode(
     running: status?.running ?? s.running,
     runningSubagentCount: descendants.get(s.id)?.runningCount ?? 0,
     completed: status?.completionUnread === true,
+    ...(customStatus === undefined ? {} : { customStatus }),
     hasActiveSchedule: hasActiveSchedule(s),
     updatedAt: s.updatedAt,
     ...(pendingInteraction === undefined ? {} : { pendingInteraction }),
@@ -374,7 +380,7 @@ export function deriveGroups(
       expanded,
       containsCurrent: g.key === currentGroup,
       sessions: expanded
-        ? g.sessions.map(session => sessionNode(session, descendants, statuses))
+        ? g.sessions.map(session => sessionNode(session, descendants, statuses, view.customStatuses))
         : [],
     })
   }
@@ -410,10 +416,44 @@ export function deriveFlat(
   list: SessionListState,
   sessionIds: readonly SessionId[],
   statuses: SessionStatuses,
+  customStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>,
 ): SessionNode[] {
   const descendants = indexSubagentDescendants(list.byId)
   return sessionIds
-    .map(id => sessionNode(list.byId[id] as SessionSummary, descendants, statuses))
+    .map(id => sessionNode(list.byId[id] as SessionSummary, descendants, statuses, customStatuses))
+}
+
+/**
+ * Derive the fixed top section: active Sessions plus every row the user
+ * flagged for attention. Completed and finalized Sessions stay in their
+ * groups; plain idle rows stay out of the section entirely.
+ * @param list - sessions list snapshot.
+ * @param archivedSessionIds - registry-global archive set.
+ * @param statuses - unified UI status by Session.
+ * @param customStatuses - browser-local user status per Session.
+ * @param limit - maximum rows in the section.
+ * @returns newest-first rows that are running, unread, waiting, or marked for later.
+ */
+export function deriveRecentAndInProgress(
+  list: SessionListState,
+  archivedSessionIds: readonly SessionId[],
+  statuses: SessionStatuses,
+  customStatuses: Readonly<Record<string, CustomSessionStatus | undefined>>,
+  limit = 6,
+): SessionNode[] {
+  const ordered = orderByRecency(visibleSessionIds(list, archivedSessionIds), list.byId)
+  return deriveFlat(list, ordered, statuses, customStatuses)
+    .filter(node => node.customStatus !== 'completed'
+      && node.customStatus !== 'finalized'
+      && node.customStatus !== 'idle'
+      && (node.running
+        || node.runningSubagentCount > 0
+        || node.pendingInteraction !== undefined
+        || node.completed
+        || node.customStatus === 'later'
+        || node.customStatus === 'warning'
+        || node.customStatus === 'unread'))
+    .slice(0, limit)
 }
 
 /**
