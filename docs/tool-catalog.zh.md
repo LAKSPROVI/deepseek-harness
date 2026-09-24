@@ -2294,6 +2294,93 @@ Create one named, durable teammate from custom parameters or from a saved templa
 
 Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
+### Lê o debate estruturado atual, com revisão CAS, rodada, fase, status e histórico de transições.
+
+Read the current structured debate, its CAS revision, round, phase, status, and transition history.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### Inicia um debate estruturado da equipe. Apenas o Team Lead.
+
+Start one structured Team debate. Team Lead only.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "topic": {
+      "type": "string",
+      "description": "Question or proposition the Team must debate."
+    },
+    "participants": {
+      "type": "array",
+      "description": "Two through ten unique Team member names, including lead when it participates.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "max_rounds": {
+      "type": "integer",
+      "description": "Maximum complete debate rounds. Defaults to 2."
+    }
+  },
+  "required": [
+    "topic",
+    "participants"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### Compara-e-troca uma transição de debate estruturado. Apenas o Team Lead.
+
+Compare-and-set a structured debate transition. Team Lead only.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "debate_id": {
+      "type": "string",
+      "description": "Current debate id."
+    },
+    "expected_revision": {
+      "type": "integer",
+      "description": "Current debate revision."
+    },
+    "action": {
+      "type": "string",
+      "description": "Protocol transition. Pausing does not interrupt active model turns.",
+      "enum": [
+        "pause",
+        "resume",
+        "advance",
+        "complete"
+      ]
+    },
+    "note": {
+      "type": "string",
+      "description": "Short audit note about completed work or the human instruction."
+    }
+  },
+  "required": [
+    "debate_id",
+    "expected_revision",
+    "action"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
 ### Interrompe e demite todos os teammates ativos, ou teammates nomeados específicos, em uma única chamada em lote para limpar a equipe.
 
 Interrupt and dismiss all active teammates, or specific named teammates, in one batch call to clean up the team.

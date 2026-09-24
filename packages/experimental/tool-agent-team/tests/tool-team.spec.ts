@@ -46,6 +46,9 @@ const TOOL_NAMES = [
   'team_squad_delete',
   'team_squad_spawn',
   'team_roster_dismiss',
+  'team_debate_start',
+  'team_debate_get',
+  'team_debate_update',
 ].sort()
 
 const roots: string[] = []

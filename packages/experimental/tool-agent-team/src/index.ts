@@ -3,7 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { TeamTaskId } from '@deepseek-ai/dsh-experimental-agent-team'
+import { TeamDebateId, TeamTaskId } from '@deepseek-ai/dsh-experimental-agent-team'
 import type { TeamMemberView } from '@deepseek-ai/dsh-experimental-agent-team'
 import type {
   SavedTeamSquad, SavedTeamTemplate, TeamTemplateSettings,
@@ -247,6 +247,45 @@ const ROSTER_DISMISS_VALUE_SCHEMA = {
     dismissedCount: { type: 'integer', required: true },
     dismissedNames: { type: 'array', required: true, items: { type: 'string' } },
   },
+} as const
+
+const DEBATE_PHASE_SCHEMA = {
+  type: 'string', enum: ['positions', 'critique', 'rebuttal', 'verification', 'synthesis'],
+} as const
+
+const DEBATE_TRANSITION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    revision: { type: 'integer', required: true },
+    round: { type: 'integer', required: true },
+    phase: { ...DEBATE_PHASE_SCHEMA, required: true },
+    status: { type: 'string', required: true, enum: ['active', 'paused', 'completed'] },
+    actor: { type: 'string', required: true },
+    note: { type: 'string' },
+  },
+} as const
+
+const DEBATE_VIEW_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', required: true },
+    revision: { type: 'integer', required: true },
+    topic: { type: 'string', required: true },
+    status: { type: 'string', required: true, enum: ['active', 'paused', 'completed'] },
+    phase: { ...DEBATE_PHASE_SCHEMA, required: true },
+    round: { type: 'integer', required: true },
+    maxRounds: { type: 'integer', required: true },
+    participants: { type: 'array', required: true, items: { type: 'string' } },
+    history: { type: 'array', required: true, items: DEBATE_TRANSITION_SCHEMA },
+  },
+} as const
+
+const DEBATE_GET_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { debate: DEBATE_VIEW_SCHEMA },
 } as const
 
 /**
@@ -759,6 +798,61 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           dismissedCount: dismissedNames.length,
           dismissedNames,
         }
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_debate_start',
+      description: 'Start one structured Team debate. Team Lead only.',
+      parameters: {
+        topic: { type: 'string', required: true, description: 'Question or proposition the Team must debate.' },
+        participants: {
+          type: 'array', required: true, items: { type: 'string' },
+          description: 'Two through ten unique Team member names, including lead when it participates.',
+        },
+        max_rounds: { type: 'integer', description: 'Maximum complete debate rounds. Defaults to 2.' },
+      },
+      output: jsonOutput(DEBATE_VIEW_SCHEMA),
+      async execute(args, exec) {
+        return await ctx.agentTeams.startDebate(callingAgent(exec.agent, 'team_debate_start'), {
+          topic: args.topic,
+          participants: args.participants,
+          ...(args.max_rounds === undefined ? {} : { maxRounds: args.max_rounds }),
+        })
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_debate_get',
+      description: 'Read the current structured debate, its CAS revision, round, phase, status, and transition history.',
+      parameters: {},
+      output: jsonOutput(DEBATE_GET_VALUE_SCHEMA),
+      async execute(_args, exec) {
+        const debate = ctx.agentTeams.getDebate(callingAgent(exec.agent, 'team_debate_get'))
+        return Promise.resolve(debate === undefined ? {} : { debate })
+      },
+    })))
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_debate_update',
+      description: 'Compare-and-set a structured debate transition. Team Lead only.',
+      parameters: {
+        debate_id: { type: 'string', required: true, description: 'Current debate id.' },
+        expected_revision: { type: 'integer', required: true, description: 'Current debate revision.' },
+        action: {
+          type: 'string', required: true, enum: ['pause', 'resume', 'advance', 'complete'],
+          description: 'Protocol transition. Pausing does not interrupt active model turns.',
+        },
+        note: { type: 'string', description: 'Short audit note about completed work or the human instruction.' },
+      },
+      output: jsonOutput(DEBATE_VIEW_SCHEMA),
+      async execute(args, exec) {
+        return await ctx.agentTeams.updateDebate(callingAgent(exec.agent, 'team_debate_update'), {
+          debateId: TeamDebateId(args.debate_id),
+          expectedRevision: args.expected_revision,
+          action: args.action,
+          ...(args.note === undefined ? {} : { note: args.note }),
+        })
       },
     })))
   } catch (error: unknown) {
