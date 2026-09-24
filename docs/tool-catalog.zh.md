@@ -2186,7 +2186,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `interrupt_agent`
 
-中断一名 teammate 的当前 turn，同时保留其待处理 inbox。仅 Team Lead 可用。
+Interrupt one teammate's current turn while preserving its pending inbox. Team Lead only.
 
 ```json
 {
@@ -2203,11 +2203,11 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
 ### `list_agents`
 
-列出 Lead 与所有持久 teammate，以及各自当前的运行时状态。
+List the Lead and every durable teammate with current runtime status.
 
 ```json
 {
@@ -2216,11 +2216,11 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
 ### `send_message`
 
-向另一名 Team member 发送一条持久消息。running target 会在最近的步骤边界收到消息；idle target 会启动一个 turn；inactive teammate 会冷恢复。
+Send one durable message to another Team member. A running target receives it at the nearest step boundary; an idle target starts a turn; an inactive teammate cold-resumes.
 
 ```json
 {
@@ -2242,11 +2242,11 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
-### `spawn_teammate`
+### Cria um teammate nomeado e durável a partir de parâmetros customizados ou de um template salvo. Apenas o Team Lead pode chamar esta tool.
 
-创建一名具名、持久的 teammate。只有 Team Lead 可以调用此工具。
+Create one named, durable teammate from custom parameters or from a saved template. Only the Team Lead may call this tool.
 
 ```json
 {
@@ -2254,15 +2254,19 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
   "properties": {
     "name": {
       "type": "string",
-      "description": "Unique lower-kebab-case teammate name."
+      "description": "Unique teammate name or natural label (e.g. \"revisor\"). Required unless template_id is used."
     },
     "description": {
       "type": "string",
-      "description": "Short description of the delegated responsibility."
+      "description": "Short description of the delegated responsibility. Required unless template_id is used."
     },
     "prompt": {
       "type": "string",
-      "description": "Complete initial task for the teammate."
+      "description": "Complete initial task for the teammate. Required unless template_id is used."
+    },
+    "template_id": {
+      "type": "string",
+      "description": "Optional saved teammate template ID. When provided, missing fields are populated from the saved template."
     },
     "context": {
       "type": "string",
@@ -2271,21 +2275,139 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
         "fresh",
         "fork"
       ]
+    },
+    "llm_provider": {
+      "type": "string",
+      "description": "Optional LLM adapter route (e.g. \"openai\", \"deepseek\", \"anthropic\"). Omit to inherit the Lead provider or template value."
+    },
+    "model": {
+      "type": "string",
+      "description": "Optional provider-owned model id (e.g. \"gpt-5\", \"deepseek-chat\"). Omit to inherit the Lead model or template value."
+    },
+    "persona": {
+      "type": "string",
+      "description": "Optional teammate-only system persona describing its role and constraints."
+    }
+  }
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### Interrompe e demite todos os teammates ativos, ou teammates nomeados específicos, em uma única chamada em lote para limpar a equipe.
+
+Interrupt and dismiss all active teammates, or specific named teammates, in one batch call to clean up the team.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "names": {
+      "type": "array",
+      "description": "Optional list of specific teammate names to dismiss. If omitted, all active teammates are dismissed.",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### Exclui um squad preset reutilizável das settings por id ou título.
+
+Delete a reusable squad preset from settings by id or title.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Squad id or title to delete."
     }
   },
   "required": [
-    "name",
-    "description",
-    "prompt"
+    "id"
   ]
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### Lista todos os squad presets multi-agent reutilizáveis salvos nas settings do sistema.
+
+List all reusable multi-agent squad presets saved in system settings.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### Salva ou atualiza um squad preset multi-agent reutilizável (1-9 membros) nas settings.
+
+Save or update a reusable multi-agent squad preset (1-9 members) in settings.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Optional unique squad ID. If omitted, derived from title."
+    },
+    "title": {
+      "type": "string",
+      "description": "User-facing title for the squad preset."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this squad does when instantiated."
+    },
+    "members": {
+      "type": "array",
+      "description": "One to nine squad members with name, description, prompt, context, and optional provider/model/persona."
+    }
+  },
+  "required": [
+    "title",
+    "description",
+    "members"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### Instancia um squad preset multi-agent inteiro nesta sessão em uma única operação em lote.
+
+Spawn an entire multi-agent squad preset in this session in one batch operation.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "squad_id": {
+      "type": "string",
+      "description": "Saved squad preset ID or title to instantiate."
+    }
+  },
+  "required": [
+    "squad_id"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
 ### `team_task_create`
 
-在共享 Team 任务板上创建一个无 owner 的 pending task。
+Create one unowned pending task on the shared Team task board.
 
 ```json
 {
@@ -2321,11 +2443,11 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
 ### `team_task_get`
 
-在修改或执行共享任务前，读取其完整的最新值。
+Read the complete latest value of one shared task before changing or executing it.
 
 ```json
 {
@@ -2342,11 +2464,11 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
 ### `team_task_list`
 
-列出共享任务，包括 readiness、owner、revision、blocker 与 write-scope warning。
+List shared tasks, including readiness, owner, revision, blockers, and write-scope warnings.
 
 ```json
 {
@@ -2381,11 +2503,11 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
 ### `team_task_update`
 
-使用 team_task_get 或 team_task_list 返回的最新 revision，对共享任务操作执行 compare-and-set。
+Compare-and-set a shared task action using the latest revision from team_task_get or team_task_list.
 
 ```json
 {
@@ -2448,11 +2570,104 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### Exclui um template de teammate reutilizável das settings por id ou título.
+
+Delete a reusable teammate template from settings by id or title.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Template id or title to delete."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### Lista todos os templates de teammate reutilizáveis salvos nas settings do sistema.
+
+List all reusable teammate templates saved in system settings.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### Salva ou atualiza um template de teammate reutilizável nas settings para reuso entre sessões e equipes.
+
+Save or update a reusable teammate template in settings so it can be reused across sessions and teams.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Optional unique template ID. If omitted, derived from title."
+    },
+    "title": {
+      "type": "string",
+      "description": "User-facing title for the template (e.g. \"Pesquisador Jurídico Sênior\")."
+    },
+    "name": {
+      "type": "string",
+      "description": "Default member name. If omitted, derived from title."
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of the responsibility."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Default initial prompt/instructions for teammates created with this template."
+    },
+    "context": {
+      "type": "string",
+      "description": "Default context mode (fresh or fork). Defaults to fresh.",
+      "enum": [
+        "fresh",
+        "fork"
+      ]
+    },
+    "llm_provider": {
+      "type": "string",
+      "description": "Optional default LLM provider."
+    },
+    "model": {
+      "type": "string",
+      "description": "Optional default model ID."
+    },
+    "persona": {
+      "type": "string",
+      "description": "Optional default persona."
+    }
+  },
+  "required": [
+    "title",
+    "description",
+    "prompt"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
 ### `wait_agent`
 
-等待本次调用开始后下一次 teammate 状态、mailbox 或共享任务变更。它绝不会唤醒 inactive member；若没有其他 member 正在 running 或 provisioning，则立即返回 noProgress。唤醒或超时后应重新列出状态，而不是轮询。
+Wait for the next teammate status, mailbox, or shared-task change after this call starts. This never wakes inactive members and returns noProgress immediately when no other member is running or provisioning. Re-list after wakeup or timeout instead of polling.
 
 ```json
 {
@@ -2466,10 +2681,9 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 }
 ```
 
-来源：[`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
-这 10 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。
-
+All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

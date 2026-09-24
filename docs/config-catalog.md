@@ -861,7 +861,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts:17`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts:28`](../packages/experimental/tool-agent-team/src/index.ts)
 
 <a id="deepseek-aidsh-file-reference-local"></a>
 
