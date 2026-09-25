@@ -14,6 +14,7 @@ import { teamProjectionDefinition } from './projection.ts'
 import { TeamRoster } from './roster.ts'
 import type { TeamMembership } from './roster.ts'
 import { TeamTaskBoard } from './task-board.ts'
+import { TeamDebateBoard } from './debate.ts'
 import { TeamId, TeamTaskId } from './types.ts'
 import type {
   Config,
@@ -22,18 +23,27 @@ import type {
   SendTeamMessageResult,
   SpawnTeammateRequest,
   SpawnTeammateResult,
+  StartTeamDebateRequest,
+  TeamDebateMutationResult,
+  TeamDebateSnapshot,
   TeamMemberView,
   TeamTaskMutationResult,
   TeamTaskView,
   TeamView,
   TeamWaitResult,
+  UpdateTeamDebateRequest,
   UpdateTeamTaskRequest,
 } from './types.ts'
 
 export type * from './types.ts'
 export type { TeamMembership } from './roster.ts'
-export { TeamId, TeamMessageId, TeamTaskId } from './types.ts'
+export { TeamId, TeamMessageId, TeamTaskId, TeamDebateId } from './types.ts'
 export { TeamError } from './error.ts'
+export type { SavedSquadMember, SavedTeamSquad, SavedTeamTemplate, TeamTemplateSettings } from './templates.ts'
+export {
+  MAX_TEAM_SQUAD_COUNT, MAX_TEAM_TEMPLATE_COUNT, TEAM_TEMPLATE_SETTINGS_NAMESPACE,
+  normalizeTeamMemberName, TeamTemplateSettingsSchema, validateTeamTemplateSettings,
+} from './templates.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -45,6 +55,7 @@ const DEFAULT_MAX_MEMBERS = 16
 const DEFAULT_MAX_TASKS = 256
 const DEFAULT_MAX_PENDING_MESSAGES = 64
 const DEFAULT_MAX_MESSAGE_BYTES = 65_536
+const DEFAULT_MAX_DEBATE_ROUNDS = 8
 const DEFAULT_DISPOSAL_TIMEOUT_MS = 5_000
 
 /** Validate one positive safe-integer deployment limit. */
@@ -64,6 +75,7 @@ export class TeamService extends TypertRemoteService {
     maxTasks: z.number().step(1).min(1).default(DEFAULT_MAX_TASKS),
     maxPendingMessagesPerMember: z.number().step(1).min(1).default(DEFAULT_MAX_PENDING_MESSAGES),
     maxMessageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_MESSAGE_BYTES),
+    maxDebateRounds: z.number().step(1).min(1).default(DEFAULT_MAX_DEBATE_ROUNDS),
     disposalTimeoutMs: z.number().step(1).min(1).default(DEFAULT_DISPOSAL_TIMEOUT_MS),
   })
 
@@ -76,6 +88,7 @@ export class TeamService extends TypertRemoteService {
   private readonly roster: TeamRoster
   private readonly mailbox: TeamMailbox
   private readonly tasks: TeamTaskBoard
+  private readonly debates: TeamDebateBoard
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'agentTeams')
@@ -87,6 +100,7 @@ export class TeamService extends TypertRemoteService {
         config.maxPendingMessagesPerMember ?? DEFAULT_MAX_PENDING_MESSAGES,
       ),
       maxMessageBytes: positiveLimit('maxMessageBytes', config.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES),
+      maxDebateRounds: positiveLimit('maxDebateRounds', config.maxDebateRounds ?? DEFAULT_MAX_DEBATE_ROUNDS),
       disposalTimeoutMs: positiveLimit(
         'disposalTimeoutMs',
         config.disposalTimeoutMs ?? DEFAULT_DISPOSAL_TIMEOUT_MS,
@@ -106,6 +120,7 @@ export class TeamService extends TypertRemoteService {
       this.config.maxMessageBytes,
     )
     this.tasks = new TeamTaskBoard(this.journal, this.config.maxTasks)
+    this.debates = new TeamDebateBoard(this.journal, this.roster, this.config.maxDebateRounds)
 
     ctx.on('session/event', (session, event) => { this.mailbox.observeSessionEvent(session, event) })
     ctx.on('agent/created', ({ agent }) => { this.scheduleRecovery(agent) })
@@ -204,6 +219,35 @@ export class TeamService extends TypertRemoteService {
   }
 
   /**
+   * Return the current durable Team debate, when present.
+   * @param caller - exact live Team member reading the debate.
+   * @returns the current debate snapshot, or undefined when none exists.
+   */
+  getDebate(caller: Agent): TeamDebateSnapshot | undefined {
+    return this.debates.get(this.roster.membership(caller))
+  }
+
+  /**
+   * Create a revision-one active structured debate. Lead only.
+   * @param caller - exact live Team Lead starting the debate.
+   * @param request - debate topic, participants, and optional round limit.
+   * @returns the revision-one active debate snapshot.
+   */
+  async startDebate(caller: Agent, request: StartTeamDebateRequest): Promise<TeamDebateSnapshot> {
+    return await this.debates.start(caller, request)
+  }
+
+  /**
+   * Compare-and-set one Lead-authorized debate transition.
+   * @param caller - exact live Team Lead authorizing the transition.
+   * @param request - debate identity, expected revision, action, and optional note.
+   * @returns the committed next debate revision.
+   */
+  async updateDebate(caller: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateSnapshot> {
+    return await this.debates.update(caller, request)
+  }
+
+  /**
    * Wait for the next Team-domain or member-status change.
    * @param caller - exact live Team member waiting for activity.
    * @param timeoutMs - bounded wait duration from ten seconds through one hour.
@@ -244,6 +288,54 @@ export class TeamService extends TypertRemoteService {
     return {
       members: this.listMembers(agent),
       tasks: this.listTasks(agent),
+    }
+  }
+
+  /**
+   * Read the current structured debate through the generated Remote API.
+   * @param agent - exact live Team member reading the debate.
+   * @returns the current debate snapshot, or undefined when none exists.
+   */
+  @Remote('getDebate')
+  remoteGetDebate(agent: Agent): TeamDebateSnapshot | undefined {
+    return this.getDebate(agent)
+  }
+
+  /**
+   * Start one structured debate through the generated Remote API.
+   * @param agent - exact live Team Lead starting the debate.
+   * @param request - debate topic, participants, and optional round limit.
+   * @returns the revision-one active debate or a typed Team rejection.
+   */
+  @Remote('startDebate')
+  remoteStartDebate(agent: Agent, request: StartTeamDebateRequest): Promise<TeamDebateMutationResult> {
+    return this.debateMutationResult(this.startDebate(agent, request))
+  }
+
+  /**
+   * Compare-and-set one debate transition through the generated Remote API.
+   * @param agent - exact live Team Lead authorizing the transition.
+   * @param request - debate identity, expected revision, action, and optional note.
+   * @returns the committed debate or a typed Team rejection.
+   */
+  @Remote('updateDebate')
+  remoteUpdateDebate(agent: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateMutationResult> {
+    return this.debateMutationResult(this.updateDebate(agent, request))
+  }
+
+  /** Preserve Team debate rejections while allowing unexpected failures to reject the Remote call. */
+  private async debateMutationResult(operation: Promise<TeamDebateSnapshot>): Promise<TeamDebateMutationResult> {
+    try {
+      return { ok: true, value: await operation }
+    } catch (error) {
+      if (!(error instanceof TeamError)) throw error
+      return {
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      }
     }
   }
 

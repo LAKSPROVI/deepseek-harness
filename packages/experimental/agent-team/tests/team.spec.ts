@@ -1849,4 +1849,59 @@ describe('Team mailbox and waiting', () => {
       phase: 'failed', error: 'settled elsewhere',
     })
   })
+
+  it('controls a two-round structured debate with Lead authority and revision CAS', async () => {
+    const { ctx, lead } = await setup(['hang'], { maxDebateRounds: 2 })
+    const created = await spawn(ctx, lead, 'debate-worker')
+    const worker = await waitRunning(ctx, created.member.id)
+
+    await expect(ctx.agentTeams.startDebate(worker, {
+      topic: 'Which implementation is safer?',
+      participants: ['lead', 'debate-worker'],
+    })).rejects.toMatchObject({ code: 'TEAM_LEAD_REQUIRED' })
+
+    let debate = await ctx.agentTeams.startDebate(lead, {
+      topic: 'Which implementation is safer?',
+      participants: ['lead', 'debate-worker'],
+      maxRounds: 2,
+    })
+    expect(debate).toMatchObject({ revision: 1, phase: 'positions', round: 1, status: 'active' })
+    await expect(ctx.agentTeams.startDebate(lead, {
+      topic: 'A competing debate', participants: ['lead', 'debate-worker'],
+    })).rejects.toMatchObject({ code: 'TEAM_DEBATE_ACTIVE' })
+
+    debate = await ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: debate.revision, action: 'pause', note: 'human review',
+    })
+    expect(debate.status).toBe('paused')
+    await expect(ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: debate.revision, action: 'advance',
+    })).rejects.toMatchObject({ code: 'TEAM_DEBATE_TRANSITION' })
+    debate = await ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: debate.revision, action: 'resume',
+    })
+    await expect(ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: 1, action: 'advance',
+    })).rejects.toMatchObject({ code: 'TEAM_DEBATE_STALE' })
+
+    const expected = [
+      ['critique', 1], ['rebuttal', 1], ['verification', 1], ['synthesis', 1],
+      ['positions', 2], ['critique', 2], ['rebuttal', 2], ['verification', 2], ['synthesis', 2],
+    ] as const
+    for (const [phase, round] of expected) {
+      debate = await ctx.agentTeams.updateDebate(lead, {
+        debateId: debate.id, expectedRevision: debate.revision, action: 'advance',
+      })
+      expect(debate).toMatchObject({ phase, round, status: 'active' })
+    }
+    debate = await ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: debate.revision, action: 'complete', note: 'human accepted synthesis',
+    })
+    expect(debate).toMatchObject({ status: 'completed', phase: 'synthesis', round: 2 })
+    expect(debate.history).toHaveLength(debate.revision)
+    expect(ctx.agentTeams.getDebate(lead)).toEqual(debate)
+
+    ctx.agentTeams.interrupt(lead, 'debate-worker')
+    await waitNoAgent(ctx, created.member.id)
+  })
 })

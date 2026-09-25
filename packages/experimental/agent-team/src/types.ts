@@ -40,6 +40,18 @@ export function TeamMessageId(id: string): TeamMessageId {
   return id as TeamMessageId
 }
 
+/** Stable identifier for one structured Team debate. */
+export type TeamDebateId = Branded<'TeamDebateId'>
+
+/**
+ * Brand a generated Team-debate identity.
+ * @param id - Team-local debate identity.
+ * @returns the same string branded as a Team debate identity.
+ */
+export function TeamDebateId(id: string): TeamDebateId {
+  return id as TeamDebateId
+}
+
 /** Durable teammate lifecycle. */
 export type TeamMemberPhase = 'provisioning' | 'active' | 'failed'
 
@@ -102,6 +114,55 @@ export interface TeamView {
   readonly tasks: TeamTaskView[]
 }
 
+/** Ordered deliberation stages within one debate round. */
+export type TeamDebatePhase = 'positions' | 'critique' | 'rebuttal' | 'verification' | 'synthesis'
+
+/** Human-controlled lifecycle of one structured debate. */
+export type TeamDebateStatus = 'active' | 'paused' | 'completed'
+
+/** One compact transition retained inside the whole debate snapshot. */
+export interface TeamDebateTransition {
+  readonly revision: number
+  readonly round: number
+  readonly phase: TeamDebatePhase
+  readonly status: TeamDebateStatus
+  readonly actor: string
+  readonly note?: string
+}
+
+/** Whole structured debate snapshot; every transition increments {@link revision}. */
+export interface TeamDebateSnapshot {
+  readonly id: TeamDebateId
+  readonly revision: number
+  readonly topic: string
+  readonly status: TeamDebateStatus
+  readonly phase: TeamDebatePhase
+  readonly round: number
+  readonly maxRounds: number
+  readonly participants: string[]
+  readonly history: TeamDebateTransition[]
+}
+
+/** Input for creating one structured Team debate. */
+export interface StartTeamDebateRequest {
+  readonly topic: string
+  readonly participants: readonly string[]
+  readonly maxRounds?: number
+}
+
+/** Input for one Lead-authorized compare-and-set debate transition. */
+export interface UpdateTeamDebateRequest {
+  readonly debateId: TeamDebateId
+  readonly expectedRevision: number
+  readonly action: 'pause' | 'resume' | 'advance' | 'complete'
+  readonly note?: string
+}
+
+/** Remote result for one debate mutation: the committed snapshot or a typed Team rejection. */
+export type TeamDebateMutationResult =
+  | { readonly ok: true; readonly value: TeamDebateSnapshot }
+  | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } }
+
 /** One peer message retained until its target Session records it. */
 export interface TeamMessageSnapshot {
   readonly id: TeamMessageId
@@ -136,6 +197,8 @@ export interface Config {
   readonly maxPendingMessagesPerMember?: number
   /** Maximum UTF-8 bytes in one complete sender-framed delivery. */
   readonly maxMessageBytes?: number
+  /** Maximum complete debate rounds one Team debate may run. */
+  readonly maxDebateRounds?: number
   /** Maximum milliseconds allowed for Team-owned runtime disposal. */
   readonly disposalTimeoutMs?: number
 }
@@ -221,6 +284,8 @@ declare module '@deepseek-ai/dsh-session/types' {
     'team/member': { version: 2; teamId: TeamId; member: TeamMemberSnapshot }
     /** Whole shared-task value, stored only in the Team Lead Session. */
     'team/task': { version: 2; teamId: TeamId; task: TeamTaskSnapshot }
+    /** Whole structured-debate value, stored only in the Team Lead Session. */
+    'team/debate': { version: 2; teamId: TeamId; debate: TeamDebateSnapshot }
     /** Durable mailbox enqueue, stored before delivery is attempted. */
     'team/message/queued': { version: 2; teamId: TeamId; message: TeamMessageSnapshot }
     /** Durable acknowledgement that the target Session recorded the message. */

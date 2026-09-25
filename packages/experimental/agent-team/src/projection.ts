@@ -6,6 +6,7 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent, SessionEventMap, SessionId } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type {
+  TeamDebateSnapshot,
   TeamId,
   TeamMemberSnapshot,
   TeamMessageId,
@@ -13,6 +14,7 @@ import type {
   TeamTaskSnapshot,
 } from './types.ts'
 import {
+  TeamDebateId as toTeamDebateId,
   TeamId as toTeamId,
   TeamMessageId as toTeamMessageId,
   TeamTaskId as toTeamTaskId,
@@ -29,6 +31,7 @@ const teamTaskIdSchema = z.string().min(1).refine((value) => {
   return match === null || Number.isSafeInteger(Number(match[1]))
 }, { message: 'numeric task id suffix must be a safe integer' }).transform(value => toTeamTaskId(value))
 const teamMessageIdSchema = z.string().min(1).transform(value => toTeamMessageId(value))
+const teamDebateIdSchema = z.string().min(1).transform(value => toTeamDebateId(value))
 
 const coreContentBlockTypes = new Set(['text', 'reasoning', 'image', 'tool-call', 'tool-result'])
 const imageAttachmentSchema = z.object({
@@ -110,6 +113,31 @@ const teamTaskEventSchema = z.object({
   task: teamTaskSnapshotSchema,
 }).strict() as z.ZodType<SessionEventMap['team/task']>
 
+const teamDebateSnapshotSchema = z.object({
+  id: teamDebateIdSchema,
+  revision: positiveSafeInteger,
+  topic: z.string(),
+  status: z.enum(['active', 'paused', 'completed']),
+  phase: z.enum(['positions', 'critique', 'rebuttal', 'verification', 'synthesis']),
+  round: positiveSafeInteger,
+  maxRounds: positiveSafeInteger,
+  participants: z.array(z.string()),
+  history: z.array(z.object({
+    revision: positiveSafeInteger,
+    round: positiveSafeInteger,
+    phase: z.enum(['positions', 'critique', 'rebuttal', 'verification', 'synthesis']),
+    status: z.enum(['active', 'paused', 'completed']),
+    actor: z.string(),
+    note: z.string().optional(),
+  }).strict()),
+}).strict() as z.ZodType<TeamDebateSnapshot>
+
+const teamDebateEventSchema = z.object({
+  version: z.literal(2),
+  teamId: teamIdSchema,
+  debate: teamDebateSnapshotSchema,
+}).strict() as z.ZodType<SessionEventMap['team/debate']>
+
 const teamMessageQueuedEventSchema = z.object({
   version: z.literal(2),
   teamId: teamIdSchema,
@@ -130,6 +158,7 @@ export interface TeamState {
   readonly tasks: TeamTaskSnapshot[]
   readonly messages: TeamMessageSnapshot[]
   readonly delivered: TeamMessageId[]
+  debate: TeamDebateSnapshot | undefined
   nextTaskNumber: number
 }
 
@@ -145,6 +174,7 @@ export function emptyTeamState(rootId: SessionId): TeamProjectionState {
     tasks: [],
     messages: [],
     delivered: [],
+    debate: undefined,
     nextTaskNumber: 1,
   }
 }
@@ -166,6 +196,7 @@ const teamProjectionEntrySchema = z.object({
   tasks: z.array(teamTaskSnapshotSchema),
   messages: z.array(teamMessageSnapshotSchema),
   delivered: z.array(teamMessageIdSchema),
+  debate: teamDebateSnapshotSchema.optional(),
   nextTaskNumber: positiveSafeInteger,
   failure: z.string().optional(),
 }).strict() as z.ZodType<TeamProjectionState>
@@ -174,6 +205,7 @@ const teamProjectionEntrySchema = z.object({
 export type TeamEventType =
   | 'team/member'
   | 'team/task'
+  | 'team/debate'
   | 'team/message/queued'
   | 'team/message/delivered'
 
@@ -188,6 +220,7 @@ type TeamSessionEvent = SessionEvent<TeamEventType>
 export function isTeamEvent(event: SessionEvent): event is TeamSessionEvent {
   return event.type === 'team/member'
     || event.type === 'team/task'
+    || event.type === 'team/debate'
     || event.type === 'team/message/queued'
     || event.type === 'team/message/delivered'
 }
@@ -208,6 +241,8 @@ function parseCurrentTeamEvent(event: TeamSessionEvent): TeamSessionEvent {
       return { ...event, data: parsePersisted(event.type, teamMemberEventSchema, event.data) }
     case 'team/task':
       return { ...event, data: parsePersisted(event.type, teamTaskEventSchema, event.data) }
+    case 'team/debate':
+      return { ...event, data: parsePersisted(event.type, teamDebateEventSchema, event.data) }
     case 'team/message/queued':
       return { ...event, data: parsePersisted(event.type, teamMessageQueuedEventSchema, event.data) }
     case 'team/message/delivered':
@@ -279,6 +314,15 @@ function applyCurrentTeamEvent(state: TeamState, event: TeamSessionEvent): void 
       }
       if (index < 0) state.tasks.push(task)
       else state.tasks[index] = task
+      break
+    }
+    case 'team/debate': {
+      const debate = event.data.debate
+      const prior = state.debate
+      if (prior !== undefined && debate.revision !== prior.revision + 1) {
+        throw new Error(`team debate "${debate.id}" revision is not contiguous`)
+      }
+      state.debate = debate
       break
     }
     case 'team/message/queued': {
