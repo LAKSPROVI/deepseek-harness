@@ -399,6 +399,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the committed next task revision.',
       },
       {
+        signature: 'getDebate(caller: Agent): TeamDebateSnapshot | undefined',
+        description: 'Return the current durable Team debate, when present.',
+        parameters: [{ name: 'caller', description: 'exact live Team member reading the debate.' }],
+        returns: 'the current debate snapshot, or undefined when none exists.',
+      },
+      {
+        signature: 'async startDebate(caller: Agent, request: StartTeamDebateRequest): Promise<TeamDebateSnapshot>',
+        description: 'Create a revision-one active structured debate. Lead only.',
+        parameters: [{ name: 'caller', description: 'exact live Team Lead starting the debate.' }, { name: 'request', description: 'debate topic, participants, and optional round limit.' }],
+        returns: 'the revision-one active debate snapshot.',
+      },
+      {
+        signature: 'async updateDebate(caller: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateSnapshot>',
+        description: 'Compare-and-set one Lead-authorized debate transition.',
+        parameters: [{ name: 'caller', description: 'exact live Team Lead authorizing the transition.' }, { name: 'request', description: 'debate identity, expected revision, action, and optional note.' }],
+        returns: 'the committed next debate revision.',
+      },
+      {
         signature: 'async waitForChange(caller: Agent, timeoutMs: number, signal: AbortSignal): Promise<TeamWaitResult>',
         description: 'Wait for the next Team-domain or member-status change.',
         parameters: [{ name: 'caller', description: 'exact live Team member waiting for activity.' }, { name: 'timeoutMs', description: 'bounded wait duration from ten seconds through one hour.' }, { name: 'signal', description: 'caller cancellation for the wait only.' }],
@@ -421,6 +439,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read the current roster and non-deleted task board through the generated Remote API.',
         parameters: [{ name: 'agent', description: 'exact live Team member used as the authority credential.' }],
         returns: 'detached current roster and task views.',
+      },
+      {
+        signature: '@Remote(\'getDebate\') remoteGetDebate(agent: Agent): TeamDebateSnapshot | undefined',
+        description: 'Read the current structured debate through the generated Remote API.',
+        parameters: [{ name: 'agent', description: 'exact live Team member reading the debate.' }],
+        returns: 'the current debate snapshot, or undefined when none exists.',
+      },
+      {
+        signature: '@Remote(\'startDebate\') remoteStartDebate(agent: Agent, request: StartTeamDebateRequest): Promise<TeamDebateMutationResult>',
+        description: 'Start one structured debate through the generated Remote API.',
+        parameters: [{ name: 'agent', description: 'exact live Team Lead starting the debate.' }, { name: 'request', description: 'debate topic, participants, and optional round limit.' }],
+        returns: 'the revision-one active debate or a typed Team rejection.',
+      },
+      {
+        signature: '@Remote(\'updateDebate\') remoteUpdateDebate(agent: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateMutationResult>',
+        description: 'Compare-and-set one debate transition through the generated Remote API.',
+        parameters: [{ name: 'agent', description: 'exact live Team Lead authorizing the transition.' }, { name: 'request', description: 'debate identity, expected revision, action, and optional note.' }],
+        returns: 'the committed debate or a typed Team rejection.',
       },
       {
         signature: '@Remote(\'createTask\') remoteCreateTask(agent: Agent, request: CreateTeamTaskRequest): Promise<TeamTaskMutationResult>',
@@ -6333,6 +6369,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SshStreamEndpoint = z.infer<typeof streamEndpointSchema>;',
   },
   {
+    name: 'StartTeamDebateRequest',
+    declaration: 'export interface StartTeamDebateRequest {\n    readonly topic: string;\n    readonly participants: readonly string[];\n    readonly maxRounds?: number;\n}',
+  },
+  {
     name: 'StorageBackend',
     declaration: 'export interface StorageBackend {\n    readonly kv?: KvFacet;\n    close(): Promise<void>;\n}',
   },
@@ -6531,6 +6571,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TableValueOf',
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
+  },
+  {
+    name: 'TeamDebateId',
+    declaration: 'export type TeamDebateId = Branded<\'TeamDebateId\'>;',
+  },
+  {
+    name: 'TeamDebateMutationResult',
+    declaration: 'export type TeamDebateMutationResult = {\n    readonly ok: true;\n    readonly value: TeamDebateSnapshot;\n} | {\n    readonly ok: false;\n    readonly error: {\n        readonly code: string;\n        readonly message: string;\n    };\n};',
+  },
+  {
+    name: 'TeamDebatePhase',
+    declaration: 'export type TeamDebatePhase = \'positions\' | \'critique\' | \'rebuttal\' | \'verification\' | \'synthesis\';',
+  },
+  {
+    name: 'TeamDebateSnapshot',
+    declaration: 'export interface TeamDebateSnapshot {\n    readonly id: TeamDebateId;\n    readonly revision: number;\n    readonly topic: string;\n    readonly status: TeamDebateStatus;\n    readonly phase: TeamDebatePhase;\n    readonly round: number;\n    readonly maxRounds: number;\n    readonly participants: string[];\n    readonly history: TeamDebateTransition[];\n}',
+  },
+  {
+    name: 'TeamDebateStatus',
+    declaration: 'export type TeamDebateStatus = \'active\' | \'paused\' | \'completed\';',
+  },
+  {
+    name: 'TeamDebateTransition',
+    declaration: 'export interface TeamDebateTransition {\n    readonly revision: number;\n    readonly round: number;\n    readonly phase: TeamDebatePhase;\n    readonly status: TeamDebateStatus;\n    readonly actor: string;\n    readonly note?: string;\n}',
   },
   {
     name: 'TeamId',
@@ -6919,6 +6983,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TypertTypeModel',
     declaration: 'export interface TypertTypeModel {\n    readonly name: string;\n    readonly declaration: string;\n}',
+  },
+  {
+    name: 'UpdateTeamDebateRequest',
+    declaration: 'export interface UpdateTeamDebateRequest {\n    readonly debateId: TeamDebateId;\n    readonly expectedRevision: number;\n    readonly action: \'pause\' | \'resume\' | \'advance\' | \'complete\';\n    readonly note?: string;\n}',
   },
   {
     name: 'UpdateTeamTaskRequest',

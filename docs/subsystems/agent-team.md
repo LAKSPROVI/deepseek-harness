@@ -73,6 +73,54 @@ interface TeamTaskSnapshot {
 
 `pending` is unstarted or released, `in_progress` carries an owner, `completed` satisfies blockers, and `deleted` is a retained tombstone. Views add owner name, readiness, and write-scope overlap warnings without changing the durable snapshot.
 
+## Structured debates
+
+The Team Lead runs at most one structured debate at a time. Each state lives as
+one whole-value snapshot with compare-and-set revisions; transitions append to
+its history and advance through five phases over up to `maxRounds` rounds.
+
+```ts type-equiv
+/** Input for creating one structured Team debate. */
+interface StartTeamDebateRequest {
+  readonly topic: string
+  readonly participants: readonly string[]
+  readonly maxRounds?: number
+}
+```
+
+```ts type-equiv
+/** Whole structured debate snapshot; every transition increments {@link revision}. */
+interface TeamDebateSnapshot {
+  readonly id: TeamDebateId
+  readonly revision: number
+  readonly topic: string
+  readonly status: TeamDebateStatus
+  readonly phase: TeamDebatePhase
+  readonly round: number
+  readonly maxRounds: number
+  readonly participants: string[]
+  readonly history: TeamDebateTransition[]
+}
+```
+
+```ts type-equiv
+/** Input for one Lead-authorized compare-and-set debate transition. */
+interface UpdateTeamDebateRequest {
+  readonly debateId: TeamDebateId
+  readonly expectedRevision: number
+  readonly action: 'pause' | 'resume' | 'advance' | 'complete'
+  readonly note?: string
+}
+```
+
+```ts type-equiv
+/** Remote result for one debate mutation: the committed snapshot or a typed Team rejection. */
+type TeamDebateMutationResult =
+  | { readonly ok: true; readonly value: TeamDebateSnapshot }
+  | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } }
+```
+
+
 ## Replay
 
 `foldTeam()` replays one root Session into the roster, task board, and queued-minus-delivered mailbox that every Team operation reads. It selects records by `TeamId`, so events inherited by an ordinary fork retain the ancestor id and never enter the new root's state. Session event `seq` and `time` remain the ordering and timing record; Team snapshots do not duplicate them. Roster and task reads reach callers as views; pending mail stays internal to delivery and recovery. The package [README](../../packages/experimental/agent-team/README.md) owns operation, authorization, recovery, and limit behavior.
@@ -154,6 +202,29 @@ listTasks(caller: Agent): TeamTaskView[]
 async updateTask(caller: Agent, request: UpdateTeamTaskRequest): Promise<TeamTaskView>
 
 /**
+ * Return the current durable Team debate, when present.
+ * @param caller - exact live Team member reading the debate.
+ * @returns the current debate snapshot, or undefined when none exists.
+ */
+getDebate(caller: Agent): TeamDebateSnapshot | undefined
+
+/**
+ * Create a revision-one active structured debate. Lead only.
+ * @param caller - exact live Team Lead starting the debate.
+ * @param request - debate topic, participants, and optional round limit.
+ * @returns the revision-one active debate snapshot.
+ */
+async startDebate(caller: Agent, request: StartTeamDebateRequest): Promise<TeamDebateSnapshot>
+
+/**
+ * Compare-and-set one Lead-authorized debate transition.
+ * @param caller - exact live Team Lead authorizing the transition.
+ * @param request - debate identity, expected revision, action, and optional note.
+ * @returns the committed next debate revision.
+ */
+async updateDebate(caller: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateSnapshot>
+
+/**
  * Wait for the next Team-domain or member-status change.
  * @param caller - exact live Team member waiting for activity.
  * @param timeoutMs - bounded wait duration from ten seconds through one hour.
@@ -183,6 +254,29 @@ tryMembership(agent: Agent): TeamMembership | undefined
  * @returns detached current roster and task views.
  */
 @Remote('view') remoteView(agent: Agent): TeamView
+
+/**
+ * Read the current structured debate through the generated Remote API.
+ * @param agent - exact live Team member reading the debate.
+ * @returns the current debate snapshot, or undefined when none exists.
+ */
+@Remote('getDebate') remoteGetDebate(agent: Agent): TeamDebateSnapshot | undefined
+
+/**
+ * Start one structured debate through the generated Remote API.
+ * @param agent - exact live Team Lead starting the debate.
+ * @param request - debate topic, participants, and optional round limit.
+ * @returns the revision-one active debate or a typed Team rejection.
+ */
+@Remote('startDebate') remoteStartDebate(agent: Agent, request: StartTeamDebateRequest): Promise<TeamDebateMutationResult>
+
+/**
+ * Compare-and-set one debate transition through the generated Remote API.
+ * @param agent - exact live Team Lead authorizing the transition.
+ * @param request - debate identity, expected revision, action, and optional note.
+ * @returns the committed debate or a typed Team rejection.
+ */
+@Remote('updateDebate') remoteUpdateDebate(agent: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateMutationResult>
 
 /**
  * Create one shared task through the generated Remote API.
