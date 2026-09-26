@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-08-idempotent-sandbox-mode-requests.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-08-idempotent-sandbox-mode-requests.md
-2026-09-08-idempotent-sandbox-mode-requests.md: 562706201bfcf8566c4c85960e376202bfebe689
-2026-09-08-idempotent-sandbox-mode-requests.zh.md: 473329b2130fc5da040ee5b60a51c0a440fbd144
+/agent-note-idempotent-same-mode-sandbox-requests:
+  en: d6a03bcb6f3113a9
+  zh: ea63df37497fa645
+/agent-note-idempotent-same-mode-sandbox-requests/problem:
+  en: 5ee45476f1c97fb9
+  zh: 6056a4c4b9dd6602
+/agent-note-idempotent-same-mode-sandbox-requests/decision:
+  en: 3f5689b6079d2d47
+  zh: 426cbfb0617bc137
+/agent-note-idempotent-same-mode-sandbox-requests/alternatives-considered:
+  en: 158d437016fc5226
+  zh: 572c92344bc4828f
+/agent-note-idempotent-same-mode-sandbox-requests/consequences:
+  en: 24998db6e57d30bd
+  zh: a1beb0bdb19f337c

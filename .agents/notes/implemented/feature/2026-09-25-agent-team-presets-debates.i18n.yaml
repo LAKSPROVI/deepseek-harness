@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-25-agent-team-presets-debates.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-25-agent-team-presets-debates.md
-2026-09-25-agent-team-presets-debates.md: 7141482487748a4a79fd1e8f4d357d4d2dfef207
-2026-09-25-agent-team-presets-debates.zh.md: 2614f411748f722098b41b02f704cf500e13b552
+/agent-note-agent-teams-reusable-presets-and-structured-debates:
+  en: 8a20dbd006bedf4f
+  zh: 743cd46f1a441918
+/agent-note-agent-teams-reusable-presets-and-structured-debates/problem:
+  en: cc3c9995fdb25b98
+  zh: 27767510e8f09722
+/agent-note-agent-teams-reusable-presets-and-structured-debates/decision:
+  en: 320fadecdaac532b
+  zh: e705f400bdf75491
+/agent-note-agent-teams-reusable-presets-and-structured-debates/alternatives-considered:
+  en: 4a164056f336da86
+  zh: ab4e0a9f351d1496
+/agent-note-agent-teams-reusable-presets-and-structured-debates/consequences:
+  en: 726000038759a0c6
+  zh: 6fa5dbd80016f410
+/agent-note-agent-teams-reusable-presets-and-structured-debates/testing:
+  en: ad2db09279840c70
+  zh: 3ca5bc6d0f797224

@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-10-automation-remote-panel.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-10-automation-remote-panel.md
-2026-09-10-automation-remote-panel.md: 4505a2c32bf2f2c2585827105347335b900dc620
-2026-09-10-automation-remote-panel.zh.md: 0d494e3b166fd80313fe3040ecfb1de8bd14b299
+/agent-note-persistent-automation-remote-panel:
+  en: e1a41ffc6c76b555
+  zh: 2d6efa492556de23
+/agent-note-persistent-automation-remote-panel/problem:
+  en: ee9d22b81ca0fca0
+  zh: e44790da31b38f37
+/agent-note-persistent-automation-remote-panel/decision:
+  en: 55d56234cf0687ff
+  zh: cb38ffd31367de82
+/agent-note-persistent-automation-remote-panel/alternatives-considered:
+  en: c4cd03dcea525dc7
+  zh: ae6c8c97d196d3c6
+/agent-note-persistent-automation-remote-panel/consequences:
+  en: 93b11298b623ab88
+  zh: a6e7db4debe1ebe5
+/agent-note-persistent-automation-remote-panel/risks:
+  en: f5ce9ed625da2d29
+  zh: 69e1c13d3829c29c

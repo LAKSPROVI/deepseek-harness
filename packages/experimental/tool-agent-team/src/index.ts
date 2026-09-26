@@ -773,7 +773,7 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
         }
         return {
           squadId: found.id,
-          spawnedMembers,
+          spawnedMembers: spawnedMembers.map(modelMember),
         }
       },
     })))

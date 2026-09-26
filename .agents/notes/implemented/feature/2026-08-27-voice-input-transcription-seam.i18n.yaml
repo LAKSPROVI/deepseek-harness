@@ -1,6 +1,34 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-08-27-voice-input-transcription-seam.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-27-voice-input-transcription-seam.md
-2026-08-27-voice-input-transcription-seam.md: 0c48af8dec188ec74b090f30278bff9f7b623f79
-2026-08-27-voice-input-transcription-seam.zh.md: bf3d93f6196563beedcdd7b290993a110533e932
+/agent-note-voice-input-as-a-transcription-capability-seam:
+  en: eec57a56fe7e6d2c
+  zh: 7b101c5d67a27c43
+/agent-note-voice-input-as-a-transcription-capability-seam/problem:
+  en: 27191705e96ea713
+  zh: c292e0719599a095
+/agent-note-voice-input-as-a-transcription-capability-seam/decision:
+  en: 10b1081685f5eb17
+  zh: 1500bda0508fd4c0
+/agent-note-voice-input-as-a-transcription-capability-seam/decision/the-seam-owns-every-transcription-policy:
+  en: 8092f7854a34039c
+  zh: 4cfe06a8c7d407f2
+/agent-note-voice-input-as-a-transcription-capability-seam/decision/audio-runs-on-the-host-and-stays-transient:
+  en: 3e1f6fd79c4656e1
+  zh: 04ec0eb3c9007f03
+/agent-note-voice-input-as-a-transcription-capability-seam/decision/audio-travels-base64-over-the-existing-rpc:
+  en: 87a044d6a0f02b89
+  zh: c3fec26aae58e72c
+/agent-note-voice-input-as-a-transcription-capability-seam/decision/failures-are-values-faults-are-exceptions:
+  en: 177d5740b694b6f1
+  zh: a40472985456b3a6
+/agent-note-voice-input-as-a-transcription-capability-seam/decision/the-provider-refuses-redirects:
+  en: 732cc08a41e9d571
+  zh: ba9a15d063dc1ae5
+/agent-note-voice-input-as-a-transcription-capability-seam/alternatives-considered:
+  en: 12ae34593679578b
+  zh: f06bdd9110270057
+/agent-note-voice-input-as-a-transcription-capability-seam/consequences:
+  en: 4b72c7275f764cac
+  zh: 810795366427dd8a

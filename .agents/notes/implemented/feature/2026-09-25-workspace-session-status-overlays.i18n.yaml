@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-25-workspace-session-status-overlays.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-25-workspace-session-status-overlays.md
-2026-09-25-workspace-session-status-overlays.md: 2f506a5f3b4659bef87bb5da8d12300fddb27760
-2026-09-25-workspace-session-status-overlays.zh.md: d3f12146cac50059762bdf0a656b2439444be1f5
+/agent-note-browser-local-session-status-overlays-and-the-fixed-recentes-section:
+  en: 095363bfe8db5f33
+  zh: 77583bd8e1f6771a
+/agent-note-browser-local-session-status-overlays-and-the-fixed-recentes-section/problem:
+  en: 8a484b2160c2d622
+  zh: e6a9881f91fd86f4
+/agent-note-browser-local-session-status-overlays-and-the-fixed-recentes-section/decision:
+  en: 0cdc7cce26876906
+  zh: f638be29127f84d6
+/agent-note-browser-local-session-status-overlays-and-the-fixed-recentes-section/alternatives-considered:
+  en: d94bb179267f7137
+  zh: 303314911e0b3a97
+/agent-note-browser-local-session-status-overlays-and-the-fixed-recentes-section/consequences:
+  en: f8f10f5b39bd9ee1
+  zh: 67be6ba7ba21a466
+/agent-note-browser-local-session-status-overlays-and-the-fixed-recentes-section/testing:
+  en: 5b85660788944ff4
+  zh: d3eb83c5d5cefd9c

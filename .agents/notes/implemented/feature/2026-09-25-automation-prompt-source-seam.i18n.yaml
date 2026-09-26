@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-25-automation-prompt-source-seam.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-25-automation-prompt-source-seam.md
-2026-09-25-automation-prompt-source-seam.md: a132782c07a0a9a257c33f53f55518d3c331d01b
-2026-09-25-automation-prompt-source-seam.zh.md: 80899f07180ae6b3b40aadf253545aa69fc484ce
+/agent-note-automation-prompt-messages-cross-the-opaque-messagesource-seam:
+  en: a0286b4d168dc57c
+  zh: 414533965d25a84d
+/agent-note-automation-prompt-messages-cross-the-opaque-messagesource-seam/problem:
+  en: 7c85ffc8a56910cb
+  zh: e84aa65b43536fa2
+/agent-note-automation-prompt-messages-cross-the-opaque-messagesource-seam/decision:
+  en: fa93e5ad4a01d0e9
+  zh: b3a4768b637ecb58
+/agent-note-automation-prompt-messages-cross-the-opaque-messagesource-seam/alternatives-considered:
+  en: 07db5a2b11eab865
+  zh: 96a73366c7bb2df5
+/agent-note-automation-prompt-messages-cross-the-opaque-messagesource-seam/consequences:
+  en: 74b14fe55f9c167a
+  zh: 4f1bfec5d9bbafe2
+/agent-note-automation-prompt-messages-cross-the-opaque-messagesource-seam/testing:
+  en: 6040bdc8e69ba83b
+  zh: e68e86e4bad93653

@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-09-bounded-cold-session-history-memory.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-09-bounded-cold-session-history-memory.md
-2026-09-09-bounded-cold-session-history-memory.md: 9c76c87ab918bdbfefc3551f305248d1da2951fe
-2026-09-09-bounded-cold-session-history-memory.zh.md: 546480d140210051d69e711ee23512f1f7d7ed0e
+/agent-note-bounded-cold-session-history-memory:
+  en: d9294d8cef0d92db
+  zh: f3cbdc9a1c64be1e
+/agent-note-bounded-cold-session-history-memory/problem:
+  en: deb7155645262866
+  zh: 16933326ab44e51e
+/agent-note-bounded-cold-session-history-memory/decision:
+  en: a305a815b3deb941
+  zh: 33a626ad992cea6a
+/agent-note-bounded-cold-session-history-memory/alternatives-considered:
+  en: 2cfeaeabd8598e87
+  zh: 0d1725722825d90a
+/agent-note-bounded-cold-session-history-memory/consequences:
+  en: 1a6a66e8731036b8
+  zh: f8f8e84c55adb479

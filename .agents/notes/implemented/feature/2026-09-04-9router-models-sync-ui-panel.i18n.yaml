@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-04-9router-models-sync-ui-panel.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-04-9router-models-sync-ui-panel.md
-2026-09-04-9router-models-sync-ui-panel.md: 10659d0aef40b6a4fb7d7a0fff71d851fbd3ed43
-2026-09-04-9router-models-sync-ui-panel.zh.md: 3e8fce60f8280792b608fef4d7422992dd6f8d52
+/agent-note-9router-dynamic-models-synchronization-ui-and-remote-methods:
+  en: 6110b1af1128d35f
+  zh: 46775756a0773780
+/agent-note-9router-dynamic-models-synchronization-ui-and-remote-methods/problem:
+  en: 8714221eab1f5947
+  zh: 35383c1b74f198b0
+/agent-note-9router-dynamic-models-synchronization-ui-and-remote-methods/decision:
+  en: 6ab7157692a72c9b
+  zh: 9f0ed3bea942ad0a
+/agent-note-9router-dynamic-models-synchronization-ui-and-remote-methods/alternatives-considered:
+  en: 6a6ff33e6574291a
+  zh: 0bf6dfadf9c1d73d
+/agent-note-9router-dynamic-models-synchronization-ui-and-remote-methods/consequences:
+  en: e9d3eaad17cb9bdb
+  zh: db242a62914d48d9
+/agent-note-9router-dynamic-models-synchronization-ui-and-remote-methods/verification:
+  en: 6a282129b7c88273
+  zh: 0495c78a55b1325b

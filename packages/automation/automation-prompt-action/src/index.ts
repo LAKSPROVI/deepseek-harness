@@ -172,7 +172,9 @@ export async function openPromptSession(
   const permissionPreset = payload.permissionPreset ?? config.permissionPreset ?? ctx.permissionPresets.defaultPreset
   ctx.permissionPresets.resolve(permissionPreset)
   const preset = await ctx.agentPresets.resolve(payload.agentPreset ?? config.agentPreset)
-  await ctx.agentPresets.standingKeyFor(preset.id)
+  if (preset.broken !== undefined) {
+    throw new Error(`agent preset "${preset.id}" is unavailable: ${preset.broken}`)
+  }
   const selected = ctx.agentDefaultModel.currentSelection()
   const modelSelection: ModelSelection = { ...selected }
 

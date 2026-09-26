@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-09-v2-file-media-type-migration.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-09-v2-file-media-type-migration.md
-2026-09-09-v2-file-media-type-migration.md: f5612fcb4f1f8f0fbd212838a590eed72267a1a2
-2026-09-09-v2-file-media-type-migration.zh.md: 3e6975ba184a23dbd34cd9a2789d05ee42235b33
+/agent-note-v2-legacy-file-media-type-migration:
+  en: 5284e5e2d297e38e
+  zh: 45d327e18534d983
+/agent-note-v2-legacy-file-media-type-migration/problem:
+  en: 5c6bbd005c3c2816
+  zh: 3f9bbf5611a64380
+/agent-note-v2-legacy-file-media-type-migration/decision:
+  en: 1fb34dbad5a73884
+  zh: 46ece21ff45b4a13
+/agent-note-v2-legacy-file-media-type-migration/alternatives-considered:
+  en: b86a0fc0378bd2a9
+  zh: d00e05485108e83f
+/agent-note-v2-legacy-file-media-type-migration/consequences:
+  en: a4624008fa436f68
+  zh: 782953fb8a65f9e6
