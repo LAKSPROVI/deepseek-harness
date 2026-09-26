@@ -1,6 +1,25 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/automation/README.md
-README.md: 05ca12420d062a6fd368e53c7593202d616111c5
-README.zh.md: 5c49fd6adefbab6ea74a9e34ef79a915e541367d
+/:
+  en: b83a26c24d432335
+  zh: cdf11ffbe4077861
+/automation-durable-scheduled-tasks:
+  en: 0be78faad7cc23c3
+  zh: 5fe69802c1b8af18
+/automation-durable-scheduled-tasks/summary:
+  en: 8df3bbb6054cefc7
+  zh: 526b840e6f42b655
+/automation-durable-scheduled-tasks/table-of-contents:
+  en: 1eb35b015a6c423f
+  zh: a8a3dceee2c9e943
+/automation-durable-scheduled-tasks/packages:
+  en: 27e740b6b9fcd944
+  zh: b41094f67763005b
+/automation-durable-scheduled-tasks/related-documentation:
+  en: 33d0956753430b81
+  zh: e71bd00b802122c7
+/automation-durable-scheduled-tasks/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

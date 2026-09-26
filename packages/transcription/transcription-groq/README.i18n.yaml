@@ -1,6 +1,43 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/transcription/transcription-groq/README.md
-README.md: d8b406c86f5e0eda627ae495ab5b355bec7b0a48
-README.zh.md: 5480c5d357899c9d1a205b56cc476b8296a76f02
+/:
+  en: 504ad3996337c404
+  zh: 94cb998865587ac6
+/deepseek-ai-dsh-transcription-groq:
+  en: a485fc171e32e584
+  zh: 9f256b61d7f0d245
+/deepseek-ai-dsh-transcription-groq/summary:
+  en: 93d473645d6da186
+  zh: 594fa2a2c641a328
+/deepseek-ai-dsh-transcription-groq/table-of-contents:
+  en: 0c5747caf4a1dace
+  zh: 133c050eaa273ba2
+/deepseek-ai-dsh-transcription-groq/overview:
+  en: 6a1eab6c6080928b
+  zh: efa5753acfa549ec
+/deepseek-ai-dsh-transcription-groq/config:
+  en: b8d08ac0b5367038
+  zh: b2311aa1ac3be900
+/deepseek-ai-dsh-transcription-groq/the-request:
+  en: 61cfb83a70518d08
+  zh: 3ae45e40a962fbd5
+/deepseek-ai-dsh-transcription-groq/mapping:
+  en: 7976a8440070fcfd
+  zh: b8ed73a8fb80424e
+/deepseek-ai-dsh-transcription-groq/credentials-and-settings-per-call:
+  en: fd3eeea1d3ac0539
+  zh: dab5d3825ce07384
+/deepseek-ai-dsh-transcription-groq/model-experience:
+  en: 478b1d7ec295729d
+  zh: 29944b28c4096b95
+/deepseek-ai-dsh-transcription-groq/model-experience/kv-cache-effect:
+  en: b134eea2460ec282
+  zh: ddf22cb8d2cd8e99
+/deepseek-ai-dsh-transcription-groq/known-limitations-and-deferred-work:
+  en: 1f3768b30fd5baf3
+  zh: ec82e98d5727ac9e
+/deepseek-ai-dsh-transcription-groq/known-limitations-and-deferred-work/dev-note:
+  en: f9521438a65025b4
+  zh: 5e8b5e93105734a8

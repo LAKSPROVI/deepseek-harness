@@ -1,6 +1,43 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/transcription/voice-input/README.md
-README.md: 305d0b17fc5106a53a3b19293044a577439a0338
-README.zh.md: ac1dee1d91bdd0dc82e6a05a53a7b352e15e1ac2
+/:
+  en: 2097691df8be9f69
+  zh: 273d2ac08a90ab2d
+/deepseek-ai-dsh-voice-input:
+  en: 698adfba64331600
+  zh: f772736ba14504d1
+/deepseek-ai-dsh-voice-input/summary:
+  en: e039994c7be114d6
+  zh: b0dcc682e458ad19
+/deepseek-ai-dsh-voice-input/table-of-contents:
+  en: fdf59d46e16b5d50
+  zh: 500667a27d31476d
+/deepseek-ai-dsh-voice-input/overview:
+  en: b53bdcdf5a60b5d7
+  zh: 25886225bf78f0dc
+/deepseek-ai-dsh-voice-input/remote-api-ctx-remote-voiceinput:
+  en: 503e695a1d50adcc
+  zh: fbd93c10da7474e0
+/deepseek-ai-dsh-voice-input/the-upload:
+  en: 1d89489402bd9516
+  zh: a9b654e7ca9a8d11
+/deepseek-ai-dsh-voice-input/failures:
+  en: 971573e049e4fb3b
+  zh: e22456697340059b
+/deepseek-ai-dsh-voice-input/policy-ownership:
+  en: 6077988dfd54f71c
+  zh: be935ec4c852bb42
+/deepseek-ai-dsh-voice-input/model-experience:
+  en: 620cd00c99b00b01
+  zh: 8c3f52913fdb6d09
+/deepseek-ai-dsh-voice-input/model-experience/kv-cache-effect:
+  en: bd57c8d187a6c3c2
+  zh: 4ab3c66f3762543f
+/deepseek-ai-dsh-voice-input/known-limitations-and-deferred-work:
+  en: e20d32fbcbd2d09b
+  zh: 26f4eaac6baf0c99
+/deepseek-ai-dsh-voice-input/known-limitations-and-deferred-work/dev-note:
+  en: 354d24b784ec3c04
+  zh: 95f4aaef34b61670

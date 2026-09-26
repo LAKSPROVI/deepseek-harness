@@ -33,7 +33,7 @@ export interface WebStartupValues {
   /**
    * Absolute directory of the presets this bundle ships beside the roster's
    * built-in ones (`presets/` in the package). An assembly fact, not user
-   * config: the `agent-presets` row reads it as a deployment root.
+   * config: the `agent-preset-registry` row reads it as a deployment root.
    */
   presetRoot: string
 }

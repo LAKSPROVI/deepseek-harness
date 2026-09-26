@@ -171,7 +171,10 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
   // desc line carries the projected limits — copy that can only render after
   // the imageLimits projection crossed the RemoteMock transport.
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'dropped.png', { type: 'image/png' })
-  const dataTransfer = { types: ['Files'], files: [image], dropEffect: 'none' }
+  const dataTransfer = {
+    types: ['Files'], files: [image], dropEffect: 'none',
+    items: [{ kind: 'file', getAsFile: () => image, webkitGetAsEntry: () => ({ isDirectory: false }) }],
+  }
   fireEvent.dragEnter(document.body, { dataTransfer })
   // The voice control keeps an (idle, empty) live region mounted, so the
   // overlay is the status region that carries the drop copy.

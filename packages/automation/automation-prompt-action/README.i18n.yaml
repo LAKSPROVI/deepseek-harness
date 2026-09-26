@@ -1,6 +1,52 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/automation/automation-prompt-action/README.md
-README.md: 7adaff8c932ff0109b4a7bbd19e0ea2acc66b876
-README.zh.md: 97c5d0d49264bfc4c10b86d683c8b7dffc088a0e
+/:
+  en: 78d0f2c9d9c9bc54
+  zh: 0dc8124015a17071
+/deepseek-ai-dsh-automation-prompt-action:
+  en: a32e3ff0828ef405
+  zh: dcbc4c0b6860ab2e
+/deepseek-ai-dsh-automation-prompt-action/summary:
+  en: bcfa9958ba3a8f23
+  zh: 2674aad3616d7cb9
+/deepseek-ai-dsh-automation-prompt-action/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/deepseek-ai-dsh-automation-prompt-action/use-this-package:
+  en: 4ea4bc25030a27c8
+  zh: 211fbc9983777ee4
+/deepseek-ai-dsh-automation-prompt-action/use-this-package/config:
+  en: 0781b465e7f2792a
+  zh: 3888e62194fa1615
+/deepseek-ai-dsh-automation-prompt-action/use-this-package/task-payload:
+  en: 390dd92e6ce46d66
+  zh: 9475974a6bdd0622
+/deepseek-ai-dsh-automation-prompt-action/understand-the-implementation:
+  en: 1ade72896cbb229f
+  zh: 6b537267899c361f
+/deepseek-ai-dsh-automation-prompt-action/further-exploration:
+  en: 8931db9ed052e33e
+  zh: 040c5cde39cb5a58
+/deepseek-ai-dsh-automation-prompt-action/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-automation-prompt-action/model-experience/session-prompt:
+  en: 3296e9dd8138b0a0
+  zh: 3296e9dd8138b0a0
+/deepseek-ai-dsh-automation-prompt-action/model-experience/session-prompt/what-the-model-sees:
+  en: 9aed3a27f2e98b68
+  zh: 81ca58219af140f1
+/deepseek-ai-dsh-automation-prompt-action/model-experience/session-prompt/token-effect:
+  en: 95e7d591dc9bc6a0
+  zh: 9649dd6bc471ce90
+/deepseek-ai-dsh-automation-prompt-action/model-experience/session-prompt/kv-cache-effect:
+  en: 9424207952c63975
+  zh: 5c901b7572388216
+/deepseek-ai-dsh-automation-prompt-action/known-limitations-and-deferred-work:
+  en: f23f30990216dff7
+  zh: 43a37f7dc84ac1bb
+/deepseek-ai-dsh-automation-prompt-action/known-limitations-and-deferred-work/dev-note:
+  en: 7fa221ec2ab2ef5d
+  zh: 424d639398ccd1d8

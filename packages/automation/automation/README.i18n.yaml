@@ -1,6 +1,52 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/automation/automation/README.md
-README.md: 1ba8a52fb9f80a9bf53a27e11ed39e925d2a4c33
-README.zh.md: 6aec3c1fd256c8d46b58c984d10035ecd72d1bff
+/:
+  en: 7ce9d2aba743abd5
+  zh: 3fc4c1848d2df487
+/deepseek-ai-dsh-automation:
+  en: 92b193bbb7ffd4e8
+  zh: a81c56f443105b63
+/deepseek-ai-dsh-automation/summary:
+  en: 96f5d6556414359a
+  zh: f1ee324c4a3d1a55
+/deepseek-ai-dsh-automation/table-of-contents:
+  en: b6694e80ab44924d
+  zh: 7935d4feb9e1fbe7
+/deepseek-ai-dsh-automation/architecture-overview:
+  en: c2dca2f4ac40c601
+  zh: 7dace4db223a6b42
+/deepseek-ai-dsh-automation/core-capabilities:
+  en: 9052e085115c4fad
+  zh: c3b62dc61efefa52
+/deepseek-ai-dsh-automation/core-capabilities/2-1-scheduling-recurrence-engine-src-recurrence-ts-src-cron-ts:
+  en: 6c423ee4585641ee
+  zh: 55cb94b7471e0ce5
+/deepseek-ai-dsh-automation/core-capabilities/2-2-execution-supervisor-resilience-src-worker-ts-src-reaper-ts:
+  en: 01d4a16d83b7a0d6
+  zh: c4c11c3659d46c8a
+/deepseek-ai-dsh-automation/core-capabilities/2-3-persistence-layer-src-persistence-ts-src-store-ts:
+  en: 615ba769caa402a8
+  zh: cacdc6518b7060fe
+/deepseek-ai-dsh-automation/core-capabilities/2-4-notifications-real-time-transport-src-notifier-ts-src-sse-ts-src-api-ts:
+  en: d2436a04925629e4
+  zh: 1dd2d36faf9eed99
+/deepseek-ai-dsh-automation/deepseek-harness-cordis-integration:
+  en: bb5857742d17264d
+  zh: 0e693aeb225a58f0
+/deepseek-ai-dsh-automation/verification-tests:
+  en: ba2a3c3ece7ac223
+  zh: 0b6340dc4fd83c85
+/deepseek-ai-dsh-automation/model-experience:
+  en: ecb61255e8ef45ec
+  zh: 220cbe55f11056f4
+/deepseek-ai-dsh-automation/model-experience/kv-cache-effect:
+  en: c29fa4287ccebc36
+  zh: 6b07ed153edd1a53
+/deepseek-ai-dsh-automation/known-limitations-and-deferred-work:
+  en: 27f43f0b8544ba2f
+  zh: 88c4d50f6af41eb0
+/deepseek-ai-dsh-automation/known-limitations-and-deferred-work/dev-note:
+  en: 0dd7d83fc8284e4c
+  zh: fff8c6ae280a8258

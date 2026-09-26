@@ -1,6 +1,37 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-voice-input/README.md
-README.md: 2e38932a7dac82e95c7a6011291670e96df48872
-README.zh.md: 0aadfc7d9274066af6f245e5034ed41714af5236
+/:
+  en: ef905c24afdc0b6f
+  zh: 0faeba665552279b
+/deepseek-ai-dsh-client-ui-voice-input:
+  en: 6e72e1d5a20cb986
+  zh: 412fef0cb3b67541
+/deepseek-ai-dsh-client-ui-voice-input/summary:
+  en: b48bcbd4d2420f0b
+  zh: bc827f8649e0329f
+/deepseek-ai-dsh-client-ui-voice-input/table-of-contents:
+  en: b8c48927b3a2a5a0
+  zh: d709bc260278fe68
+/deepseek-ai-dsh-client-ui-voice-input/overview:
+  en: 8c5fd9d69149c9e8
+  zh: 5c8384aab0caf5e5
+/deepseek-ai-dsh-client-ui-voice-input/how-one-utterance-travels:
+  en: 4c2031755baf5a76
+  zh: 8eb047b2a300a675
+/deepseek-ai-dsh-client-ui-voice-input/presentation-state-and-copy:
+  en: 9bf60ee3593c4491
+  zh: 790c2175f5427199
+/deepseek-ai-dsh-client-ui-voice-input/model-experience:
+  en: bb98a599ec741984
+  zh: 524e840d050be9c1
+/deepseek-ai-dsh-client-ui-voice-input/model-experience/kv-cache-effect:
+  en: 8dbbb08e18b3d8c5
+  zh: 830da939c94b116f
+/deepseek-ai-dsh-client-ui-voice-input/known-limitations-and-deferred-work:
+  en: 79fc721aa119b5f1
+  zh: 0d53d14d795653b1
+/deepseek-ai-dsh-client-ui-voice-input/known-limitations-and-deferred-work/dev-note:
+  en: e984b24ca568b3ff
+  zh: ab3d77c13da4d0b8
