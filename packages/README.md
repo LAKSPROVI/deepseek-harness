@@ -5,7 +5,7 @@ kind: "package-group"
 
 # Packages
 
-English | [中文](README.zh.md)
+English | [ä¸­æ–‡](README.zh.md)
 
 ## Summary
 
@@ -56,8 +56,8 @@ Every package lives in exactly one group; new packages join existing groups, and
 | [`workflow/`](workflow/README.md) | Workflow seam, PTC process engine, and model-facing `workflow`/`ralph` tools |
 | [`webhook/`](webhook/README.md) | Verified external events, trusted rules, and fire-and-forget Workspace Sessions |
 | [`web/`](web/README.md) | Web capability family: seam, search/fetch providers, model-facing web tools |
-| [`automation/`](automation/README.md) | Durable task automation engine: scheduler, worker, reaper, and the Web panel's Remote namespace |
-| [`transcription/`](transcription/README.md) | Transcription capability family: seam, Groq provider, and browser voice-input Remote |
+| [`automation/`](automation/README.md) | Durable task automation engine: scheduler, worker, reaper, Web panel Remote's Remote namespace |
+| [`transcription/`](transcription/README.md) | Transcription capability: seam, Groq provider, browser voice-input |
 | [`document/`](document/README.md) | Shared Host Office-to-PDF conversion |
 | [`attachment/`](attachment/README.md) | Durable attachment identity, validation, local content-addressed storage |
 | [`spill/`](spill/README.md) | Spill capability family: storage seam, local impl, tool-result spill policy |
@@ -90,7 +90,7 @@ Every package lives in exactly one group; new packages join existing groups, and
 <a id="release-expectations"></a>
 ## Release expectations
 
-Most groups are product — stable API. The exceptions: `experimental/` publishes without stability or support promises, and `test-support/`, `runtime-diagnostics/`, and `util/` are support with lower compatibility expectations.
+Most groups are product â€” stable API. The exceptions: `experimental/` publishes without stability or support promises, and `test-support/`, `runtime-diagnostics/`, and `util/` are support with lower compatibility expectations.
 
 -----
 
@@ -106,7 +106,7 @@ The dependency graph is generated: [docs/module-graph.md](../docs/module-graph.m
 <a id="package-readme-contracts"></a>
 ## Package README contracts
 
-Every package README covers purpose, configuration, extension points, and [Model Experience](../docs/cookbook/adding-a-package.md#4-write-the-package-readme) unless the model-agnostic [omission allowlist](../scripts/verify-package-readme-model-experience.ts) exempts it. It also carries `## Known Limitations and Deferred Work` or uses its [allowlist](../scripts/verify-package-readme-limitations.ts). Package conventions — exports, service access, invariants, tests — live in [packages/AGENTS.md](AGENTS.md).
+Every package README covers purpose, configuration, extension points, and [Model Experience](../docs/cookbook/adding-a-package.md#4-write-the-package-readme) unless the model-agnostic [omission allowlist](../scripts/verify-package-readme-model-experience.ts) exempts it. It also carries `## Known Limitations and Deferred Work` or uses its [allowlist](../scripts/verify-package-readme-limitations.ts). Package conventions â€” exports, service access, invariants, tests â€” live in [packages/AGENTS.md](AGENTS.md).
 
 -----
 
@@ -114,7 +114,7 @@ Every package README covers purpose, configuration, extension points, and [Model
 ## Dev Note
 
 <details>
-<summary>Working context for maintainers — click to expand</summary>
+<summary>Working context for maintainers â€” click to expand</summary>
 
 None.
 
