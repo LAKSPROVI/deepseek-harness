@@ -143,7 +143,7 @@ interface TeamDebateTransition {
 ```
 
 ```ts type-equiv
-/** Whole structured debate snapshot; every transition increments `revision`. */
+/** Whole structured debate snapshot; every transition increments {@link revision}. */
 interface TeamDebateSnapshot {
   readonly id: TeamDebateId
   readonly revision: number

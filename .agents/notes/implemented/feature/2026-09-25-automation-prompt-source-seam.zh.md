@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-该包保留本地的 `AutomationMessageSource` 接口，记录精确的来源对象，并通过不透明的 `MessageSource` seam 发出它：`satisfies AutomationMessageSource as unknown as MessageSource`。在相邻的 V3-to-V4 格式边交付之前，暂缓把 `automation` 成员注册到 `MessageSourceMap`；双重转换让这一暂缓成为显式且经过编译的产物，而不是未检的载荷。行文规范用"消息 `source` 与 Session 标题回退"替换了 JSDoc 里的 "provenance" 一词，保持术语具体。
+该包保留本地的 `AutomationMessageSource` 接口，记录精确的来源对象，并通过不透明的 `MessageSource` seam 发出它：`satisfies AutomationMessageSource as unknown as MessageSource`。在相邻的 V3-to-V4 格式边交付之前，暂缓把 `automation` 成员注册到 `MessageSourceMap`；双重转换让这一暂缓成为显式且经过编译的产物，而不是未检的载荷。行文规范用"消息 `source` 与 Session 标题回退"替换了 JSDoc 里的 "来源" 一词，保持术语具体。
 
 ## 备选方案
 

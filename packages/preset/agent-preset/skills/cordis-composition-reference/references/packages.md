@@ -30,6 +30,13 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 |---|---|---|
 | `@deepseek-ai/dsh-attachment-local` | yes | Private content-addressed DSH_HOME attachment storage |
 
+## automation
+
+| Package | Config | Description |
+|---|---|---|
+| `@deepseek-ai/dsh-automation-prompt-action` | yes | CUSTOM_PROMPT executor for the automation engine: each run opens a Workspace Session and sends the task prompt |
+| `@deepseek-ai/dsh-tool-automation` | no | Model-facing automation_* tools over the ctx.automation engine |
+
 ## boot
 
 | Package | Config | Description |
@@ -67,6 +74,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-client-ui-agent-preset` | no | Agent-preset surfaces: the default for later sessions, this session's seat, and the composition editor |
 | `@deepseek-ai/dsh-client-ui-approval` | no | Approval composer takeover over the scoped Remote Event waterfall |
 | `@deepseek-ai/dsh-client-ui-attachment` | no | Dynamic attachment presentation plugin for conversation input, message-image, and trajectory image slots |
+| `@deepseek-ai/dsh-client-ui-automation` | no | undefined |
 | `@deepseek-ai/dsh-client-ui-brand-official` | no | Official DeepSeek Harness brand occupants for the Web client's sidebar slots |
 | `@deepseek-ai/dsh-client-ui-chat` | no | Chat Conversation target, node definitions, renderers, and details surface |
 | `@deepseek-ai/dsh-client-ui-commands` | no | Client command surface: global directory cache, '/' source, three command UI kinds, popupSelect registry |
@@ -111,6 +119,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-client-ui-tool` | no | Client Tool call-tree renderer and keyed per-tool presentation slot |
 | `@deepseek-ai/dsh-client-ui-trajectory` | no | Trajectory event ledger with an interactive timing overview: pure-consumer plugin registering into the conversation ViewMap (no service) |
 | `@deepseek-ai/dsh-client-ui-user-questions` | no | Web ask_user_question composer takeover and plan-review presentation UI |
+| `@deepseek-ai/dsh-client-ui-voice-input` | no | Push-to-talk composer control: records one utterance in the browser and writes the Host transcript into the session draft |
 | `@deepseek-ai/dsh-client-ui-workflow-run` | no | Durable workflow-run Conversation Node and nested member disclosure for dsh web |
 | `@deepseek-ai/dsh-client-ui-workspace` | no | Workspace picker plugin: one WorkspacePicker registered into the sidebar and empty-state workspace slots |
 
@@ -464,6 +473,14 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | Package | Config | Description |
 |---|---|---|
 | `@deepseek-ai/dsh-tool-todo` | yes | Model-facing todo_write tool over the DeepSeek Harness event-sourced session log |
+
+## transcription
+
+| Package | Config | Description |
+|---|---|---|
+| `@deepseek-ai/dsh-transcription` | yes | Abstract speech-to-text capability seam (ctx.transcription) for the DeepSeek Harness — provider registry, registration-order-independent selection, payload bounds, request/result vocabulary, and the TranscriptionError taxonomy |
+| `@deepseek-ai/dsh-transcription-groq` | yes | Groq-backed speech-to-text provider (OpenAI-compatible Whisper transcriptions API) for the DeepSeek Harness transcription capability seam (ctx.transcription) |
+| `@deepseek-ai/dsh-voice-input` | no | Browser-facing Remote surface that transcribes one uploaded audio utterance through the DeepSeek Harness transcription seam |
 
 ## typert
 

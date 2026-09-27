@@ -15824,6 +15824,235 @@
       }
     },
     {
+      "key": "event:team/debate",
+      "kind": "event",
+      "event": "team/debate",
+      "surface": false,
+      "digest": "84a7362512e706a545918cfa4af11a97ab9770b4addcbfad9f9e2908c54b465a",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 19,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 20,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "debate",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "teamId",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "version",
+                "type": 18,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "history",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "id",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "maxRounds",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "participants",
+                "type": 17,
+                "optional": false
+              },
+              {
+                "name": "phase",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "revision",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "round",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "status",
+                "type": 13,
+                "optional": false
+              },
+              {
+                "name": "topic",
+                "type": 5,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "array",
+            "element": 4
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "actor",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "note",
+                "type": 5,
+                "optional": true
+              },
+              {
+                "name": "phase",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "revision",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "round",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "status",
+                "type": 13,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              7,
+              8,
+              9,
+              10,
+              11
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "critique"
+          },
+          {
+            "kind": "literal",
+            "value": "positions"
+          },
+          {
+            "kind": "literal",
+            "value": "rebuttal"
+          },
+          {
+            "kind": "literal",
+            "value": "synthesis"
+          },
+          {
+            "kind": "literal",
+            "value": "verification"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "union",
+            "types": [
+              14,
+              15,
+              16
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "completed"
+          },
+          {
+            "kind": "literal",
+            "value": "paused"
+          },
+          {
+            "kind": "literal",
+            "value": "active"
+          },
+          {
+            "kind": "array",
+            "element": 5
+          },
+          {
+            "kind": "literal",
+            "value": 2
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "team/debate"
+          }
+        ]
+      }
+    },
+    {
       "key": "event:team/member",
       "kind": "event",
       "event": "team/member",
@@ -22590,7 +22819,7 @@
       },
       "names": [],
       "sources": [
-        "packages/experimental/agent-team/src/types.ts:238"
+        "packages/experimental/agent-team/src/types.ts:303"
       ]
     },
     {
@@ -22724,6 +22953,196 @@
       },
       "names": [],
       "sources": []
+    },
+    {
+      "digest": "0e19f185c920e55fad3ad9976dfb8ed7274c1a567769ab573b4532bba3c9bc83",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "debate",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "teamId",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "version",
+                "type": 17,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "history",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "id",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "maxRounds",
+                "type": 11,
+                "optional": false
+              },
+              {
+                "name": "participants",
+                "type": 16,
+                "optional": false
+              },
+              {
+                "name": "phase",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "revision",
+                "type": 11,
+                "optional": false
+              },
+              {
+                "name": "round",
+                "type": 11,
+                "optional": false
+              },
+              {
+                "name": "status",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "topic",
+                "type": 4,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "array",
+            "element": 3
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "actor",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "note",
+                "type": 4,
+                "optional": true
+              },
+              {
+                "name": "phase",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "revision",
+                "type": 11,
+                "optional": false
+              },
+              {
+                "name": "round",
+                "type": 11,
+                "optional": false
+              },
+              {
+                "name": "status",
+                "type": 12,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              6,
+              7,
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "critique"
+          },
+          {
+            "kind": "literal",
+            "value": "positions"
+          },
+          {
+            "kind": "literal",
+            "value": "rebuttal"
+          },
+          {
+            "kind": "literal",
+            "value": "synthesis"
+          },
+          {
+            "kind": "literal",
+            "value": "verification"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "union",
+            "types": [
+              13,
+              14,
+              15
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "completed"
+          },
+          {
+            "kind": "literal",
+            "value": "paused"
+          },
+          {
+            "kind": "literal",
+            "value": "active"
+          },
+          {
+            "kind": "array",
+            "element": 4
+          },
+          {
+            "kind": "literal",
+            "value": 2
+          }
+        ]
+      },
+      "names": [],
+      "sources": [
+        "packages/experimental/agent-team/src/types.ts:299"
+      ]
     },
     {
       "digest": "0e7b2a97f54f1afdb8cdfad1635abe9145327db539bfb69b4045c19d8c17755d",
@@ -31553,6 +31972,173 @@
       "sources": []
     },
     {
+      "digest": "1f8a4a54a72925f5c0f25e40ba6ed719c2665b8d238c83e9706603e38c8d5f71",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "history",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "id",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "maxRounds",
+                "type": 10,
+                "optional": false
+              },
+              {
+                "name": "participants",
+                "type": 15,
+                "optional": false
+              },
+              {
+                "name": "phase",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "revision",
+                "type": 10,
+                "optional": false
+              },
+              {
+                "name": "round",
+                "type": 10,
+                "optional": false
+              },
+              {
+                "name": "status",
+                "type": 11,
+                "optional": false
+              },
+              {
+                "name": "topic",
+                "type": 3,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "array",
+            "element": 2
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "actor",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "note",
+                "type": 3,
+                "optional": true
+              },
+              {
+                "name": "phase",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "revision",
+                "type": 10,
+                "optional": false
+              },
+              {
+                "name": "round",
+                "type": 10,
+                "optional": false
+              },
+              {
+                "name": "status",
+                "type": 11,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              5,
+              6,
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "positions"
+          },
+          {
+            "kind": "literal",
+            "value": "rebuttal"
+          },
+          {
+            "kind": "literal",
+            "value": "synthesis"
+          },
+          {
+            "kind": "literal",
+            "value": "verification"
+          },
+          {
+            "kind": "literal",
+            "value": "critique"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "union",
+            "types": [
+              12,
+              13,
+              14
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "paused"
+          },
+          {
+            "kind": "literal",
+            "value": "active"
+          },
+          {
+            "kind": "literal",
+            "value": "completed"
+          },
+          {
+            "kind": "array",
+            "element": 3
+          }
+        ]
+      },
+      "names": [
+        "packages/experimental/agent-team/src/types.ts#TeamDebateSnapshot"
+      ],
+      "sources": [
+        "packages/experimental/agent-team/src/types.ts:156"
+      ]
+    },
+    {
       "digest": "1f8c126cfab3df812cd115cfc23e3256f0fa2383400f4ce91ecad313577e59b0",
       "schema": {
         "root": 0,
@@ -31785,7 +32371,7 @@
         "packages/experimental/agent-team/src/types.ts#TeamMessageSource"
       ],
       "sources": [
-        "packages/experimental/agent-team/src/types.ts:137"
+        "packages/experimental/agent-team/src/types.ts:198"
       ]
     },
     {
@@ -32981,6 +33567,114 @@
       "sources": []
     },
     {
+      "digest": "2bfdd14083fa7aa1c355565b1f90b8aebf50fcc5b3df316e22d9c69c1a64027a",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "actor",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "note",
+                "type": 1,
+                "optional": true
+              },
+              {
+                "name": "phase",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "revision",
+                "type": 8,
+                "optional": false
+              },
+              {
+                "name": "round",
+                "type": 8,
+                "optional": false
+              },
+              {
+                "name": "status",
+                "type": 9,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              3,
+              4,
+              5,
+              6,
+              7
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "verification"
+          },
+          {
+            "kind": "literal",
+            "value": "critique"
+          },
+          {
+            "kind": "literal",
+            "value": "positions"
+          },
+          {
+            "kind": "literal",
+            "value": "rebuttal"
+          },
+          {
+            "kind": "literal",
+            "value": "synthesis"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "union",
+            "types": [
+              10,
+              11,
+              12
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "active"
+          },
+          {
+            "kind": "literal",
+            "value": "completed"
+          },
+          {
+            "kind": "literal",
+            "value": "paused"
+          }
+        ]
+      },
+      "names": [
+        "packages/experimental/agent-team/src/types.ts#TeamDebateTransition"
+      ],
+      "sources": [
+        "packages/experimental/agent-team/src/types.ts:146"
+      ]
+    },
+    {
       "digest": "2c4c21f19f426a58f2dac914e34313aa43f8408972de857a486d1f086d5adb6c",
       "schema": {
         "root": 0,
@@ -33677,7 +34371,7 @@
         "packages/experimental/agent-team/src/types.ts#TeamMessageSnapshot"
       ],
       "sources": [
-        "packages/experimental/agent-team/src/types.ts:128"
+        "packages/experimental/agent-team/src/types.ts:189"
       ]
     },
     {
@@ -39269,6 +39963,20 @@
       "sources": []
     },
     {
+      "digest": "3f932cc5ee10870c2bc114a7bd4b19786c5b5c77608f44cb9de5a919623b3340",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "literal",
+            "value": "critique"
+          }
+        ]
+      },
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "3fdf9582c3b5597df104d32d97dab6c6ee3a93794f3034ec6ada6272404ea27f",
       "schema": {
         "root": 0,
@@ -44732,6 +45440,7 @@
         "packages/attachment/attachment/src/brand.ts#AttachmentId",
         "packages/compaction/compaction/src/brand.ts#CompactionId",
         "packages/core/session/src/types.ts#SessionId",
+        "packages/experimental/agent-team/src/types.ts#TeamDebateId",
         "packages/experimental/agent-team/src/types.ts#TeamId",
         "packages/experimental/agent-team/src/types.ts#TeamMessageId",
         "packages/experimental/agent-team/src/types.ts#TeamTaskId",
@@ -44759,6 +45468,7 @@
         "packages/core/session/src/types.ts:20",
         "packages/experimental/agent-team/src/types.ts:20",
         "packages/experimental/agent-team/src/types.ts:32",
+        "packages/experimental/agent-team/src/types.ts:44",
         "packages/experimental/agent-team/src/types.ts:8",
         "packages/feedback/message-feedback/src/types.ts:14",
         "packages/goal/goal/src/types.ts:17",
@@ -48123,7 +48833,7 @@
         "packages/experimental/agent-team/src/types.ts#TeamTaskSnapshot"
       ],
       "sources": [
-        "packages/experimental/agent-team/src/types.ts:74"
+        "packages/experimental/agent-team/src/types.ts:86"
       ]
     },
     {
@@ -50562,6 +51272,20 @@
       "sources": []
     },
     {
+      "digest": "577bc2dd39aa449dbb4656a6478f8f8ee85760c77fe25af3fe74b4abd9bd06d5",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "literal",
+            "value": "positions"
+          }
+        ]
+      },
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "57f3f606ff8b6c84d9c443faace9d1dd10cca0354f37a4f515ef075f7c351b90",
       "schema": {
         "root": 0,
@@ -51117,6 +51841,40 @@
       },
       "names": [],
       "sources": []
+    },
+    {
+      "digest": "5d4dba21ae462e931bea9719d26b772428376a176033e0284ad73b0d52480c7d",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "union",
+            "types": [
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "active"
+          },
+          {
+            "kind": "literal",
+            "value": "completed"
+          },
+          {
+            "kind": "literal",
+            "value": "paused"
+          }
+        ]
+      },
+      "names": [
+        "packages/experimental/agent-team/src/types.ts#TeamDebateStatus"
+      ],
+      "sources": [
+        "packages/experimental/agent-team/src/types.ts:143"
+      ]
     },
     {
       "digest": "5d542ac7bdf13310c46e1a884dec9fb18ad8c6e153cff207e639cd7bf9d7e694",
@@ -54566,7 +55324,7 @@
         "packages/experimental/agent-team/src/types.ts#TeamMemberSnapshot"
       ],
       "sources": [
-        "packages/experimental/agent-team/src/types.ts:47"
+        "packages/experimental/agent-team/src/types.ts:59"
       ]
     },
     {
@@ -59259,6 +60017,20 @@
       ]
     },
     {
+      "digest": "719d2b25d03797cffba7acf14afe4fe2a15d7197aab7b7ef36ac5e601fe43108",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "literal",
+            "value": "verification"
+          }
+        ]
+      },
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "71bb3254ec8f1e491ce63b762a7b5f18709de23aa4e8abcc8b886f4b6ce051dd",
       "schema": {
         "root": 0,
@@ -59744,6 +60516,20 @@
           {
             "kind": "literal",
             "value": "delegation"
+          }
+        ]
+      },
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "77cfa12de9dad833bd0250ee92d4f496973a916b8fe3dffed71c30145004c705",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "literal",
+            "value": "team/debate"
           }
         ]
       },
@@ -61875,6 +62661,233 @@
       "sources": [
         "packages/workflow/workflow/src/types.ts:63"
       ]
+    },
+    {
+      "digest": "84a7362512e706a545918cfa4af11a97ab9770b4addcbfad9f9e2908c54b465a",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 19,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 20,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "debate",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "teamId",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "version",
+                "type": 18,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "history",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "id",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "maxRounds",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "participants",
+                "type": 17,
+                "optional": false
+              },
+              {
+                "name": "phase",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "revision",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "round",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "status",
+                "type": 13,
+                "optional": false
+              },
+              {
+                "name": "topic",
+                "type": 5,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "array",
+            "element": 4
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "actor",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "note",
+                "type": 5,
+                "optional": true
+              },
+              {
+                "name": "phase",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "revision",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "round",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "status",
+                "type": 13,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              7,
+              8,
+              9,
+              10,
+              11
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "critique"
+          },
+          {
+            "kind": "literal",
+            "value": "positions"
+          },
+          {
+            "kind": "literal",
+            "value": "rebuttal"
+          },
+          {
+            "kind": "literal",
+            "value": "synthesis"
+          },
+          {
+            "kind": "literal",
+            "value": "verification"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "union",
+            "types": [
+              14,
+              15,
+              16
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "completed"
+          },
+          {
+            "kind": "literal",
+            "value": "paused"
+          },
+          {
+            "kind": "literal",
+            "value": "active"
+          },
+          {
+            "kind": "array",
+            "element": 5
+          },
+          {
+            "kind": "literal",
+            "value": 2
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "team/debate"
+          }
+        ]
+      },
+      "names": [],
+      "sources": []
     },
     {
       "digest": "84ac8c1a66ffc697262e181f42e851259eae14038c113ca329fb4700ccdb1f7c",
@@ -69328,6 +70341,50 @@
       "sources": []
     },
     {
+      "digest": "a351e22682b76004213b59b187a5be75cc6dd518fe2a84bdf7104e026dfe7d2a",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "union",
+            "types": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "critique"
+          },
+          {
+            "kind": "literal",
+            "value": "positions"
+          },
+          {
+            "kind": "literal",
+            "value": "rebuttal"
+          },
+          {
+            "kind": "literal",
+            "value": "synthesis"
+          },
+          {
+            "kind": "literal",
+            "value": "verification"
+          }
+        ]
+      },
+      "names": [
+        "packages/experimental/agent-team/src/types.ts#TeamDebatePhase"
+      ],
+      "sources": [
+        "packages/experimental/agent-team/src/types.ts:140"
+      ]
+    },
+    {
       "digest": "a3a259a1aa5401af786ce08c4a8419681d3000d73467991b5fc563389bc4ebd2",
       "schema": {
         "root": 0,
@@ -69515,7 +70572,7 @@
       },
       "names": [],
       "sources": [
-        "packages/experimental/agent-team/src/types.ts:234"
+        "packages/experimental/agent-team/src/types.ts:297"
       ]
     },
     {
@@ -71559,7 +72616,7 @@
       },
       "names": [],
       "sources": [
-        "packages/experimental/agent-team/src/types.ts:232"
+        "packages/experimental/agent-team/src/types.ts:295"
       ]
     },
     {
@@ -71748,7 +72805,7 @@
         "packages/experimental/agent-team/src/types.ts#TeamTaskStatus"
       ],
       "sources": [
-        "packages/experimental/agent-team/src/types.ts:71"
+        "packages/experimental/agent-team/src/types.ts:83"
       ]
     },
     {
@@ -81643,7 +82700,7 @@
         "packages/experimental/agent-team/src/types.ts#TeamMemberPhase"
       ],
       "sources": [
-        "packages/experimental/agent-team/src/types.ts:44"
+        "packages/experimental/agent-team/src/types.ts:56"
       ]
     },
     {
@@ -82485,6 +83542,20 @@
       "sources": []
     },
     {
+      "digest": "e46304d62c8e4fdbe8bf059470c00aa832d0f565c48f960f7ce22fec8f54d3c7",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "literal",
+            "value": "rebuttal"
+          }
+        ]
+      },
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "e481c46af3813e0010558e93f578b2986acd658404cec2d1679e3ac2a6c48654",
       "schema": {
         "root": 0,
@@ -83122,6 +84193,20 @@
       "sources": []
     },
     {
+      "digest": "e8ab629cc0fce5f9ca2678229cc17a472672be8e415b96b391c244beb4de6b19",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "literal",
+            "value": "synthesis"
+          }
+        ]
+      },
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "e8de0f457fed5b9ff94dc4950b59ef75fd8ba8af665cc7899485924a62653367",
       "schema": {
         "root": 0,
@@ -83509,7 +84594,7 @@
       },
       "names": [],
       "sources": [
-        "packages/experimental/agent-team/src/types.ts:236"
+        "packages/experimental/agent-team/src/types.ts:301"
       ]
     },
     {
@@ -97047,6 +98132,114 @@
           {
             "kind": "literal",
             "value": "instructions"
+          }
+        ]
+      },
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "ff388d741f2ecb945c0fb64c538ccf9efecf05c705f74837afaf3b52e280a854",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "array",
+            "element": 1
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "actor",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "note",
+                "type": 2,
+                "optional": true
+              },
+              {
+                "name": "phase",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "revision",
+                "type": 9,
+                "optional": false
+              },
+              {
+                "name": "round",
+                "type": 9,
+                "optional": false
+              },
+              {
+                "name": "status",
+                "type": 10,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "rebuttal"
+          },
+          {
+            "kind": "literal",
+            "value": "synthesis"
+          },
+          {
+            "kind": "literal",
+            "value": "verification"
+          },
+          {
+            "kind": "literal",
+            "value": "critique"
+          },
+          {
+            "kind": "literal",
+            "value": "positions"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "union",
+            "types": [
+              11,
+              12,
+              13
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "active"
+          },
+          {
+            "kind": "literal",
+            "value": "completed"
+          },
+          {
+            "kind": "literal",
+            "value": "paused"
           }
         ]
       },

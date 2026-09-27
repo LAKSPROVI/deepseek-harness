@@ -18,7 +18,7 @@ Two mechanisms extend the Team domain, both riding the existing journal and tool
 
 ## Alternatives considered
 
-**Per-request squad composition only.** Without persisted presets every session retypes prompts and loses the curated roster's provenance. Settings persistence makes a reviewed composition reusable across teams.
+**Per-request squad composition only.** Without persisted presets every session retypes prompts and loses the curated roster's origin. Settings persistence makes a reviewed composition reusable across teams.
 
 **Debates as tasks on the shared DAG.** Task claim and collaboration semantics do not capture a phase protocol or compare-and-set round transitions; a debate is a protocol with a history, not a work item, and reusing task revisions would conflate the two CAS domains.
 
