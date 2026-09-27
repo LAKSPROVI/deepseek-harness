@@ -252,6 +252,21 @@
   flex: none;
 }
 
+/* Browser-local custom status dots (triage): same 8px disc, own colors. */
+.dotUnread,
+.dotLater,
+.dotFinalized {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dotUnread { background: var(--info, #3b82f6); }
+.dotLater { background: var(--warning, #f59e0b); }
+.dotFinalized { background: var(--success, #22c55e); }
+
 /* Trailing action buttons surface on hover only (figma 27:4668 / 27:4656):
    bare 16px glyphs, tertiary grey; the figma gap 12 reads too airy beside
    the 16px glyphs, so the buttons sit at 10. */

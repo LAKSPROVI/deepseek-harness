@@ -52,7 +52,7 @@ import type { SessionActivity, WorkspaceId, WorkspaceView } from '@deepseek-ai/d
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { WorkspaceShortcutState } from '../shortcuts.ts'
-import type { createWorkspaceViewStore } from '../stores.ts'
+import type { createWorkspaceViewStore, CustomSessionStatus } from '../stores.ts'
 
 /**
  * Owner share of the directory-flow holes: the complete conversation between
@@ -430,6 +430,31 @@ export type SessionRenameDialogProps =
   & PropsLocale<'workspace'>
   & Omit<SessionRenameDialogInjected, 'hooks'>
   & PropsHooks<SessionRenameDialogInjected['hooks']>
+
+/** Triage action share: the row only raises the status-picker request. */
+export interface SessionStatusInjected {
+  /** Ask for the status picker. */
+  requestSessionStatus: (sessionId: SessionId) => void
+}
+
+/** Status dialog share: the pending request, its settlement, and the store action it confirms with. */
+export interface SessionStatusDialogInjected {
+  hooks: {
+    /** The pending status-picker request, until the dialog consumes or cancels it. */
+    statusRequest: HostObservable<SessionId | null>
+  }
+  /** Consume or cancel the pending request. */
+  settleSessionStatus: () => void
+  /** Persist the browser-local status override. */
+  setSessionStatus: (sessionId: SessionId, status: CustomSessionStatus) => void
+}
+
+/** Props of the status-picker dialog entry in `shell.overlay`. */
+export type SessionStatusDialogProps =
+  PropsRuntime<'shell.overlay'>
+  & PropsLocale<'workspace'>
+  & Omit<SessionStatusDialogInjected, 'hooks'>
+  & PropsHooks<SessionStatusDialogInjected['hooks']>
 
 /** Props of the stop-and-archive dialog entry in `shell.overlay`. */
 export type SessionArchiveConfirmProps =

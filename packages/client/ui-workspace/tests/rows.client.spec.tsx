@@ -793,10 +793,10 @@ describe('workspace browser rows', () => {
   })
 
   it.each([
-    ['approval', 'Approval'],
-    ['plan-review', 'Plan review'],
-    ['question', 'Answer'],
-  ] as const)('uses the compact English %s row label', (pendingInteraction, compactLabel) => {
+    ['approval', 'Aprovação'],
+    ['plan-review', 'Revisão de plano'],
+    ['question', 'Responder'],
+  ] as const)('uses the compact pt-BR %s row label', (pendingInteraction, compactLabel) => {
     const node: SessionNode = {
       id: sid(pendingInteraction), title: 'Needs input', blank: false,
       pendingInteraction, running: false, runningSubagentCount: 0, completed: false, updatedAt: 0,

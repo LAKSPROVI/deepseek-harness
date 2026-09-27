@@ -334,7 +334,7 @@ function assertNever(value: never): never {
 }
 
 interface SessionStatus {
-  state: StateDotState
+  state: StateDotState | 'unread' | 'later' | 'finalized'
   label: string
   /** Compact text that replaces the Session row's update time. */
   trailingLabel?: string
@@ -342,10 +342,11 @@ interface SessionStatus {
 
 /**
  * Session status presentation; pending interaction is primary and live activity
- * outranks completion reminders.
+ * outranks completion reminders. Browser-local custom statuses (finalized,
+ * later, unread) ride after live facts and before completion/idle.
  */
 function sessionStatuses(
-  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'runningSubagentCount' | 'completed'>,
+  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'runningSubagentCount' | 'completed' | 'customStatus'>,
   t: RowTranslate,
 ): readonly [SessionStatus, ...SessionStatus[]] {
   const subagents: SessionStatus | undefined = node.runningSubagentCount === 0
@@ -392,15 +393,29 @@ function sessionStatuses(
     return subagents === undefined ? [primary] : [primary, subagents]
   }
   if (subagents !== undefined) return [subagents]
+  // Browser-local triage status (user-applied): rides before completion/idle.
+  if (node.customStatus === 'finalized') return [{ state: 'finalized', label: t('status.finalized') }]
+  if (node.customStatus === 'later') return [{ state: 'later', label: t('status.later') }]
+  if (node.customStatus === 'unread') return [{ state: 'unread', label: t('status.unread') }]
+  if (node.customStatus === 'warning') return [{ state: 'warning', label: t('status.waitingDecision') }]
   if (node.completed) return [{ state: 'done', label: t('status.completed') }]
   return [{ state: 'idle', label: t('status.idle') }]
+}
+
+/** Dot for one Session status: the three browser-local triage states use custom classes. */
+function StatusDotForState({ state }: { state: SessionStatus['state'] }) {
+  if (state === 'unread' || state === 'later' || state === 'finalized') {
+    const cls = css[`dot${state[0]?.toUpperCase()}${state.slice(1)}` as keyof typeof css]
+    return <span data-state={state} className={clsx(css.dot, cls)} aria-hidden="true" />
+  }
+  return <StateDot state={state} />
 }
 
 /** Primary status dot plus every status's screen-reader label, shared by the search and session rows. */
 function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ...SessionStatus[]] }) {
   return (
     <>
-      <StateDot state={statuses[0].state} />
+      <StatusDotForState state={statuses[0].state} />
       {statuses.map(status => (
         <span className={css.visuallyHidden} key={status.label}>{status.label}</span>
       ))}
@@ -442,7 +457,7 @@ function SessionHoverContent({ node, now, renderSlot, t }: {
       {renderSlot('sidebar.session.row.hover', { sessionId: node.id })}
       {statuses.map(status => (
         <div className={css.hoverStatus} key={status.label}>
-          <StateDot state={status.state} />
+          <StatusDotForState state={status.state} />
           <span>{status.label}</span>
         </div>
       ))}

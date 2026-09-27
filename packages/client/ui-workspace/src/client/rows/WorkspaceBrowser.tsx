@@ -32,13 +32,15 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { ArchivedFilter, GroupNode, SessionNode, SessionOrderBy, SessionRowState } from '../tree.ts'
+import { deriveRecentAndInProgress } from '../tree.ts'
+import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import {
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
   pinCurrentBlank, reconcileManualOrder, sessionMemberIds, UNGROUPED_KEY,
 } from '../tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import { AnimatedRows } from './AnimatedRows.tsx'
-import { FLAT_SESSION_ORDER_KEY, type SessionGroupBy } from '../stores.ts'
+import { FLAT_SESSION_ORDER_KEY, type CustomSessionStatus, type SessionGroupBy } from '../stores.ts'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
 
@@ -247,6 +249,10 @@ type SessionTreeProps = Pick<
   setSessionOrder: (accountKey: string, order: readonly string[]) => void
   /** Registry-global pin and archive sets plus the archived-visibility choice. */
   rowState: SessionRowState
+  /** Browser-local user status per Session (Lakatoss triage port). */
+  customStatuses?: Readonly<Record<string, CustomSessionStatus | undefined>>
+  /** Persist one browser-local status override (Lakatoss triage port). */
+  onSetStatus?: (sessionId: SessionNode['id'], status: CustomSessionStatus) => void
   /** Switch the archived filter back to the default hide-archived view. */
   onLeaveArchivedOnly: () => void
   /** Open the browser-owned rename dialog for a real Workspace group. */
@@ -280,7 +286,7 @@ function EmptySessions({ rowState, onLeaveArchivedOnly, t }: Pick<SessionTreePro
 /** The scrolling session tree; unmounting drops the sessions subscription and local row limits. */
 function SessionTree({
   list, useSessionStatus, startSession, open, workspaces, ungroupedSessionIds,
-  rowState, onLeaveArchivedOnly,
+  rowState, customStatuses, onLeaveArchivedOnly,
   workspaceReady, animationResetKey, usePanelInfo,
   onRenameRequest, onDeleteRequest, onSessionRenameRequest,
   renderSlot,
@@ -337,8 +343,9 @@ function SessionTree({
     () => deriveGroups(list, workspaces, rowState, statuses, {
       expandedGroups,
       ungroupedOrder: ungroupedSessionIds,
+      ...(customStatuses === undefined ? {} : { customStatuses }),
     }),
-    [list, workspaces, rowState, statuses, expandedGroups, ungroupedSessionIds],
+    [list, workspaces, rowState, statuses, customStatuses, expandedGroups, ungroupedSessionIds],
   )
   useEffect(() => {
     for (let key = revealGroup; key !== undefined; key = parents.get(key)) {
@@ -627,7 +634,7 @@ function SessionTree({
 
 /** The flat "In one list" body: every session is one draggable top-level row. */
 function FlatList({
-  list, sessionIds, rowState, onLeaveArchivedOnly, useSessionStatus, open, onSessionRenameRequest,
+  list, sessionIds, rowState, customStatuses, onLeaveArchivedOnly, useSessionStatus, open, onSessionRenameRequest,
   usePanelInfo, setSessionOrder, workspaceReady, animationResetKey,
   revealSessionId, onSessionRevealed, renderSlot, t,
 }: Pick<
@@ -643,6 +650,7 @@ function FlatList({
   | 'revealSessionId'
   | 'onSessionRevealed'
   | 'rowState'
+  | 'customStatuses'
   | 'onLeaveArchivedOnly'
   | 't'
 > & {
@@ -652,8 +660,8 @@ function FlatList({
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
   const statuses = useSessionStatus(s => s)
   const rows = useMemo(
-    () => deriveFlat(list, sessionIds, rowState, statuses),
-    [list, sessionIds, rowState, statuses],
+    () => deriveFlat(list, sessionIds, rowState, statuses, customStatuses),
+    [list, sessionIds, rowState, statuses, customStatuses],
   )
   const [drag, setDrag] = useState<DragState | null>(null)
   const dropCommitted = useRef(false)
@@ -897,6 +905,8 @@ export function WorkspaceBrowser({
   const archivedFilter = useStore(s => s.archivedFilter ?? 'default')
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
+  // Browser-local triage statuses (Lakatoss port): rows read them, never live Host facts.
+  const customSessionStatuses = useStore(s => s.customSessionStatuses)
   // Archived sessions are not openable: the row stays visible under the
   // filter but a click explains instead of navigating.
   const guardedOpen = (sessionId: SessionId): void => {
@@ -1341,6 +1351,20 @@ export function WorkspaceBrowser({
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
       <div className={css.listArea}>
+        {/* Lakatoss triage port: the in-progress and recent section rides the
+            browser-local status overlays, ahead of the grouped tree. */}
+        {wide && normalizedQuery === '' && (
+          <RecentSection
+            list={list}
+            workspaces={workspaces}
+            rowState={rowState}
+            statuses={useSessionStatus(s => s)}
+            customStatuses={customSessionStatuses}
+            currentId={mainSessionId}
+            t={t}
+            open={guardedOpen}
+          />
+        )}
         {wide && (normalizedQuery !== ''
           ? (
             <SearchResults
@@ -1365,6 +1389,7 @@ export function WorkspaceBrowser({
                 list={list}
                 sessionIds={orderedFlatSessionIds}
                 rowState={rowState}
+                customStatuses={customSessionStatuses}
                 onLeaveArchivedOnly={leaveArchivedOnly}
                 workspaceReady={workspaceReady}
                 animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}
@@ -1395,6 +1420,7 @@ export function WorkspaceBrowser({
                 setGroupExpanded={actions.setGroupExpanded}
                 setSessionOrder={saveSessionOrder}
                 rowState={rowState}
+                customStatuses={customSessionStatuses}
                 onLeaveArchivedOnly={leaveArchivedOnly}
                 startSession={startSession}
                 open={guardedOpen}
@@ -1483,5 +1509,42 @@ export function WorkspaceBrowser({
         text={t(shortcutState.forkError.reason === 'unavailable' ? 'shortcut.noCompletedTurn' : 'shortcut.forkFailed')}
         onDone={dismissForkError} />}
     </div>
+  )
+}
+
+/** Lakatoss triage port: the in-progress-with-recent section over the tree. */
+function RecentSection({ list, workspaces, rowState, statuses, customStatuses, currentId, open, t }: {
+  list: SessionListState
+  workspaces: readonly WorkspaceView[]
+  rowState: SessionRowState
+  statuses: SessionStatusSnapshot
+  customStatuses: Readonly<Record<string, CustomSessionStatus | undefined>> | undefined
+  currentId: SessionId | undefined
+  open: (sessionId: SessionId) => void
+  t: WorkspaceBrowserProps['t']
+}) {
+  const nodes = deriveRecentAndInProgress(list, rowState, statuses, customStatuses ?? {}, 6)
+  if (nodes.length === 0) return null
+  return (
+    <section className={css.recentSection} aria-label={t('section.recentAndInProgress')}>
+      <div className={css.recentSectionTitle}>{t('section.recentAndInProgress')}</div>
+      <div role="tree" aria-label={t('section.recentAndInProgress')}>
+        {nodes.map((node) => {
+          const groupKey = owningGroupKey(workspaces, node.id)
+          const ws = workspaces.find(w => w.workspaceId === groupKey)
+          return (
+            <div
+              key={node.id}
+              role="treeitem"
+              className={clsx(css.recentRow, node.id === currentId && css.recentRowCurrent)}
+              onClick={() => { open(node.id) }}
+            >
+              <span className={css.recentRowTitle}>{node.title}</span>
+              {ws !== undefined && <span className={css.workspaceBadge}>{ws.title}</span>}
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }

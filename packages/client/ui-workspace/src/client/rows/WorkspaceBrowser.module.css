@@ -619,3 +619,104 @@
     transition: none;
   }
 }
+
+/* Triage status picker dialog (Lakatoss port). */
+.statusOptions {
+  display: grid;
+  gap: 8px;
+}
+
+.statusOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+
+/* Lakatoss triage: in-progress and recent section. */
+.recentSection {
+  border-bottom: 1px solid var(--border, #333);
+  padding: 4px 6px;
+}
+
+.recentSectionTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #888);
+  padding: 2px 6px 6px;
+}
+
+.recentRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 6px;
+  border-radius: 4px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
+.recentRow:hover { background: var(--hover, #222); }
+
+.recentRow.current { background: var(--accent-soft, #233); }
+
+.recentRowTitle {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Lakatoss triage section: in-progress and recent rows over the tree. */
+.recentSection {
+  flex: none;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+  padding: 4px 0 6px;
+}
+
+.recentSectionTitle {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #8b8b8b);
+  padding: 4px 10px 6px;
+}
+
+.recentRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.recentRow:hover { background: var(--hover, rgba(255,255,255,0.04)); }
+
+.recentRowCurrent { background: var(--selected, rgba(59,130,246,0.18)); }
+
+.recentRowTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceBadge {
+  flex: none;
+  font-size: 10px;
+  color: var(--muted, #8b8b8b);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
