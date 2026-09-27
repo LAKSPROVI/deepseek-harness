@@ -403,7 +403,11 @@ function runningChildCount(list: SessionListState, parentId: SessionId, statuses
 
 /** The list projection alone owns the best-effort active-Schedule indicator. */
 function hasActiveSchedule(list: SessionListState, sessionId: SessionId): boolean {
-  return (list.projectionsBySession[sessionId]?.values.schedule?.length ?? 0) > 0
+  // 0.1.7: o schedule projeta sob a chave 'schedule', mas o SessionProjectionMap
+  // publico nao a declara mais; o acesso e por nome de storage com guarda de forma.
+  const values = list.projectionsBySession[sessionId]?.values as Record<string, unknown> | undefined
+  const schedule = values?.['schedule']
+  return Array.isArray(schedule) && schedule.length > 0
 }
 
 function sessionNode(

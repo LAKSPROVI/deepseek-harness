@@ -9,10 +9,8 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
-import { writeFile } from 'node:fs/promises'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
-import FileSettingsProvider from '@deepseek-ai/dsh-settings-file'
 import SubagentService from '@deepseek-ai/dsh-subagent'
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
@@ -24,9 +22,8 @@ import { serialize } from '@deepseek-ai/dsh-llm-deepseek/src/serialize.ts'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import TeamService, {
-  TeamTemplateSettingsSchema, validateTeamTemplateSettings,
+  type TeamTemplateSettings, validateTeamTemplateSettings,
 } from '../../agent-team/src/index.ts'
-import { TEAM_TEMPLATE_SETTINGS_NAMESPACE } from '../../agent-team/src/index.ts'
 import * as toolTeam from '../src/index.ts'
 
 function serializeRequest(request: GenerateOptions) {
@@ -87,8 +84,6 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legac
   roots.push(storageRoot)
   const settingsRoot = mkdtempSync(join(tmpdir(), 'dsh-tool-team-settings-'))
   roots.push(settingsRoot)
-  const settingsFile = join(settingsRoot, 'settings.yaml')
-  await writeFile(settingsFile, '{}\n')
   await ctx.plugin(JsonlSessionPersistence, { root: storageRoot })
   await ctx.plugin(TestSessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
@@ -97,16 +92,18 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legac
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
   await ctx.plugin(TeamService)
-  await ctx.plugin(FileSettingsProvider, { path: settingsFile })
-  // Register the agent-team-templates namespace with its schema; the
-  // template/squad tools read it and write through the same registration.
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.register(
-      TEAM_TEMPLATE_SETTINGS_NAMESPACE,
-      TeamTemplateSettingsSchema,
-      { validate: validateTeamTemplateSettings },
-    )
-  })
+  // 0.1.7: `dsh-settings-file` e `SettingsForms.register` morreram; as Team tools
+  // leem o namespace via `ctx.get('settings')`, entao um store KV em memoria com a
+  // validacao do schema satisfaz o contrato que as tools usam.
+  const store = new Map<string, unknown>()
+  ctx.provide('settings', {
+    get: (ns: string) => store.get(ns),
+    update: async (ns: string, patch: object) => {
+      const next = { ...(store.get(ns) as object | undefined ?? {}), ...patch }
+      validateTeamTemplateSettings(next as TeamTemplateSettings)
+      store.set(ns, next)
+    },
+  } as never)
   const fiber = await ctx.plugin(toolTeam)
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)

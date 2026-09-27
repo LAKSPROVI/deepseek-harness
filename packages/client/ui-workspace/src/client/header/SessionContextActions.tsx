@@ -11,7 +11,7 @@ import type { WorkspaceId, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-worksp
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  IconBranchOutline16, IconChevronDownOutline14, IconNewChatOutline16, IconRefreshOutline16,
+  IconBranchOutlineRegular, IconChevronDownOutlineRegular, IconNewChatOutlineRegular, IconRefreshOutlineRegular,
   useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -100,9 +100,9 @@ export function SessionContextActions({
         onClick={() => { setOpen(v => !v) }}
         /* jscpd:ignore-end */
       >
-        <IconNewChatOutline16 />
+        <IconNewChatOutlineRegular />
         <span>{t('context.newSession.button')}</span>
-        <IconChevronDownOutline14 />
+        <IconChevronDownOutlineRegular />
       </button>
 
       {open && (
@@ -113,7 +113,7 @@ export function SessionContextActions({
             role="menuitem"
             onClick={handleStartClean}
           >
-            <IconNewChatOutline16 className={css.menuIcon} />
+            <IconNewChatOutlineRegular className={css.menuIcon} />
             <div className={css.menuText}>
               <span className={css.menuTitle}>{t('context.newSession.clean')}</span>
               <span className={css.menuDesc}>{t('context.newSession.cleanDesc')}</span>
@@ -126,7 +126,7 @@ export function SessionContextActions({
             role="menuitem"
             onClick={handleStartWithSummary}
           >
-            <IconRefreshOutline16 className={css.menuIcon} />
+            <IconRefreshOutlineRegular className={css.menuIcon} />
             <div className={css.menuText}>
               <span className={css.menuTitle}>{t('context.newSession.withSummary')}</span>
               <span className={css.menuDesc}>{t('context.newSession.withSummaryDesc')}</span>
@@ -141,7 +141,7 @@ export function SessionContextActions({
             role="menuitem"
             onClick={handleFork}
           >
-            <IconBranchOutline16 className={css.menuIcon} />
+            <IconBranchOutlineRegular className={css.menuIcon} />
             <div className={css.menuText}>
               <span className={css.menuTitle}>{t('menu.fork')}</span>
               <span className={css.menuDesc}>{t('menu.forkDesc')}</span>

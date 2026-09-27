@@ -107,16 +107,8 @@ function resolveOptions(ctx: Context, config: Config): GroqTranscriptionProvider
 
 /** Register the Groq transcription provider with `ctx.transcription`. */
 export function apply(ctx: Context, config: Config): void {
-  let current: () => Config = () => config
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, TRANSCRIPTION_GROQ_SETTINGS_NAMESPACE, Config, config, {
-      setSource: (source: () => Config) => {
-        current = source
-      },
-      // The registration carries no resolved value: the provider projects the
-      // section per call, so a committed change needs no re-registration.
-      onChange: () => {},
-    })
-  })
-  ctx.transcription.registerProvider(new GroqTranscriptionProvider(() => resolveOptions(ctx, current())))
+  // 0.1.7: SettingsForms.installSection foi removido — config de plugins agora
+  // vive nas cordis plugin entries (edicao pela auto-page remonta a entry).
+  // O provider le o config do boot; a edicao via Settings aplica no proximo reload da entry.
+  ctx.transcription.registerProvider(new GroqTranscriptionProvider(() => resolveOptions(ctx, config)))
 }

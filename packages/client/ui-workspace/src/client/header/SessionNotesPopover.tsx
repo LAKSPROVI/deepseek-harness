@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useEscapeToClose } from './popover.ts'
 import clsx from 'clsx'
 import {
-  IconListPenOutline16, IconPlusOutline16, writeClipboard, useDismissOnOutsidePointer,
+  IconListPenOutlineRegular, IconPlusOutlineRegular, writeClipboard, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -175,7 +175,7 @@ export function SessionNotesPopover({ sessionId, inputActions, t }: SessionNotes
         title={t('notes.button.aria')}
         onClick={() => { setOpen(v => !v) }}
       >
-        <IconListPenOutline16 />
+        <IconListPenOutlineRegular />
         <span>{t('notes.button.label')}</span>
         {pendingRemindersCount > 0 && (
           <span className={css.triggerBadge}>{pendingRemindersCount}</span>
@@ -294,7 +294,7 @@ export function SessionNotesPopover({ sessionId, inputActions, t }: SessionNotes
                       onClick={handleAddReminder}
                       title={t('notes.reminders.add')}
                     >
-                      <IconPlusOutline16 size={14} />
+                      <IconPlusOutlineRegular size={14} />
                     </button>
                   </div>
                 </div>
