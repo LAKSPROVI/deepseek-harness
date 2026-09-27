@@ -832,7 +832,7 @@ describe('dsh-tool-team', () => {
       template_id: templateId,
     })))
     expect(spawned.member).toMatchObject({
-      name: 'revisor-de-contratos',
+      target: 'revisor-de-contratos',
       description: 'Revisa clausulas contratuais',
     })
 
@@ -844,7 +844,7 @@ describe('dsh-tool-team', () => {
       context: 'fork',
     })))
     expect(spawned2.member).toMatchObject({
-      name: 'revisor-especial',
+      target: 'revisor-especial',
       description: 'Revisao especial',
     })
   }, 15000)

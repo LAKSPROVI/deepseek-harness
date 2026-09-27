@@ -120,6 +120,62 @@ interface TeamProjection {
 }
 ```
 
+```ts type-equiv
+/** Ordered deliberation stages within one debate round. */
+type TeamDebatePhase = 'positions' | 'critique' | 'rebuttal' | 'verification' | 'synthesis'
+```
+
+```ts type-equiv
+/** Human-controlled lifecycle of one structured debate. */
+type TeamDebateStatus = 'active' | 'paused' | 'completed'
+```
+
+```ts type-equiv
+/** One compact transition retained inside the whole debate snapshot. */
+interface TeamDebateTransition {
+  readonly revision: number
+  readonly round: number
+  readonly phase: TeamDebatePhase
+  readonly status: TeamDebateStatus
+  readonly actor: string
+  readonly note?: string
+}
+```
+
+```ts type-equiv
+/** Whole structured debate snapshot; every transition increments `revision`. */
+interface TeamDebateSnapshot {
+  readonly id: TeamDebateId
+  readonly revision: number
+  readonly topic: string
+  readonly status: TeamDebateStatus
+  readonly phase: TeamDebatePhase
+  readonly round: number
+  readonly maxRounds: number
+  readonly participants: string[]
+  readonly history: TeamDebateTransition[]
+}
+```
+
+```ts type-equiv
+/** Input for creating one structured Team debate. */
+interface StartTeamDebateRequest {
+  readonly topic: string
+  readonly participants: readonly string[]
+  readonly maxRounds?: number
+}
+```
+
+```ts type-equiv
+/** Input for one Lead-authorized compare-and-set debate transition. */
+interface UpdateTeamDebateRequest {
+  readonly debateId: TeamDebateId
+  readonly expectedRevision: number
+  readonly action: 'pause' | 'resume' | 'advance' | 'complete'
+  readonly note?: string
+}
+```
+
 ## Replay
 
 The `agentTeam` Session projection replays one root Session into the roster, task board, and queued-minus-delivered mailbox that every Team operation reads. It selects records by `TeamId`, so events inherited by an ordinary fork retain the ancestor id and never enter the new root's state. Session event `seq` and `time` remain the ordering and timing record; Team snapshots do not duplicate them. Roster and task reads reach callers as views; pending mail stays internal to delivery and recovery. The package [README](../../packages/experimental/agent-team/README.md) owns operation, authorization, recovery, and limit behavior.
@@ -199,6 +255,29 @@ listTasks(caller: Agent): TeamTaskView[]
  * @returns the committed next task revision.
  */
 async updateTask(caller: Agent, request: UpdateTeamTaskRequest): Promise<TeamTaskView>
+
+/**
+ * Return the current durable Team debate, when present.
+ * @param caller - exact live Team member reading the debate.
+ * @returns the current debate snapshot, or undefined when none exists.
+ */
+getDebate(caller: Agent): TeamDebateSnapshot | undefined
+
+/**
+ * Create a revision-one active structured debate. Lead only.
+ * @param caller - exact live Team Lead starting the debate.
+ * @param request - debate topic, participants, and optional round limit.
+ * @returns the revision-one active debate snapshot.
+ */
+async startDebate(caller: Agent, request: StartTeamDebateRequest): Promise<TeamDebateSnapshot>
+
+/**
+ * Compare-and-set one Lead-authorized debate transition.
+ * @param caller - exact live Team Lead authorizing the transition.
+ * @param request - debate identity, expected revision, action, and optional note.
+ * @returns the committed next debate revision.
+ */
+async updateDebate(caller: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateSnapshot>
 
 /**
  * Wait for the next Team-domain or member-status change.

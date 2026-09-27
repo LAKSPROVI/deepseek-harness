@@ -25,12 +25,21 @@ export class TeamDebateBoard {
     private readonly maxRounds: number,
   ) {}
 
-  /** Return the current durable debate, when present. */
+  /**
+   * Return the current durable debate, when present.
+   * @param membership - exact live Team membership whose root owns the debate.
+   * @returns the current debate snapshot, or undefined when none exists.
+   */
   get(membership: TeamMembership): TeamDebateSnapshot | undefined {
     return this.journal.state(membership.root).debate
   }
 
-  /** Create a revision-one active debate. */
+  /**
+   * Create a revision-one active debate.
+   * @param caller - exact live Team Lead authorizing the creation.
+   * @param request - debate topic, participant names, and optional round limit.
+   * @returns the revision-one active debate snapshot.
+   */
   async start(caller: Agent, request: StartTeamDebateRequest): Promise<TeamDebateSnapshot> {
     const membership = this.requireLead(caller)
     const topic = requiredText(request.topic, 'topic', 4_000)
@@ -65,7 +74,12 @@ export class TeamDebateBoard {
     })
   }
 
-  /** Apply one Lead-authorized compare-and-set transition. */
+  /**
+   * Apply one Lead-authorized compare-and-set transition.
+   * @param caller - exact live Team Lead authorizing the transition.
+   * @param request - debate identity, expected revision, action, and optional note.
+   * @returns the committed next debate revision.
+   */
   async update(caller: Agent, request: UpdateTeamDebateRequest): Promise<TeamDebateSnapshot> {
     const membership = this.requireLead(caller)
     const note = request.note === undefined ? undefined : requiredText(request.note, 'note', 1_000)

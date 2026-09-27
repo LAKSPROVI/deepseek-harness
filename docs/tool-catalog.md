@@ -19,6 +19,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-mcp-resources` | `list_mcp_resource_templates`, `list_mcp_resources`, `read_mcp_resource` | `ctx.tools`, `ctx.mcpResources` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-experimental-browser-use-stagehand-native` | `stagehand_act`, `stagehand_extract`, `stagehand_navigate`, `stagehand_observe`, `stagehand_screenshot`, `stagehand_tabs` | `ctx.browserUse`, `ctx.agents`, `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
+| `@deepseek-ai/dsh-tool-automation` | `automation_create_task`, `automation_delete_task`, `automation_list_tasks`, `automation_pause_task`, `automation_resume_task`, `automation_trigger_task` | `ctx.tools`, `ctx.automation` | `tool/call`, `tool/result after the engine store or controller answers` | - | automation_create_task defaults to the CUSTOM_PROMPT action; the run itself is fire-and-forget and reaches the model only through a later list. |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`, `ctx.ptcRuntime (execution time)`, `ctx.systemPrompt` | `tool/call`, `one tool/ptc-dispatch-start + tool/ptc-dispatch pair per bridged sub-call`, `tool/result` | - | Owned by the tool registry as a reserved transport outside filterable capability layers under `mode: ptc` / `mode: both` (see the PTC mode Agent Note). Under `ptc` it is the registry's only wire contribution; the other visible capabilities are declared in a generated SDK section in the loaded runtime's language, and a program calls them through bindings scheduled under the native concurrency contract (submission-ordered starts and policy; concurrency-safe bodies overlap up to `maxParallelSubCalls`) that re-enter the complete guarded tool pipeline and link each nested execution to this outer result. |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
 | `@deepseek-ai/dsh-tool-bash` | `bash` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs for run_in_background and the job-backed foreground path` | `tool/call`, `tool/result` | - | The bash tool is the model-facing consumer of the bash executor seam. With a job registry composed every call registers with the generic `ctx.jobs` runtime as it starts, collected/stopped through the `job_*` tools from `@deepseek-ai/dsh-tool-jobs`; without one, or with `enableRunInBackground: false`, the tool registers a foreground-only schema without the `run_in_background` parameter. |
@@ -40,7 +41,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-subagent` | `list_subagent_models`, `subagent` | `ctx.tools`, `ctx.subagents`, `ctx.systemPrompt`, `ctx.llm for model discovery and selected-route validation` | `tool/call`, `tool/result`, `child session events through the chosen provider` | `subagent`, `subagent_fork` | The registered delegation name is the load-time `toolName` config (default `subagent`); the default schema above has model selection off, while the discovery schema is shown as the fixed companion available in an enabled Session. Web presets sample the Plugins preference for each new top-level Session and preserve that decision for its child Sessions; `subagent_fork` remains fixed-route. Each instance independently controls whether it reads model-selection settings and its background behavior through `modelSelectionSettings`, `backgroundMode`, and `enableRunInBackground`. |
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
-| `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
+| `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_debate_get`, `team_debate_start`, `team_debate_update`, `team_roster_dismiss`, `team_squad_delete`, `team_squad_list`, `team_squad_save`, `team_squad_spawn`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `team_template_delete`, `team_template_list`, `team_template_save`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
@@ -516,6 +517,176 @@ Ask the user a concise question when you need confirmation, a choice, or missing
 Source: [`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts)
 
 ask_user_question pauses the tool call until the active UI provider returns a human answer.
+
+<a id="deepseek-aidsh-tool-automation"></a>
+
+## `@deepseek-ai/dsh-tool-automation`
+
+### `automation_create_task`
+
+Schedule a persistent task that survives restarts. By default the task opens a new session in a workspace and sends it `prompt` when due (action_type CUSTOM_PROMPT); the workspace defaults to this session's directory. schedule_expr depends on schedule_type: an ISO-8601 instant for ONCE, a number of seconds for INTERVAL, a five-field UTC cron line for CRON, or an RRULE string for RRULE.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Short human-readable task title."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional longer explanation shown in the task list."
+    },
+    "schedule_type": {
+      "type": "string",
+      "description": "How schedule_expr is read.",
+      "enum": [
+        "ONCE",
+        "INTERVAL",
+        "CRON",
+        "RRULE"
+      ]
+    },
+    "schedule_expr": {
+      "type": "string",
+      "description": "ISO instant, seconds, cron line, or RRULE, per schedule_type."
+    },
+    "timezone": {
+      "type": "string",
+      "description": "IANA zone for RRULE evaluation, e.g. America/Sao_Paulo. Defaults to UTC."
+    },
+    "max_runs": {
+      "type": "integer",
+      "description": "Stop after this many completed runs. Omit for an open-ended schedule."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Instruction the new session receives on each run. Required when action_type is CUSTOM_PROMPT."
+    },
+    "workspace_path": {
+      "type": "string",
+      "description": "Absolute workspace directory the run's session opens in. Defaults to this session's directory."
+    },
+    "action_type": {
+      "type": "string",
+      "description": "Executor key; defaults to CUSTOM_PROMPT. Another key needs a deployment-registered handler."
+    },
+    "action_payload": {
+      "type": "object",
+      "description": "Extra fields passed verbatim to the executor. For CUSTOM_PROMPT they merge with prompt and workspace_path.",
+      "additionalProperties": true,
+      "properties": {}
+    }
+  },
+  "required": [
+    "title",
+    "schedule_type",
+    "schedule_expr"
+  ]
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_delete_task`
+
+Delete a persistent task and its run history. This cannot be undone.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_list_tasks`
+
+List the persistent tasks this deployment owns, with status and next run time.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_pause_task`
+
+Pause a persistent task so the scheduler skips it until resumed.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_resume_task`
+
+Resume a paused persistent task; its next run is recalculated from now.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+### `automation_trigger_task`
+
+Run a persistent task now, outside its schedule. Returns the run id; the run itself proceeds in the background.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Task id as returned by automation_create_task or automation_list_tasks."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/automation/tool-automation/src/index.ts`](../packages/automation/tool-automation/src/index.ts)
+
+automation_create_task defaults to the CUSTOM_PROMPT action; the run itself is fire-and-forget and reaches the model only through a later list.
 
 <a id="deepseek-aidsh-tools"></a>
 
@@ -2281,7 +2452,7 @@ Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/exper
 
 ### `spawn_teammate`
 
-Create one named, durable teammate. Only the Team Lead may call this tool.
+Create one named, durable teammate from custom parameters or from a saved template. Only the Team Lead may call this tool.
 
 ```json
 {
@@ -2289,15 +2460,19 @@ Create one named, durable teammate. Only the Team Lead may call this tool.
   "properties": {
     "name": {
       "type": "string",
-      "description": "Unique lower-kebab-case teammate name."
+      "description": "Unique teammate name or natural label (e.g. \"revisor\"). Required unless template_id is used."
     },
     "description": {
       "type": "string",
-      "description": "Short description of the delegated responsibility."
+      "description": "Short description of the delegated responsibility. Required unless template_id is used."
     },
     "prompt": {
       "type": "string",
-      "description": "Complete initial task for the teammate."
+      "description": "Complete initial task for the teammate. Required unless template_id is used."
+    },
+    "template_id": {
+      "type": "string",
+      "description": "Optional saved teammate template ID. When provided, missing fields are populated from the saved template."
     },
     "context": {
       "type": "string",
@@ -2306,12 +2481,217 @@ Create one named, durable teammate. Only the Team Lead may call this tool.
         "fresh",
         "fork"
       ]
+    },
+    "llm_provider": {
+      "type": "string",
+      "description": "Optional LLM adapter route (e.g. \"openai\", \"deepseek\", \"anthropic\"). Omit to inherit the Lead provider or template value."
+    },
+    "model": {
+      "type": "string",
+      "description": "Optional provider-owned model id (e.g. \"gpt-5\", \"deepseek-chat\"). Omit to inherit the Lead model or template value."
+    },
+    "persona": {
+      "type": "string",
+      "description": "Optional teammate-only system persona describing its role and constraints."
+    }
+  }
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_debate_get`
+
+Read the current structured debate, its CAS revision, round, phase, status, and transition history.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_debate_start`
+
+Start one structured Team debate. Team Lead only.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "topic": {
+      "type": "string",
+      "description": "Question or proposition the Team must debate."
+    },
+    "participants": {
+      "type": "array",
+      "description": "Two through ten unique Team member names, including lead when it participates.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "max_rounds": {
+      "type": "integer",
+      "description": "Maximum complete debate rounds. Defaults to 2."
     }
   },
   "required": [
-    "name",
+    "topic",
+    "participants"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_debate_update`
+
+Compare-and-set a structured debate transition. Team Lead only.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "debate_id": {
+      "type": "string",
+      "description": "Current debate id."
+    },
+    "expected_revision": {
+      "type": "integer",
+      "description": "Current debate revision."
+    },
+    "action": {
+      "type": "string",
+      "description": "Protocol transition. Pausing does not interrupt active model turns.",
+      "enum": [
+        "pause",
+        "resume",
+        "advance",
+        "complete"
+      ]
+    },
+    "note": {
+      "type": "string",
+      "description": "Short audit note about completed work or the human instruction."
+    }
+  },
+  "required": [
+    "debate_id",
+    "expected_revision",
+    "action"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_roster_dismiss`
+
+Interrupt and dismiss all active teammates, or specific named teammates, in one batch call to clean up the team.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "names": {
+      "type": "array",
+      "description": "Optional list of specific teammate names to dismiss. If omitted, all active teammates are dismissed.",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_squad_delete`
+
+Delete a reusable squad preset from settings by id or title.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Squad id or title to delete."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_squad_list`
+
+List all reusable multi-agent squad presets saved in system settings.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_squad_save`
+
+Save or update a reusable multi-agent squad preset (1-9 members) in settings.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Optional unique squad ID. If omitted, derived from title."
+    },
+    "title": {
+      "type": "string",
+      "description": "User-facing title for the squad preset."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this squad does when instantiated."
+    },
+    "members": {
+      "type": "array",
+      "description": "One to nine squad members with name, description, prompt, context, and optional provider/model/persona."
+    }
+  },
+  "required": [
+    "title",
     "description",
-    "prompt"
+    "members"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_squad_spawn`
+
+Spawn an entire multi-agent squad preset in this session in one batch operation.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "squad_id": {
+      "type": "string",
+      "description": "Saved squad preset ID or title to instantiate."
+    }
+  },
+  "required": [
+    "squad_id"
   ]
 }
 ```
@@ -2479,6 +2859,99 @@ Compare-and-set a shared task action using the latest revision from team_task_ge
     "task_id",
     "expected_revision",
     "action"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_template_delete`
+
+Delete a reusable teammate template from settings by id or title.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Template id or title to delete."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_template_list`
+
+List all reusable teammate templates saved in system settings.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_template_save`
+
+Save or update a reusable teammate template in settings so it can be reused across sessions and teams.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Optional unique template ID. If omitted, derived from title."
+    },
+    "title": {
+      "type": "string",
+      "description": "User-facing title for the template (e.g. \"Pesquisador Jurídico Sênior\")."
+    },
+    "name": {
+      "type": "string",
+      "description": "Default member name. If omitted, derived from title."
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of the responsibility."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Default initial prompt/instructions for teammates created with this template."
+    },
+    "context": {
+      "type": "string",
+      "description": "Default context mode (fresh or fork). Defaults to fresh.",
+      "enum": [
+        "fresh",
+        "fork"
+      ]
+    },
+    "llm_provider": {
+      "type": "string",
+      "description": "Optional default LLM provider."
+    },
+    "model": {
+      "type": "string",
+      "description": "Optional default model ID."
+    },
+    "persona": {
+      "type": "string",
+      "description": "Optional default persona."
+    }
+  },
+  "required": [
+    "title",
+    "description",
+    "prompt"
   ]
 }
 ```

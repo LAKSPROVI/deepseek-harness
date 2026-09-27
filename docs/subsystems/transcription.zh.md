@@ -57,6 +57,8 @@ registerProvider(provider: TranscriptionProvider): () => void
 async transcribe(request: TranscriptionRequest, signal?: AbortSignal): Promise<TranscriptionResult>
 ```
 
+Types: [TranscriptionRequest](voice-input.zh.md)
+
 Source: [`packages/transcription/transcription/src/index.ts`](../../packages/transcription/transcription/src/index.ts)
 
 <a id="ctxvoiceinput--voiceinputservice"></a>

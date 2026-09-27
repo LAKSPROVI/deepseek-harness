@@ -129,7 +129,6 @@ describe('openPromptSession', () => {
     expect(test.calls).toEqual([
       'permission-resolve:workspace-write',
       'preset-resolve:<default>',
-      'standing:standard',
       'default-model',
       'workspace:/workspace',
       'agent-create',
