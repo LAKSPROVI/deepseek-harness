@@ -1528,19 +1528,21 @@ function RecentSection({ list, workspaces, rowState, statuses, customStatuses, c
   return (
     <section className={css.recentSection} aria-label={t('section.recentAndInProgress')}>
       <div className={css.recentSectionTitle}>{t('section.recentAndInProgress')}</div>
-      <div role="tree" aria-label={t('section.recentAndInProgress')}>
+      <div role="list" aria-label={t('section.recentAndInProgress')}>
         {nodes.map((node) => {
           const groupKey = owningGroupKey(workspaces, node.id)
           const ws = workspaces.find(w => w.workspaceId === groupKey)
           return (
             <div
               key={node.id}
-              role="treeitem"
+              role="button"
+              tabIndex={0}
               className={clsx(css.recentRow, node.id === currentId && css.recentRowCurrent)}
               onClick={() => { open(node.id) }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(node.id) } }}
             >
               <span className={css.recentRowTitle}>{node.title}</span>
-              {ws !== undefined && <span className={css.workspaceBadge}>{ws.title}</span>}
+              {ws !== undefined && <span className={css.workspaceBadge}>{'▸ ' + ws.title}</span>}
             </div>
           )
         })}

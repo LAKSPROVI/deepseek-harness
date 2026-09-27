@@ -570,16 +570,9 @@ export function deriveRecentAndInProgress(
     list.byId,
   )
   return deriveFlat(list, ordered, rowState, statuses, customStatuses)
-    .filter(node => node.customStatus !== 'completed'
-      && node.customStatus !== 'finalized'
-      && node.customStatus !== 'idle'
-      && (node.running
-        || node.runningSubagentCount > 0
-        || node.pendingInteraction !== undefined
-        || node.completed
-        || node.customStatus === 'later'
-        || node.customStatus === 'warning'
-        || node.customStatus === 'unread'))
+    .filter(node => node.customStatus === 'unread'
+      || node.customStatus === 'later'
+      || node.customStatus === 'warning')
     .slice(0, limit)
 }
 
