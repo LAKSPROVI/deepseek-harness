@@ -2811,6 +2811,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-settings-account AccountPlatformHost id \'account.platform-page\'',
       'client-ui-shortcuts ShortcutReference id \'shortcuts\'',
       'client-ui-workspace SessionRenameDialog id \'workspace.session-rename\'',
+      'client-ui-workspace SessionStatusDialog id \'workspace.session-set-status\'',
       'client-ui-workspace SessionArchiveConfirmDialog id \'workspace.session-archive\'',
       'client-ui-workspace RowActionToast id \'workspace.row-toast\'',
     ],
@@ -3875,6 +3876,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     occupants: [
       'client-ui-workspace PinSessionMenuItem id \'pin\'',
       'client-ui-workspace RenameSessionMenuItem id \'rename\'',
+      'client-ui-workspace SetSessionStatusMenuItem id \'set-status\'',
       'client-ui-workspace ForkSessionMenuItem id \'fork\'',
       'client-ui-workspace ArchiveSessionMenuItem id \'archive\'',
     ],
