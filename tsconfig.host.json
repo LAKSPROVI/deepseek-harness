@@ -394,6 +394,7 @@
     { "path": "./packages/web/web-search-deepseek" },
     { "path": "./packages/web/web-fetch-http" },
     { "path": "./packages/web/tool-web" },
+  { "path": "./packages/web/tool-jev" },
     { "path": "./packages/transcription/transcription" },
     { "path": "./packages/transcription/transcription-groq" },
     { "path": "./packages/transcription/voice-input" },

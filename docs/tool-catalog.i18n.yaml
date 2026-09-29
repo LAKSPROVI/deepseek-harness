@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write docs/tool-catalog.md
 /:
   en: 0be8ffbf23193557
-  zh: 0be8ffbf23193557
+  zh: e3b0c44298fc1c14
 /tool-schema-catalog:
   en: 6cc2cd9ced70bb09
-  zh: 51aa6381ae92d904
+  zh: 148028e809751f3a
 /tool-schema-catalog/tool-package-map:
-  en: 1898a26f8e6325bd
-  zh: e3215affebbbfb7c
+  en: 940cf6e09d0000fe
+  zh: c507006348b18a39
 /tool-schema-catalog/deepseek-ai-dsh-plugin-manager:
   en: e0143916bb634762
   zh: e0143916bb634762
@@ -82,19 +82,19 @@
   zh: 76fbbf0fe38aef10
 /tool-schema-catalog/deepseek-ai-dsh-tools/run-code:
   en: 8358b1f3dd09e202
-  zh: 8358b1f3dd09e202
+  zh: 8bc0d1eb08217bc2
 /tool-schema-catalog/deepseek-ai-dsh-plan-mode:
   en: b500b530845e26a9
   zh: b500b530845e26a9
 /tool-schema-catalog/deepseek-ai-dsh-plan-mode/exit-plan-mode:
   en: b410483c2bd0c1a1
-  zh: b410483c2bd0c1a1
+  zh: fcfc0fbe2183376e
 /tool-schema-catalog/deepseek-ai-dsh-tool-bash:
   en: 408ff0a5189bd7ec
   zh: 408ff0a5189bd7ec
 /tool-schema-catalog/deepseek-ai-dsh-tool-bash/bash:
   en: 67ee2b8d4997bd1b
-  zh: 67ee2b8d4997bd1b
+  zh: 7b9649e0b82626fd
 /tool-schema-catalog/deepseek-ai-dsh-tool-present:
   en: f656575e6df094f6
   zh: f656575e6df094f6
@@ -106,7 +106,7 @@
   zh: b222fc05f3f8ee4a
 /tool-schema-catalog/deepseek-ai-dsh-tool-pwsh/pwsh:
   en: 9d7055b9fb8ba9de
-  zh: 9d7055b9fb8ba9de
+  zh: 2053143aecbcc880
 /tool-schema-catalog/deepseek-ai-dsh-tool-cordis:
   en: 76c7c62f9029b6f5
   zh: 76c7c62f9029b6f5
@@ -250,19 +250,19 @@
   zh: c89084b31ffccbce
 /tool-schema-catalog/deepseek-ai-dsh-tool-subagent/subagent:
   en: 55cbd29d70bcf3d7
-  zh: 55cbd29d70bcf3d7
+  zh: dd7351653ceda0c2
 /tool-schema-catalog/deepseek-ai-dsh-tool-subagent-control:
   en: ab82e130c3413f04
   zh: ab82e130c3413f04
 /tool-schema-catalog/deepseek-ai-dsh-tool-subagent-control/interrupt-agent:
   en: 0cec3f2520050839
-  zh: 0cec3f2520050839
+  zh: 931d9d6213b575b7
 /tool-schema-catalog/deepseek-ai-dsh-tool-subagent-control/list-agents:
   en: ae22e8543d123c39
-  zh: ae22e8543d123c39
+  zh: 784df9201588e428
 /tool-schema-catalog/deepseek-ai-dsh-tool-subagent-control/send-message:
   en: 2ebdc450faef6446
-  zh: 2ebdc450faef6446
+  zh: b86ed62f9cc0ea59
 /tool-schema-catalog/deepseek-ai-dsh-tool-jobs:
   en: 9be673b1604d0114
   zh: 9be673b1604d0114
@@ -349,13 +349,19 @@
   zh: bb38a9d29f46563c
 /tool-schema-catalog/deepseek-ai-dsh-tool-workflow/workflow:
   en: fdd667cfe21481e8
-  zh: fdd667cfe21481e8
+  zh: fdbc6f211deb5677
 /tool-schema-catalog/deepseek-ai-dsh-tool-workspace-dependencies:
   en: 96bffc40b80df4b8
   zh: 96bffc40b80df4b8
 /tool-schema-catalog/deepseek-ai-dsh-tool-workspace-dependencies/load-workspace-dependencies:
-  en: 77b88764ff3464e9
-  zh: 77b88764ff3464e9
+  en: 140448c5efb07a24
+  zh: 140448c5efb07a24
+/tool-schema-catalog/deepseek-ai-dsh-tool-jev:
+  en: 613fb3f21c9c06ee
+  zh: 613fb3f21c9c06ee
+/tool-schema-catalog/deepseek-ai-dsh-tool-jev/jev-decide:
+  en: 3abc7878da47b037
+  zh: 187d82494c001479
 /tool-schema-catalog/deepseek-ai-dsh-tool-web:
   en: 4b9918342d3aa931
   zh: 4b9918342d3aa931

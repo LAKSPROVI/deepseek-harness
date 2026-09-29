@@ -74,6 +74,7 @@ import McpResources from '@deepseek-ai/dsh-mcp-resources'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import { registerListSubagentModels } from '../packages/subagent/tool-subagent/src/list-models.ts'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
+import * as ToolJev from '@deepseek-ai/dsh-tool-jev'
 import WorkflowEngine from '@deepseek-ai/dsh-workflow'
 import type { WorkflowRun, WorkflowStartRequest } from '@deepseek-ai/dsh-workflow'
 import * as ToolRalph from '@deepseek-ai/dsh-tool-ralph'
@@ -672,6 +673,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     async mount(ctx) {
       // Schema harvest never prepares a payload; the directory need not exist.
       await ctx.plugin(ToolWorkspaceDependencies, { source: resolve(root, '.tmp/tool-catalog/primary-runtime') })
+    },
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-jev',
+    dir: 'tool-jev',
+    source: 'packages/web/tool-jev/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      // The tool reads TYPESAFE_API_KEY only at execution time; schema
+      // harvest never calls the API, so no credential is needed here.
+      await ctx.plugin(ToolJev)
     },
   },
   {

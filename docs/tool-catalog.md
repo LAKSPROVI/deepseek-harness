@@ -45,6 +45,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
+| `@deepseek-ai/dsh-tool-jev` | `jev_decide` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 
 <a id="deepseek-aidsh-plugin-manager"></a>
@@ -3139,6 +3140,66 @@ Get absolute paths to bundled Python and library directories, plus bundled Pytho
 ```
 
 Source: [`packages/skill/tool-workspace-dependencies/src/index.ts`](../packages/skill/tool-workspace-dependencies/src/index.ts)
+
+<a id="deepseek-aidsh-tool-jev"></a>
+
+## `@deepseek-ai/dsh-tool-jev`
+
+### `jev_decide`
+
+Evaluate typed questions (choice / score / noul) about a state through the TypeSafe (Jev) System One API and return structured answers with probabilities and calibrated confidence. Each question must be one well-scoped judgment; list several questions in one call to have them evaluated in parallel.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string",
+      "description": "The text or JSON state that every question is evaluated against."
+    },
+    "model": {
+      "type": "string",
+      "description": "System One model id. Defaults to jev-latest."
+    },
+    "questions": {
+      "type": "array",
+      "description": "Questions to evaluate in parallel; each must be one well-scoped judgment.",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Answer key for this question; unique in the list."
+          },
+          "type": {
+            "type": "string",
+            "description": "Question primitive.",
+            "enum": [
+              "choice",
+              "score",
+              "noul"
+            ]
+          },
+          "instructions": {
+            "type": "string",
+            "description": "One well-scoped question about the state."
+          },
+          "criteria": {
+            "description": "choice: named options object. score: rubric array from weakest to strongest. Absent for noul."
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "state",
+    "questions"
+  ]
+}
+```
+
+Source: [`packages/web/tool-jev/src/index.ts`](../packages/web/tool-jev/src/index.ts)
 
 <a id="deepseek-aidsh-tool-web"></a>
 
