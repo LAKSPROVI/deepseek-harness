@@ -182,6 +182,16 @@ describe('live event path', () => {
 })
 
 describe('paging', () => {
+  it('opens a top-level session with a small first page', async ({ mock, start }) => {
+    const session = await sessionBench(mock, start, SID)
+    mock.stream(FOLLOW, followScript(history(plainTurn(SessionSeq(6), 1, '新问', '新答'), true)))
+    await session.open()
+    // The first page stays small so very large histories render fast; the
+    // reconnect replay keeps the same window (restart reuses the open request).
+    expect(mock.log.requests(FOLLOW)).toMatchObject([{ maxMessages: 500, turnWindow: { minMessages: 8, minTurns: 2 } }])
+    expect(mock.log.requests(PAGE)).toEqual([])
+  })
+
   it('prepends an older page and keeps seq continuity', async ({ mock, start }) => {
     const older = plainTurn(SessionSeq(0), 0, '旧问', '旧答')
     const newer = plainTurn(SessionSeq(6), 1, '新问', '新答')
@@ -191,7 +201,7 @@ describe('paging', () => {
     await session.open()
     await session.loadOlder()
     const snapshot = session.getSnapshot()
-    expect(mock.log.requests(FOLLOW)).toMatchObject([{ maxMessages: 500, turnWindow: { minMessages: 50, minTurns: 2 } }])
+    expect(mock.log.requests(FOLLOW)).toMatchObject([{ maxMessages: 500, turnWindow: { minMessages: 8, minTurns: 2 } }])
     expect(mock.log.requests(PAGE)).toEqual([
       { address: ADDRESS, throughSeq: 11, beforeSeq: 6, maxMessages: 500, turnWindow: { minMessages: 50, minTurns: 2 } },
     ])

@@ -53,6 +53,20 @@ export const PAGE_MESSAGES = 50
 
 const HISTORY_PAGE_OPTIONS = { maxMessages: 500, turnWindow: { minMessages: PAGE_MESSAGES, minTurns: 2 } }
 
+/**
+ * Messages requested for the first page of a top-level session open. Kept
+ * small so a very large history renders its recent exchanges in seconds: the
+ * Host computes a render view for every tool event on the page, so page cost
+ * scales with message count (measured 162s for 50 messages on a 31 MB
+ * session). `loadOlder` still pulls `PAGE_MESSAGES` on scroll.
+ */
+export const FIRST_PAGE_MESSAGES = 8
+
+const FIRST_PAGE_OPTIONS = {
+  ...HISTORY_PAGE_OPTIONS,
+  turnWindow: { ...HISTORY_PAGE_OPTIONS.turnWindow, minMessages: FIRST_PAGE_MESSAGES },
+}
+
 /** Minimum messages per page while a turn jump loops backwards. */
 export const JUMP_PAGE_MESSAGES = 200
 
@@ -627,8 +641,13 @@ export class Session implements SessionFace {
       },
     })
     this.events = events
+    // Small first page for a top-level session: a very large history renders
+    // its recent exchanges fast, and loadOlder backfills the rest on scroll.
+    // Subagent transcripts keep the full page (a less hot open path whose
+    // request shape several tests pin).
+    const pageOptions = this.address === undefined ? FIRST_PAGE_OPTIONS : HISTORY_PAGE_OPTIONS
     try {
-      await events.open(HISTORY_PAGE_OPTIONS)
+      await events.open(pageOptions)
       if (generation !== this.openGeneration || this.events !== events) return
       this.openState = 'open'
     } catch (error) {

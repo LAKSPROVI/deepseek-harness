@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-09-06-large-session-history-load.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-06-large-session-history-load.md
+/agent-note-large-session-history-load:
+  en: 0fbb82f77488d018
+  zh: 30dbac53f7473f75
+/agent-note-large-session-history-load/problem:
+  en: 2ece3dac8620b39a
+  zh: 4292b8c759da0f8a
+/agent-note-large-session-history-load/decision:
+  en: afff4651b758aca5
+  zh: 4d3fe0ad8a72388a
+/agent-note-large-session-history-load/verification:
+  en: 1f73c8bf0d2d99b0
+  zh: d698b68ca7c8f945
+/agent-note-large-session-history-load/alternatives-considered:
+  en: 7513f3d354fa10a2
+  zh: e5b1af958dbdfef6
+/agent-note-large-session-history-load/consequences:
+  en: cd64a37d4f6f2c25
+  zh: ca1ba5d04a0d3d2a
