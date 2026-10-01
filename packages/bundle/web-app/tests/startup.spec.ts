@@ -3,7 +3,7 @@
  * releases a consumer whose config reads `ctx.webStartup` directly.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -158,5 +158,33 @@ describe('the bundle preset root', () => {
     expect(WEB_PRESET_ROOT.replaceAll('\\', '/')).toMatch(/\/packages\/bundle\/web-app\/presets\/$/)
     expect(existsSync(join(WEB_PRESET_ROOT, 'automation', 'preset.yml'))).toBe(true)
     expect(existsSync(join(WEB_PRESET_ROOT, 'automation', 'agent.cordis.yml'))).toBe(true)
+  })
+})
+
+describe('the shipped web patch', () => {
+  it('activates every ctx.webStartup reader, including the preset registry', () => {
+    const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+    const lines = patch.split('\n')
+    const starts = lines
+      .map((line, index) => (/^\s*- id: /.test(line) ? index : -1))
+      .filter(index => index >= 0)
+    const entries = starts.map((start, position) => {
+      const end = position + 1 < starts.length ? starts[position + 1] : lines.length
+      return lines.slice(start, end)
+    })
+    // An entry whose config evaluates `ctx.webStartup` expressions must
+    // activate after the service: without inject, those expressions resolve
+    // against a service the entry never requested and every new web session
+    // fails to boot.
+    const missing = entries
+      .filter(entry => entry.some(line => !/^\s*#/.test(line) && line.includes('ctx.webStartup')))
+      .filter(entry => !entry.some(line => /^\s*inject:/.test(line) && line.includes('webStartup')))
+      .map(entry => (entry[0] ?? '').trim())
+    expect(missing).toEqual([])
+    const registry = entries.find(entry => (entry[0] ?? '').includes('- id: agent-preset-registry'))
+    expect(registry).toBeDefined()
+    expect(
+      registry?.some(line => /^\s*inject:/.test(line) && line.includes('webStartup')),
+    ).toBe(true)
   })
 })

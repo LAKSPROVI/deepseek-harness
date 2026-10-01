@@ -619,6 +619,7 @@
 - insert:
     - id: agent-preset-registry
       name: '@deepseek-ai/dsh-agent-preset-registry'
+      inject: [webStartup]
       config:
         default: standard
         # The bundle's own presets (`presets/` beside this file): versioned with
