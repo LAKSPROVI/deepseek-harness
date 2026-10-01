@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-01-atomic-write-crash-durability.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-01-atomic-write-crash-durability.md
+/agent-note-atomic-write-crash-durability:
+  en: a65c4de6cf71f800
+  zh: d7d1e853479ec8a6
+/agent-note-atomic-write-crash-durability/problem:
+  en: f15d2063ac8d8ecc
+  zh: 0187d781c1d82188
+/agent-note-atomic-write-crash-durability/decision:
+  en: 87f2868832edcf45
+  zh: 5ae88a59f20a7a86
+/agent-note-atomic-write-crash-durability/alternatives-considered:
+  en: b2d80224cec24d99
+  zh: 6525df7a24eaa13c
+/agent-note-atomic-write-crash-durability/consequences:
+  en: c6ed75905c811f17
+  zh: 9581e7168df55282

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use `dsh-atomic-write` to replace a file without exposing partial content or following a symlinked temporary path. Its writer lock serializes read-modify-write cycles across processes so concurrent writers cannot overwrite one another with stale state. Each replacement uses caller-selected permission bits on a fresh inode, which safely narrows an existing file's permissions. This zero-dependency library accepts strings; it does not provide a `cordis.yml` plugin or crash durability because it does not call `fsync`.
+Use `dsh-atomic-write` to replace a file without exposing partial content or following a symlinked temporary path. Its writer lock serializes read-modify-write cycles across processes so concurrent writers cannot overwrite one another with stale state. Each replacement uses caller-selected permission bits on a fresh inode, which safely narrows an existing file's permissions. This zero-dependency library accepts strings; it does not provide a `cordis.yml` plugin. The replacement is crash-durable: the temp file is fsynced before the rename and the parent directory after it on POSIX.
 
 ## Table of Contents
 
@@ -81,7 +81,7 @@ The package is built on one separation: the atomic commit owns the swap, and the
 
 ### Write path
 
-`writeFileAtomic` writes a random-suffix sibling opened with exclusive create (`wx`), then renames it over the target. The exclusive open refuses to follow a symlink planted at a guessable temp path; the same-directory sibling keeps the rename on one filesystem; and the rename replaces a symlinked target itself instead of writing through to its referent. A Windows retry keeps the same complete sibling and uses bounded exponential backoff, so temporary use of the target by software outside the cooperative writer lock cannot turn a safe replacement into an immediate failure; the archived [retry decision record](../../../.agents/notes/archived/bug-fix/2026-08-29-windows-atomic-replace-retry.md) documents the original rationale and rejected alternatives.
+`writeFileAtomic` writes a random-suffix sibling opened with exclusive create (`wx`), fsyncs it, then renames it over the target and fsyncs the parent directory on POSIX. The exclusive open refuses to follow a symlink planted at a guessable temp path; the same-directory sibling keeps the rename on one filesystem; and the rename replaces a symlinked target itself instead of writing through to its referent. A Windows retry keeps the same complete sibling and uses bounded exponential backoff, so temporary use of the target by software outside the cooperative writer lock cannot turn a safe replacement into an immediate failure; the archived [retry decision record](../../../.agents/notes/archived/bug-fix/2026-08-29-windows-atomic-replace-retry.md) documents the original rationale and rejected alternatives.
 
 `withFileLock` creates a `<filename>.lock` sibling with `wx`. `EEXIST` identifies contention directly; `EPERM` does so only when a fresh `lstat` confirms the lock path exists, covering Windows exclusive-create behavior without hiding an unrelated permission failure. The lock records its creator's PID as `<pid>\n` and is removed by the holder in a `finally`. A contender that reads a record whose PID a signal probe reports as absent (`ESRCH`) creates a `<filename>.lock.takeover-<record hash>` claim with `wx`, re-reads the lock and probes its PID again, removes it only if it still holds the same record and that PID is still absent, removes the claim, and retries at once. A holder that exists under another user (`EPERM`) and a record naming the contender's own process are waited for. Contenders that read the same record contend for one claim, and the second probe rejects a holder that reused the exited PID, so a takeover never removes a lock that another contender acquired after the exited holder's. Takeover proves only that the recorded process exited; an operation that starts other writers leaves its successor a way to find them, as the [Plugin Manager](../../boot/plugin-manager/README.md) does for its pnpm runs. Contention backs off exponentially and fails when the per-call `waitMs` deadline (default two seconds) passes; the [takeover decision record](../../../.agents/notes/implemented/bug-fix/2026-09-24-exited-holder-lock-takeover.md) owns the rationale.
 
@@ -122,7 +122,7 @@ Nothing here enters a request prefix, so provider cache reuse is unaffected.
 
 These limits define where the package is not the right tool. They are current package constraints, not a task backlog.
 
-- **Atomic, not durable** — no `fsync` of the file or its directory, so after a crash the rename may be observed unwound. The file-backed stores here re-read and republish on boot, keeping durability the caller's policy.
+- **Windows directory fsync is unavailable** — the temp file is fsynced before the rename everywhere; on Windows the parent directory cannot be opened for fsync, so rename durability there relies on the volume journal.
 - **String content only** — no `Buffer` or stream form until a consumer needs one.
 - **Some orphaned locks require operator recovery** — a lock whose record is empty or incomplete, or names a PID a live process reused, stays in place; later writers time out without deleting it. A contender that ends between creating a claim and removing the lock leaves both `<filename>.lock` and `<filename>.lock.takeover-<record hash>`, and the operator removes both.
 - **One host and one PID namespace** — the probe runs on the contender's host. Writers on several hosts sharing a network filesystem, or containers sharing a volume, can see a live holder as exited, take over its lock, and write at the same time as it.
@@ -133,6 +133,6 @@ These limits define where the package is not the right tool. They are current pa
 <details>
 <summary>Working context for maintainers — click to expand</summary>
 
-A durability-replacement that `fsync`s the file and parent directory and preserves owner-only permissions on Windows remains open (tracked as `settings-atomic-durability` in source).
+The `settings-atomic-durability` work shipped: the temp file is fsynced before the rename and the parent directory fsynced afterwards on POSIX, so committed replacements survive power loss; on Windows the directory fsync is unavailable and the rename relies on the volume journal. The [crash-durability decision record](../../../.agents/notes/implemented/bug-fix/2026-10-01-atomic-write-crash-durability.md) owns the rationale.
 
 </details>

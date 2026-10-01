@@ -3,7 +3,9 @@
  * `writeFileAtomic` writes a random-suffix sibling with exclusive create and
  * the caller's permission bits, then renames it over the target, so readers
  * observe either the old or the new complete content and a replaced file ends
- * up with exactly the stated mode. `withFileLock` serializes cross-process
+ * up with exactly the stated mode. The temp file is fsynced before the rename
+ * and the parent directory after it on POSIX, so a committed replacement is
+ * crash-durable. `withFileLock` serializes cross-process
  * writers of one file through a `wx`-created `<file>.lock` sibling, so a
  * read-modify-write cycle can never resurrect a state another writer just
  * replaced; readers stay lock-free because the rename commit is atomic. A lock
@@ -12,7 +14,7 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto'
-import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 const WINDOWS_TRANSIENT_RENAME_ERRORS: ReadonlySet<string> = new Set(['EACCES', 'EBUSY', 'EPERM'])
@@ -41,6 +43,19 @@ async function renameAtomicTemp(temp: string, filename: string): Promise<void> {
     delay = Math.min(delay * 2, WINDOWS_RENAME_RETRY_MAX_MS)
   }
 }
+
+/** fsync a POSIX directory so a just-renamed entry is crash-durable. */
+/* v8 ignore start -- Windows rejects O_RDONLY directory opens; POSIX coverage exercises this. */
+async function fsyncDirectory(path: string): Promise<void> {
+  if (process.platform === 'win32') return
+  const handle = await open(path, 'r')
+  try {
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
+}
+/* v8 ignore stop */
 
 /**
  * Filesystem options for {@link writeFileAtomic}; `mode` is required so the
@@ -71,7 +86,10 @@ export interface WriteFileAtomicOptions {
  * one filesystem. Windows replacement retries transient `EACCES`, `EBUSY`,
  * and `EPERM` failures for a bounded interval while the complete temp file
  * remains the rename source. On any remaining failure the temp file is
- * removed and the failure rethrown. Crash durability (fsync) is out of scope.
+ * removed and the failure rethrown. The temp file is fsynced before the
+ * rename and the parent directory is fsynced after it on POSIX, so a
+ * completed replacement is crash-durable; on Windows the directory fsync is
+ * unavailable and the rename relies on the volume journal.
  * @param filename - final path receiving the content.
  * @param content - complete next file content.
  * @param options - permission bits for the replacement inode.
@@ -81,12 +99,17 @@ export async function writeFileAtomic(filename: string, content: string, options
     recursive: true,
     ...options.dirMode === undefined ? {} : { mode: options.dirMode },
   })
-  // TODO(settings-atomic-durability): Use a replacement that fsyncs the file
-  // and parent directory and preserves owner-only permissions on Windows.
   const temp = `${filename}.${randomBytes(6).toString('hex')}.tmp`
   try {
-    await writeFile(temp, content, { mode: options.mode, flag: 'wx' })
+    const handle = await open(temp, 'wx', options.mode)
+    try {
+      await handle.writeFile(content, 'utf8')
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
     await renameAtomicTemp(temp, filename)
+    await fsyncDirectory(dirname(filename))
   } catch (error) {
     await rm(temp, { force: true })
     throw error
