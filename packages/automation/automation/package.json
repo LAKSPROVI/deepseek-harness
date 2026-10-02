@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-automation",
-  "version": "0.1.5-alpha.1",
+  "version": "0.1.7-rc.2",
   "publishConfig": {
     "access": "public"
   },
@@ -46,14 +46,14 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/dsh-home-paths": "workspace:^",
-    "@deepseek-ai/dsh-typert-protocol": "workspace:^"
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-home-paths": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/dsh-home-paths": "workspace:^",
-    "@deepseek-ai/dsh-typert-protocol": "workspace:^"
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-home-paths": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*"
   },
   "files": [
     "lib/index.js",
