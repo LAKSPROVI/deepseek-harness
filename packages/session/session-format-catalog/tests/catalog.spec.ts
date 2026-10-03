@@ -234,7 +234,7 @@ describe('first-party Session format catalog', () => {
       { type: 'step/end', seq: 8, time: 9, data: { turn: 1, step: 2 } },
       { type: 'turn/end', seq: 9, time: 10, data: { turn: 1, reason: { kind: 'completed' } } },
     ])
-    const restore = sessionFormatCatalog.createRestore(header, { recovery: 'strict', validation: 'current' })
+    const restore = createSessionFormatCatalogWithChildren([]).createRestore(header, { recovery: 'strict', validation: 'current' })
     for (const row of rows) restore.decodeRow(row)
 
     const artifact = restore.finish()

@@ -10,7 +10,12 @@
     baseURL: !!js process.env.DSH_SNAPSHOT_BASE_URL
     thinking: enabled
     reasoningEffort: low
-    streamIdleTimeoutMs: 150
+    # 450 ms with 200 ms heartbeats (server payload ~800 ms): a 90 ms margin
+    # over the 60 ms ticks does not survive a loaded shared CI runner — the
+    # idle watchdog fires a retryable TIMEOUT and the retry duplicates the
+    # agent request. 450 ms still dies without a pulse before the payload,
+    # keeping the comment-liveness proof intact.
+    streamIdleTimeoutMs: 450
 
 - id: agent-loop
   config:

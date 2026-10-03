@@ -1,8 +1,7 @@
-/** Source-safe automation panel registration and Remote mount lifecycle. */
+/** Source-safe automation panel registration; the Remote namespace arrives asynchronously. */
 
 import type {} from '@deepseek-ai/dsh-automation/remote'
 import type { Context } from '@deepseek-ai/cordis'
-import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -11,20 +10,20 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { AutomationAction } from './AutomationAction.tsx'
 import { NS, en, zh } from './locales.ts'
 
-/** Required browser services for the generated Remote namespace and header slot. */
+/** Required browser services; the automations namespace arrives asynchronously. */
 export const inject = ['remote', 'slots', 'locale']
 
 /**
- * Mount the automations namespace contribution and contribute its native header
- * panel. The generated Remote artifact exists only in lib, so the browser entry
- * (`index.ts`) binds it here and this file stays importable from source tests.
+ * Register the dictionaries and the native header panel. The `automations`
+ * namespace is mounted by the api-remotes assembly in production and by the
+ * test harness or the spec in tests; this file only consumes it through the
+ * injected scope, so the source tier never imports the generated Remote
+ * artifact and roster-booting specs stay build-free.
  * @param ctx - client root context.
- * @param contribution - the generated `automations` Remote contribution.
- * @returns the disposer that withdraws the panel and the namespace.
+ * @returns the disposer that withdraws the panel and the dictionaries.
  */
-export async function mountAutomationUi(ctx: Context, contribution: TypertRemoteContribution): Promise<() => Promise<void>> {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'client-ui-automation: dictionaries')
-  const disposeRemote = await ctx.remote.$mount(contribution)
+export function mountAutomationUi(ctx: Context): () => Promise<void> {
+  const disposeLocale = ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'client-ui-automation: dictionaries')
   // The injected scope is the only Context that carries `remote.automations`;
   // reading it from the outer `ctx` fails at first use with "without inject".
   const ui = ctx.inject(['remote.automations', 'slots'], (scope: Context) => {
@@ -57,15 +56,8 @@ export async function mountAutomationUi(ctx: Context, contribution: TypertRemote
       }),
     }, AutomationAction))
   })
-  try {
-    await ui
-  } catch (error: unknown) {
-    await ui.dispose()
-    await disposeRemote()
-    throw error
-  }
   return async () => {
     await ui.dispose()
-    await disposeRemote()
+    await disposeLocale()
   }
 }
