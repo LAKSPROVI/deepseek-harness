@@ -38,9 +38,13 @@
 | `@deepseek-ai/dsh-tool-jev` | `jev_decide` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 
+<a id="tool-package-map"></a>
+
 ## 工具包映射
 
-该表把模型可见的工具名连接到背后的插件包与服务 seam。具体 JSON Schema 见下方各工具包章节。| Tool package | Model-visible names | Requires | Writes / affects | Shipped aliases | Deployment note |
+该表把模型可见的工具名连接到背后的插件包与服务 seam。具体 JSON Schema 见下方各工具包章节。
+
+| Tool package | Model-visible names | Requires | Writes / affects | Shipped aliases | Deployment note |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-plugin-manager` | `plugin_manager` | `ctx.tools`, `ctx.pluginManager`, `ctx.sandboxPolicy` | `tool/call`, `tool/result`, `user/message` | - | - |
 | `@deepseek-ai/dsh-mcp-resources` | `list_mcp_resource_templates`, `list_mcp_resources`, `read_mcp_resource` | `ctx.tools`, `ctx.mcpResources` | `tool/call`, `tool/result` | - | - |
@@ -2925,6 +2929,7 @@ Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/exper
 All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.
 
 <a id="deepseek-aidsh-tool-todo"></a>
+
 ## `@deepseek-ai/dsh-tool-todo`
 
 ### `todo_write`

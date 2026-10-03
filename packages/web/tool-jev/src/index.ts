@@ -100,7 +100,11 @@ export function parseJevArgs(args: Record<string, unknown>): JevRequest {
   }
 }
 
-/** Render one jev_decide answer set as the model-facing text. */
+/**
+ * Render one jev_decide answer set as the model-facing text.
+ * @param value - the parsed answer object to embed as a fenced JSON document.
+ * @returns the answer set stringified inside a ```json fence.
+ */
 export function formatJevOutput(value: unknown): string {
   return '```json\n' + JSON.stringify(value, null, 2) + '\n```'
 }
