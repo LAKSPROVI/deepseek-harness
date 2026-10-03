@@ -118,7 +118,7 @@ export function verifyDefaultProductIsolation(root: string): ProductIsolationRes
     || display(pkg.directory).startsWith('packages/experimental/')
   const add = (pkg: Package, origin: string): void => {
     if (isExperimental(pkg)) {
-      if (FORK_WEB_APP_EXPERIMENTAL_DEPS.has(pkg.manifest.name ?? '')) return
+      if (FORK_WEB_APP_EXPERIMENTAL_DEPS.has(pkg.manifest.name)) return
       failures.push(`${origin} -> ${pkg.manifest.name}: default product must not include experimental packages`)
     } else if (!visited.has(pkg.directory)) {
       visited.add(pkg.directory)

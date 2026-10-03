@@ -145,6 +145,7 @@ export class ElectronWebViewImpl implements BrowserFrame {
     this.workspaceKey ??= await this.workspace(attachmentSignal)
     if (attachmentSignal.aborted) return
     const reservation = await this.bridge.acquire(this.workspaceKey)
+    // oxlint-disable-next-line typescript/no-unnecessary-condition -- abort can arrive during the await; TS cannot see it.
     if (attachmentSignal.aborted) { await this.release(reservation.lease); return }
     this.lease = reservation.lease
     this.guestLifetime = new AbortController()

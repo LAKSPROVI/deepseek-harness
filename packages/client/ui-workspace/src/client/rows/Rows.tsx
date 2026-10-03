@@ -405,7 +405,7 @@ function sessionStatuses(
 /** Dot for one Session status: the three browser-local triage states use custom classes. */
 function StatusDotForState({ state }: { state: SessionStatus['state'] }) {
   if (state === 'unread' || state === 'later' || state === 'finalized') {
-    const cls = css[`dot${state[0]?.toUpperCase()}${state.slice(1)}` as keyof typeof css]
+    const cls = css[`dot${state[0]?.toUpperCase()}${state.slice(1)}`]
     return <span data-state={state} className={clsx(css.dot, cls)} aria-hidden="true" />
   }
   return <StateDot state={state} />

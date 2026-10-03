@@ -61,7 +61,10 @@ describe('tool-jev', () => {
     const ctx = {
       tools: {
         get: vi.fn(() => ({ })),
-        register: vi.fn((definition) => { registered.push({ name: definition.name, def: definition }) }),
+        register: vi.fn((definition: {
+          name: string
+          execute: (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown>
+        }) => { registered.push({ name: definition.name, def: definition }) }),
       },
     } as unknown as Context
 
@@ -80,7 +83,7 @@ describe('tool-jev', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({ model: 'jev-1.13.0' })
 
-    const sent = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body)
+    const sent = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body) as { state: string; questions: Record<string, unknown> }
     expect(sent.state).toBe('Cliente relata urgencia.')
     expect(Object.keys(sent.questions)).toEqual(['a'])
 

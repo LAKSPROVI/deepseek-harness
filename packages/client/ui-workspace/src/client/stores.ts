@@ -127,6 +127,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         // Persistence replaces the whole state with stored JSON, so a
         // `dsh.workspace.view.v5` blob written before this map existed arrives
         // without it; fill it in before the write.
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- legacy v5 blobs arrive without it.
         d.customSessionStatuses ??= {}
         d.customSessionStatuses[sessionId] = status === 'idle' ? undefined : status
       },

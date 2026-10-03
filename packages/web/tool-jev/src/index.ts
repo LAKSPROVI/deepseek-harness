@@ -85,7 +85,7 @@ export function parseJevArgs(args: Record<string, unknown>): JevRequest {
     }
     const instructions = typeof q.instructions === 'string' ? q.instructions.trim() : ''
     if (instructions.length === 0) throw new Error(`jev_decide: question "${qName}" instructions must be non-blank`)
-    if (type === 'choice' && (typeof q.criteria !== 'object' || q.criteria === null || Object.keys(q.criteria as object).length === 0)) {
+    if (type === 'choice' && (typeof q.criteria !== 'object' || q.criteria === null || Object.keys(q.criteria).length === 0)) {
       throw new Error(`jev_decide: question "${qName}" (choice) requires a non-empty criteria object of named options`)
     }
     if (type === 'score' && (!Array.isArray(q.criteria) || q.criteria.length === 0)) {

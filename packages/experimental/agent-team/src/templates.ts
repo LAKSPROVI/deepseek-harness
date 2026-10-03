@@ -47,7 +47,8 @@ export interface TeamTemplateSettings {
   squads?: SavedTeamSquad[]
 }
 
-const SquadMemberSchema = z.object({
+/** Member field schemas shared by squad members and reusable templates. */
+const teamMemberFields = () => ({
   name: z.string().min(1).max(120).required(),
   description: z.string().min(1).max(1_000).required(),
   prompt: z.string().min(1).max(20_000).required(),
@@ -57,18 +58,14 @@ const SquadMemberSchema = z.object({
   persona: z.string().max(12_000),
 })
 
+const SquadMemberSchema = z.object(teamMemberFields())
+
 /** Serialized validation for the reusable template namespace. */
 export const TeamTemplateSettingsSchema: z<TeamTemplateSettings> = z.object({
   templates: z.array(z.object({
     id: z.string().min(1).max(80).required(),
     title: z.string().min(1).max(120).required(),
-    name: z.string().min(1).max(120).required(),
-    description: z.string().min(1).max(1_000).required(),
-    prompt: z.string().min(1).max(20_000).required(),
-    context: z.union(['fresh', 'fork']).required(),
-    llmProvider: z.string().max(200),
-    model: z.string().max(300),
-    persona: z.string().max(12_000),
+    ...teamMemberFields(),
   })).max(MAX_TEAM_TEMPLATE_COUNT).default([]),
   squads: z.array(z.object({
     id: z.string().min(1).max(80).required(),
