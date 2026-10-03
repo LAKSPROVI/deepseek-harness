@@ -891,10 +891,10 @@ describe('dsh-tool-team', () => {
 
     const spawned = parsedJson(await execute(ctx, lead, 'team_squad_spawn', {
       squad_id: saved.squad.id,
-    })) as { spawnedMembers: Array<{ name: string }> }
+    })) as { spawnedMembers: Array<{ target: string }> }
     expect(spawned.spawnedMembers).toHaveLength(2)
-    expect(spawned.spawnedMembers[0]!.name).toBe('pesquisador')
-    expect(spawned.spawnedMembers[1]!.name).toBe('revisor')
+    expect(spawned.spawnedMembers[0]!.target).toBe('pesquisador')
+    expect(spawned.spawnedMembers[1]!.target).toBe('revisor')
 
     const dismissed = parsedJson(await execute(ctx, lead, 'team_roster_dismiss', {})) as { dismissedCount: number; dismissedNames: string[] }
     expect(dismissed.dismissedCount).toBe(2)
@@ -916,21 +916,21 @@ describe('dsh-tool-team', () => {
       name: 'Revisor de Contratos - Senior',
       description: 'Test normalization',
       prompt: 'Test prompt',
-    })) as { member: { name: string } }
-    expect(spawned.member.name).toBe('revisor-de-contratos-senior')
+    })) as { member: { target: string } }
+    expect(spawned.member.target).toBe('revisor-de-contratos-senior')
 
     const spawned2 = parsedJson(await execute(ctx, lead, 'spawn_teammate', {
       name: 'pesquisador_juridico (tributario)',
       description: 'Test normalization 2',
       prompt: 'Test prompt 2',
-    })) as { member: { name: string } }
-    expect(spawned2.member.name).toBe('pesquisador-juridico-tributario')
+    })) as { member: { target: string } }
+    expect(spawned2.member.target).toBe('pesquisador-juridico-tributario')
 
     const spawned3 = parsedJson(await execute(ctx, lead, 'spawn_teammate', {
       name: 'valid-name-123',
       description: 'Test normalization 3',
       prompt: 'Test prompt 3',
-    })) as { member: { name: string } }
-    expect(spawned3.member.name).toBe('valid-name-123')
+    })) as { member: { target: string } }
+    expect(spawned3.member.target).toBe('valid-name-123')
   }, 20000)
 })
