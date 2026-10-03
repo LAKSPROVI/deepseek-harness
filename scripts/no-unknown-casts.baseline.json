@@ -319,6 +319,37 @@
   "packages/attachment/attachment/tests/admission.spec.ts": {
     "d7dc9c349af8699fefcaffed26377443dd73ef95f1dc985f4de542ec133869f5": 1
   },
+  "packages/automation/automation-prompt-action/src/index.ts": {
+    "f3bb18ae39f4a8fd4dce544dc3173fa58a29dffab13a46e4b7505a5a6e4a2966": 1
+  },
+  "packages/automation/automation-prompt-action/tests/prompt-action.spec.ts": {
+    "f05a3d556ce5c90c9d23ae95f96de4158791f8704d272fa219624b86764d681b": 1,
+    "febbe0687d7079e44a15b802235157043bad5a5f188348db89fe00f50532bee8": 1
+  },
+  "packages/automation/automation/tests/api.spec.ts": {
+    "61d720e6f48d80d9077500a94d4defe345ddbaf8b2b1edf8cd5d038aef8b8d3e": 1,
+    "756999cb1429cc34b36204033dd80e2f55a5927579c313b06acc70b882d26524": 1,
+    "808f1141e0d4741f2b939a82f3a7cbeb2aababe7913c848b5d6dd8d7032f86e2": 1,
+    "e6e22f38ce009fc8de4910c004f16755b450c9983476b7353ca520d6b5d52c4b": 1,
+    "fb80e2fb75d5b9eeebcad8e9416aa3364d35745e8ca95a70851dc9c8d899c88e": 1
+  },
+  "packages/automation/automation/tests/daemons.spec.ts": {
+    "0fec625874602799c04c170bc19109a0bd066ad87cf438b055c4eb451230142c": 1,
+    "855fd5e4e87c7efcc2652a40ed6314c75affb6e688b879fee014df5bc1623284": 1,
+    "a152aba87d877ff55a026eef249c834de4c3c1f70f3f48a75bfb78d8f6f60b7f": 1
+  },
+  "packages/automation/automation/tests/persistence_api.spec.ts": {
+    "8a0169cc0e6ff1124fbb78a1d22ca53f9782bc0eb8dc082d5e2ddd24671525af": 1,
+    "c19f1b2aaa4f5fb24573dd0f6bb6be3633763b9660d3cc12fe8758f0354f886b": 1,
+    "d557cf299ceb01d1b78836dc245481e1e0f7945281dea5953e691fcdf44ade3c": 1,
+    "e10b29d8f4e37c13fec3ca97474d9b906d1481d2ec93cb869674a58a318d40b6": 1
+  },
+  "packages/automation/automation/tests/remote-service.spec.ts": {
+    "52faf4558fcd91bd27dbdfa7e497843e8eeb75ea5f68ee231335018d5b3f2053": 2
+  },
+  "packages/automation/tool-automation/tests/tool-automation.spec.ts": {
+    "01cdfd084570d9947a720ddfbd028b08d20fd3327db2cdbff070cb21802a1d5a": 1
+  },
   "packages/boot/app-boot/tests/app-boot.spec.ts": {
     "46749c86ea74f896ecf7a25e5839d4b49f839497cec757f3ef09ad551d99a933": 1,
     "f66725b07f595b27258f0e9fe86618d8c44652052e6150704f0488ecc7d176b9": 1
@@ -467,6 +498,12 @@
   },
   "packages/client/ui-attachment/tests/composer-attachments.client.spec.tsx": {
     "ab22ebe23f59b5aa76d42502a0421f3953d1d170e8a4f900a0c442daf6f1397d": 1
+  },
+  "packages/client/ui-automation/tests/automation-action.client.spec.tsx": {
+    "6bb124403b12cf47bb62b8d273190add082ea81799a8155a830ee5c5a8806002": 1
+  },
+  "packages/client/ui-automation/tests/browser-plugin.client.spec.ts": {
+    "eee35b4d8641824c6eaacfe03ed60d353d81d5257d1111132f34d46a7b13ef35": 1
   },
   "packages/client/ui-chat/src/client/chat/ChatView.tsx": {
     "50ce0a6085bdfd7032e5a391ed34cd078768ad8f46cc885eb54571cf8edd4bee": 1
@@ -815,6 +852,15 @@
   "packages/client/ui-trajectory/tests/views.client.spec.tsx": {
     "958ba19bf4d19e2dd44b271fa784091302bd3a2fdf291db6839fc49da543c5cf": 2
   },
+  "packages/client/ui-voice-input/tests/browser-plugin.client.spec.tsx": {
+    "04984a2ce1486250236e638e0197da0a1a840855ed3975c59130a85358c7e5fe": 1
+  },
+  "packages/client/ui-voice-input/tests/failures.client.spec.ts": {
+    "f892cb73d3c5a76834be2f8e3ae3bc60486614b7d4961068d07af8390fba4bc3": 1
+  },
+  "packages/client/ui-voice-input/tests/voice-input-button.client.spec.tsx": {
+    "be8fa96c64e8fbeebbf5beaa3c1512cdc0bff3e466ecc4eaa7caaca82e617edd": 1
+  },
   "packages/client/ui-workflow-run/tests/workflow-run.client.spec.tsx": {
     "9f5585ad6cebba08252165f2dcc63c1e16101e0306fab754afb641b417e7789d": 1
   },
@@ -823,6 +869,16 @@
   },
   "packages/client/ui-workspace/tests/apply.client.spec.ts": {
     "b467270b0c2a95d6b29939f6baf4d5c8e5031e99a1d15437a3060f35735d8d37": 1
+  },
+  "packages/client/ui-workspace/tests/popover.client.spec.ts": {
+    "20dd767198ac5423e8996e05a31da7ceb9eb50354ef55a138234ad9e37f66626": 1,
+    "42761a4782c0bc4c5b1c1d9264f1a6c292f60d85defc7b824b9fbcb925216061": 1
+  },
+  "packages/client/ui-workspace/tests/session-context-actions.client.spec.tsx": {
+    "ea1e33563957a38d720a0ff406210d14598bb53d4d564a88e5d13862653448c5": 3
+  },
+  "packages/client/ui-workspace/tests/session-notes.client.spec.tsx": {
+    "f3f67caec255f2eea37552dfbe86b682acddf5d620cc69597ca3a1f0b829c5c1": 4
   },
   "packages/client/web/tests/boot-client.client.spec.ts": {
     "5120c3da1b5c58832ad2e2fa40567b8c7ea59e7ebb53058f45eda7ea95b2620d": 1
@@ -1194,6 +1250,9 @@
   "packages/experimental/ptc-runtime-python/src/index.ts": {
     "b121cee14635b00f7891217013e4682493cf96f676710be60722fdf8b862aea3": 1
   },
+  "packages/experimental/tool-agent-team/src/index.ts": {
+    "22dc31f6d40e65d53912bda8fe089e55908882e4057f654d10f2280c7e818b8d": 1
+  },
   "packages/experimental/webworker-packer/src/preview.ts": {
     "cdd46c8ceda6d5707bc2abfba329351ba06bcc030b314a3c799d72a4971bd5a4": 1
   },
@@ -1422,6 +1481,9 @@
   "packages/llm/llm/tests/retry-policy.spec.ts": {
     "8b01166e4fd19d967aafe6db1830bfbd7623073becaa6a0ef68cbf4f6df60126": 1,
     "9660610ae2b1f86d83af89805af1791e4b99ea98c27f185d3ce603a676737aba": 1
+  },
+  "packages/llm/llm/tests/router-sync-execution.spec.ts": {
+    "7fe58280287ff63d40e979e72329f975e11015a95e9a8eec207a5a78748d3c89": 1
   },
   "packages/llm/llm/tests/service.spec.ts": {
     "d7a5b4679d56948abe2a2941a5199c4715dac8ad5ecce737195d9a609bb3cf1d": 4
@@ -2131,6 +2193,18 @@
   "packages/todo/tool-todo/tests/tool-todo.spec.ts": {
     "017ad37cd53fcee266e8e5a8873230ab47e32d23a5cd66909a008921c47f33c4": 1
   },
+  "packages/transcription/transcription-groq/tests/credentials.spec.ts": {
+    "37c9617ff75d6a383f58dd63f939a88803e4ff5e1676bfe7e1c0cc340fc65014": 3
+  },
+  "packages/transcription/transcription-groq/tests/groq.spec.ts": {
+    "0da2f5cf462e30ab300a3992e2683a2fa4dcc5bc37017f1ff724d6076f60f582": 1,
+    "693d5430ca32fe91f957e2fa7e4cfb7b0d38d2a6fe6f070135b93493cc499bf0": 1,
+    "8fd91116bd5f0453920d2ba372636fdf62e40e2ff72c9b4146c9867e6e404349": 1,
+    "f5fa4b26a7a92c2aa445e17eacb22d876e25954fc3fe658b435454b38ae0f9cc": 1
+  },
+  "packages/transcription/voice-input/tests/loader-composition.spec.ts": {
+    "59c63f734e8bba862325f776e3fcbebd78a84cfb4161f8df41c216950d9bf351": 1
+  },
   "packages/typert/generator/tests/remote-model.spec.ts": {
     "c89272a155d154a69b555f018a6d34517ffba3bfd160b637cc68e449de22b331": 1
   },
@@ -2162,6 +2236,9 @@
   },
   "packages/util/deque/tests/deque.spec.ts": {
     "77a439bbf36ca838c15f459e6dc344ee43d2b999b487bfda6b7e1f1c7c20e4e3": 1
+  },
+  "packages/web/tool-jev/tests/tool-jev.spec.ts": {
+    "95c6e7d891ca8ec6a634d55d1512c959387893a2a7bc21654229141a6075291e": 1
   },
   "packages/web/tool-web/tests/spill.spec.ts": {
     "ecf3420d023d28e1cbc687d438bb66ee49d55a4ae4cb0828dd0f59b926363903": 1
