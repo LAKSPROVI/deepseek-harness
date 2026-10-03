@@ -195,26 +195,6 @@ describe('experimental workspace constraints', () => {
     ])
   })
 
-  it('allows the Web bundle to compose its shipped experimental plugins, and nothing else experimental', () => {
-    const team = {
-      dir: 'packages/experimental/agent-team',
-      manifest: { name: '@deepseek-ai/dsh-experimental-agent-team', publishConfig: { access: 'public' } },
-    } satisfies WorkspaceManifest
-    const webApp = {
-      dir: 'packages/bundle/web-app',
-      manifest: {
-        name: '@deepseek-ai/dsh-web-app',
-        dependencies: {
-          '@deepseek-ai/dsh-experimental-agent-team': 'workspace:*',
-          '@deepseek-ai/dsh-experimental-prototype': 'workspace:*',
-        },
-      },
-    } satisfies WorkspaceManifest
-    expect(checkExperimentalDependencyIsolation([experimental, team, webApp])).toEqual([
-      '@deepseek-ai/dsh-web-app: dependencies.@deepseek-ai/dsh-experimental-prototype must not reference an experimental package',
-    ])
-  })
-
   it('allows development and experimental consumers but rejects the Python release runtime', () => {
     const manifests: WorkspaceManifest[] = [experimental, {
       dir: 'packages/core/test-only',

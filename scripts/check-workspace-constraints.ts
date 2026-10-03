@@ -548,18 +548,10 @@ const dependencySections = ['dependencies', 'devDependencies', 'peerDependencies
 /** Dependency sections present in an installed runtime. */
 const runtimeDependencySections = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const
 
-/** Experimental packages the Web bundle ships: its cordis patch composes them. */
-const FORK_WEB_APP_EXPERIMENTAL_DEPS: ReadonlySet<string> = new Set([
-  '@deepseek-ai/dsh-experimental-agent-team',
-  '@deepseek-ai/dsh-experimental-client-ui-agent-team',
-  '@deepseek-ai/dsh-experimental-tool-agent-team',
-])
-
 /**
  * Prevent an official runtime from requiring an experimental package. The dsh installation's `dependencies`
  * may hold the bundles the launcher's `OPTIONAL_BUNDLES` names: shipped switched off, they are not a requirement
- * ([rationale](../.agents/notes/implemented/process/2026-09-15-shipped-optional-bundles.md)). The Web bundle's
- * composed experimental plugins are allowed by {@link FORK_WEB_APP_EXPERIMENTAL_DEPS}.
+ * ([rationale](../.agents/notes/implemented/process/2026-09-15-shipped-optional-bundles.md)).
  * @param manifests - release, private experimental, and deployment-root manifests.
  * @param optionalBundles - the bundles the installation ships switched off; the launcher's list by default.
  * @returns One error for each forbidden runtime dependency.
@@ -575,11 +567,10 @@ export function checkExperimentalDependencyIsolation(
   for (const { dir, manifest } of manifests) {
     if (!standardReleaseMemberDirectory.test(dir) && dir !== 'python/sdk-runtime') continue
     const offered = manifest.name === '@deepseek-ai/dsh' ? new Set(optionalBundles) : new Set<string>()
-    const composed = manifest.name === '@deepseek-ai/dsh-web-app' ? FORK_WEB_APP_EXPERIMENTAL_DEPS : new Set<string>()
     for (const section of runtimeDependencySections) {
       for (const name of Object.keys(manifest[section] ?? {})) {
         if (!experimentalNames.has(name)) continue
-        if (section === 'dependencies' && (offered.has(name) || composed.has(name))) continue
+        if (section === 'dependencies' && offered.has(name)) continue
         errors.push(`${manifest.name ?? dir}: ${section}.${name} must not reference an experimental package`)
       }
     }

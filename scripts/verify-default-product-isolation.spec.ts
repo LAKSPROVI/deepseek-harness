@@ -115,14 +115,6 @@ describe('default product isolation', () => {
     expect(verifyDefaultProductIsolation(root).failures.join('\n')).toContain(`optional bundle ${layer} must not be a default bundle`)
   })
 
-  it('allows the composed experimental plugins the Web bundle ships and rejects every other experimental name', () => {
-    const root = fixture()
-    write(root, patch, [{ insert: [{ name: '@deepseek-ai/dsh-experimental-agent-team' }] }])
-    expect(verifyDefaultProductIsolation(root).failures).toEqual([])
-    write(root, patch, [{ insert: [{ name: '@deepseek-ai/dsh-experimental-other' }] }])
-    expect(verifyDefaultProductIsolation(root).failures.join('\n')).toContain('default product must not include experimental packages')
-  })
-
   it('requires each optional bundle to be a runtime dependency that declares a bundle patch, an icon, and locale metadata', () => {
     const root = fixture()
     write(root, profile, `export const PROFILE_TEMPLATES = { web: { bundles: ['${base}'] } }\n`
