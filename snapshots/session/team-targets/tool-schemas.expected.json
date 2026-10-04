@@ -316,86 +316,199 @@
       "name": "skill",
       "description": "Load the full instructions for a skill. Call it before acting on a task that names or clearly matches a skill in the session skill catalog.",
       "parameters": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "description": "Unique teammate name or natural label (e.g. \"revisor\"). Required unless template_id is used."
-            },
-            "description": {
-              "type": "string",
-              "description": "Short description of the delegated responsibility. Required unless template_id is used."
-            },
-            "prompt": {
-              "type": "string",
-              "description": "Complete initial task for the teammate. Required unless template_id is used."
-            },
-            "template_id": {
-              "type": "string",
-              "description": "Optional saved teammate template ID. When provided, missing fields are populated from the saved template."
-            },
-            "context": {
-              "type": "string",
-              "description": "fresh starts without Lead history; fork inherits completed Lead turns. Defaults to fresh.",
-              "enum": [
-                "fresh",
-                "fork"
-              ]
-            },
-            "llm_provider": {
-              "type": "string",
-              "description": "Optional LLM adapter route (e.g. \"openai\", \"deepseek\", \"anthropic\"). Omit to inherit the Lead provider or template value."
-            },
-            "model": {
-              "type": "string",
-              "description": "Optional provider-owned model id (e.g. \"gpt-5\", \"deepseek-chat\"). Omit to inherit the Lead model or template value."
-            },
-            "persona": {
-              "type": "string",
-              "description": "Optional teammate-only system persona describing its role and constraints."
-            }
-          },
+        "properties": {
+          "name": {
+            "description": "The exact skill name from the available skills list.",
+            "type": "string"
+          }
+        },
         "required": [
           "name"
-        ]
+        ],
+        "type": "object"
       }
     },
     {
       "name": "spawn_teammate",
       "description": "Create one named, durable teammate from custom parameters or from a saved template. Only the Team Lead may call this tool.",
       "parameters": {
-        "type": "object",
         "properties": {
           "name": {
-            "type": "string",
-            "description": "Unique lower-kebab-case teammate name."
+            "description": "Unique teammate name or natural label (e.g. \"revisor\"). Required unless template_id is used.",
+            "type": "string"
           },
           "description": {
-            "type": "string",
-            "description": "Short description of the delegated responsibility."
+            "description": "Short description of the delegated responsibility. Required unless template_id is used.",
+            "type": "string"
           },
           "prompt": {
-            "type": "string",
-            "description": "Complete initial task for the teammate."
+            "description": "Complete initial task for the teammate. Required unless template_id is used.",
+            "type": "string"
           },
           "template_id": {
-            "type": "string",
-            "description": "Optional saved teammate template ID. When provided, missing fields are filled from the template."
+            "description": "Optional saved teammate template ID. When provided, missing fields are populated from the saved template.",
+            "type": "string"
           },
           "context": {
-            "type": "string",
             "description": "fresh starts without Lead history; fork inherits completed Lead turns. Defaults to fresh.",
             "enum": [
               "fresh",
               "fork"
-            ]
+            ],
+            "type": "string"
+          },
+          "llm_provider": {
+            "description": "Optional LLM adapter route (e.g. \"openai\", \"deepseek\", \"anthropic\"). Omit to inherit the Lead provider or template value.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Optional provider-owned model id (e.g. \"gpt-5\", \"deepseek-chat\"). Omit to inherit the Lead model or template value.",
+            "type": "string"
+          },
+          "persona": {
+            "description": "Optional teammate-only system persona describing its role and constraints.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "team_debate_get",
+      "description": "Read the current structured debate, its CAS revision, round, phase, status, and transition history.",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "team_debate_start",
+      "description": "Start one structured Team debate. Team Lead only.",
+      "parameters": {
+        "properties": {
+          "max_rounds": {
+            "description": "Maximum complete debate rounds. Defaults to 2.",
+            "type": "integer"
+          },
+          "participants": {
+            "description": "Two through ten unique Team member names, including lead when it participates.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "topic": {
+            "description": "Question or proposition the Team must debate.",
+            "type": "string"
           }
         },
         "required": [
-          "name",
-          "description",
-          "prompt"
-        ]
+          "participants",
+          "topic"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "team_debate_update",
+      "description": "Advance the structured debate to its next phase with a note for the transition history.",
+      "parameters": {
+        "properties": {
+          "note": {
+            "description": "The content of the next note appended to the debate transition history.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "note"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "team_roster_dismiss",
+      "description": "Dismiss one or more teammates, interrupting their current turn and stopping their message delivery.",
+      "parameters": {
+        "properties": {
+          "names": {
+            "description": "Names of the teammates to dismiss. Omit to dismiss every active teammate.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "team_squad_delete",
+      "description": "Delete a reusable squad preset from settings by id or title.",
+      "parameters": {
+        "properties": {
+          "id": {
+            "description": "Squad id or title to delete.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "team_squad_list",
+      "description": "List all reusable multi-agent squad presets saved in system settings.",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "team_squad_save",
+      "description": "Save or update a reusable multi-agent squad preset (1-9 members) in settings.",
+      "parameters": {
+        "properties": {
+          "description": {
+            "description": "What this squad does when instantiated.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Optional unique squad ID. If omitted, derived from title.",
+            "type": "string"
+          },
+          "members": {
+            "description": "One to nine squad members with name, description, prompt, context, and optional provider/model/persona.",
+            "type": "array"
+          },
+          "title": {
+            "description": "User-facing title for the squad preset.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "members",
+          "title",
+          "description"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "team_squad_spawn",
+      "description": "Spawn every member of a saved squad preset, creating durable teammates with their own names.",
+      "parameters": {
+        "properties": {
+          "squad_id": {
+            "description": "Saved squad preset ID or title to instantiate.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "squad_id"
+        ],
+        "type": "object"
       }
     },
     {
@@ -543,6 +656,84 @@
           "expected_revision",
           "action"
         ]
+      }
+    },
+    {
+      "name": "team_template_delete",
+      "description": "Delete a reusable teammate template from settings by id or title.",
+      "parameters": {
+        "properties": {
+          "id": {
+            "description": "Template id or title to delete.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "team_template_list",
+      "description": "List all reusable teammate templates saved in system settings.",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "team_template_save",
+      "description": "Save or update a reusable teammate template in settings so it can be reused across sessions and teams.",
+      "parameters": {
+        "properties": {
+          "context": {
+            "description": "Default context mode (fresh or fork). Defaults to fresh.",
+            "enum": [
+              "fresh",
+              "fork"
+            ],
+            "type": "string"
+          },
+          "description": {
+            "description": "Short description of the responsibility.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Optional unique template ID. If omitted, derived from title.",
+            "type": "string"
+          },
+          "llm_provider": {
+            "description": "Optional default LLM provider.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Optional default model ID.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Default member name. If omitted, derived from title.",
+            "type": "string"
+          },
+          "persona": {
+            "description": "Optional default persona.",
+            "type": "string"
+          },
+          "prompt": {
+            "description": "Default initial prompt/instructions for teammates created with this template.",
+            "type": "string"
+          },
+          "title": {
+            "description": "User-facing title for the template (e.g. \"Pesquisador Jurídico Sênior\").",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "prompt"
+        ],
+        "type": "object"
       }
     },
     {
