@@ -5,8 +5,8 @@ import SessionStore, { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset, Sess
 import type { SessionEvent, SessionEventMap, SessionEventType } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { teamProjectionDefinition, teamProjectionView } from '../src/projection.ts'
-import type { TeamProjectionState, TeamState } from '../src/projection.ts'
-import { TeamId, TeamMessageId, TeamTaskId } from '../src/types.ts'
+import type { TeamDebateSnapshot, TeamProjectionState, TeamState } from '../src/projection.ts'
+import { TeamDebateId, TeamId, TeamMessageId, TeamTaskId } from '../src/types.ts'
 import type { TeamMemberSnapshot, TeamMessageSnapshot, TeamTaskSnapshot } from '../src/types.ts'
 
 const ROOT = SessionId('team-root')
@@ -174,6 +174,39 @@ describe('Agent Teams projection events', () => {
       teamId: TEAM,
       task: task({ revision: 3 }),
     }, SessionSeq(1))])).toThrow(/revision is not contiguous/)
+  })
+
+  it('applies debate snapshots and enforces debate revision continuity', () => {
+    const debate = (overrides: Partial<TeamDebateSnapshot> = {}) => ({
+      id: TeamDebateId('debate-1'),
+      revision: 1,
+      topic: 'Which implementation is safer?',
+      status: 'active',
+      phase: 'positions',
+      round: 1,
+      maxRounds: 2,
+      participants: ['lead', 'worker-a'],
+      history: [],
+      ...overrides,
+    }) as TeamDebateSnapshot
+    const first = event('team/debate', { version: 2, teamId: TEAM, debate: debate() }, SessionSeq(0))
+    expect(projectTeam(ROOT, [first]).debate).toMatchObject({ revision: 1, status: 'active' })
+    expect(projectTeam(ROOT, [first, event('team/debate', {
+      version: 2,
+      teamId: TEAM,
+      debate: debate({ revision: 2, phase: 'critique' }),
+    }, SessionSeq(1))]).debate).toMatchObject({ revision: 2, phase: 'critique' })
+    expect(() => projectTeam(ROOT, [first, event('team/debate', {
+      version: 2,
+      teamId: TEAM,
+      debate: debate({ revision: 3 }),
+    }, SessionSeq(1))])).toThrow(/revision is not contiguous/)
+    // A different debate id opens a fresh revision space at one.
+    expect(projectTeam(ROOT, [first, event('team/debate', {
+      version: 2,
+      teamId: TEAM,
+      debate: debate({ id: TeamDebateId('debate-2') }),
+    }, SessionSeq(1))]).debate).toMatchObject({ id: expect.anything(), revision: 1 })
   })
 
   it('rejects every invalid persisted task dependency relation', () => {
