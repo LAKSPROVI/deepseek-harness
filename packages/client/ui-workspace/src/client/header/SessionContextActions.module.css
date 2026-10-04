@@ -44,10 +44,8 @@
   flex-direction: column;
   width: 280px;
   padding: 6px;
-  background: var(--dsw-alias-bg-module-surface);
   border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
   animation: menu-in 150ms var(--ds-ease-in-out);
 }
 

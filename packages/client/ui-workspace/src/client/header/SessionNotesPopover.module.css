@@ -183,7 +183,7 @@
 .notesArea:focus {
   outline: none;
   border-color: var(--dsw-alias-brand-primary);
-  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 1px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
 }
 
 .remindersList {

@@ -718,5 +718,6 @@
   color: var(--muted, #8b8b8b);
   border: 1px solid var(--border, #2a2a2a);
   border-radius: 999px;
+  corner-shape: round;
   padding: 1px 7px;
 }

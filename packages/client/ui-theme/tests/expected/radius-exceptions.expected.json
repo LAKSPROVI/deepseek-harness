@@ -50,6 +50,12 @@
     ".page .action: border-radius: 12px",
     ".indicator: border-radius: 6px"
   ],
+  "ui-settings-models/src/client/ModelsSection.module.css": [
+    ".syncPanel: border-radius: 10px",
+    ".syncBadge: border-radius: 12px",
+    ".syncWarning: border-radius: 6px",
+    ".syncError: border-radius: 6px"
+  ],
   "ui-shortcuts/src/client/Reference.module.css": [
     ".dialog: border-radius: 24px",
     ".close: border-radius: 28px",
@@ -57,5 +63,21 @@
     ".keyBadge: border-radius: 10px",
     ".unbound: border-radius: 10px",
     ".recorder: border-radius: 10px"
+  ],
+  "ui-workspace/src/client/header/SessionContextActions.module.css": [
+    ".trigger: border-radius: 14px",
+    ".menu: border-radius: 10px",
+    ".menuItem: border-radius: 6px"
+  ],
+  "ui-workspace/src/client/header/SessionNotesPopover.module.css": [
+    ".trigger: border-radius: 14px",
+    ".triggerBadge: border-radius: 8px",
+    ".popover: border-radius: 12px",
+    ".notesArea: border-radius: 8px",
+    ".reminderItem: border-radius: 6px",
+    ".reminderInput: border-radius: 6px",
+    ".dueInput: border-radius: 6px",
+    ".addButton: border-radius: 6px",
+    ".actionButton: border-radius: 6px"
   ]
 }
