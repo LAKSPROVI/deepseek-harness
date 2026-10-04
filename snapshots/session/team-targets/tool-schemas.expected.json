@@ -386,9 +386,9 @@
       "description": "Start one structured Team debate. Team Lead only.",
       "parameters": {
         "properties": {
-          "max_rounds": {
-            "description": "Maximum complete debate rounds. Defaults to 2.",
-            "type": "integer"
+          "topic": {
+            "description": "Question or proposition the Team must debate.",
+            "type": "string"
           },
           "participants": {
             "description": "Two through ten unique Team member names, including lead when it participates.",
@@ -397,30 +397,50 @@
             },
             "type": "array"
           },
-          "topic": {
-            "description": "Question or proposition the Team must debate.",
-            "type": "string"
+          "max_rounds": {
+            "description": "Maximum complete debate rounds. Defaults to 2.",
+            "type": "integer"
           }
         },
         "required": [
-          "participants",
-          "topic"
+          "topic",
+          "participants"
         ],
         "type": "object"
       }
     },
     {
       "name": "team_debate_update",
-      "description": "Advance the structured debate to its next phase with a note for the transition history.",
+      "description": "Compare-and-set a structured debate transition. Team Lead only.",
       "parameters": {
         "properties": {
+          "debate_id": {
+            "description": "Current debate id.",
+            "type": "string"
+          },
+          "expected_revision": {
+            "description": "Current debate revision.",
+            "type": "integer"
+          },
+          "action": {
+            "description": "Protocol transition. Pausing does not interrupt active model turns.",
+            "enum": [
+              "pause",
+              "resume",
+              "advance",
+              "complete"
+            ],
+            "type": "string"
+          },
           "note": {
-            "description": "The content of the next note appended to the debate transition history.",
+            "description": "Short audit note about completed work or the human instruction.",
             "type": "string"
           }
         },
         "required": [
-          "note"
+          "debate_id",
+          "expected_revision",
+          "action"
         ],
         "type": "object"
       }
