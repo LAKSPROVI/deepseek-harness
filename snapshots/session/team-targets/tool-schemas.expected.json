@@ -330,7 +330,7 @@
     },
     {
       "name": "spawn_teammate",
-      "description": "Create one named, durable teammate. Only the Team Lead may call this tool.",
+      "description": "Create one named, durable teammate from custom parameters or from a saved template. Only the Team Lead may call this tool.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -345,6 +345,10 @@
           "prompt": {
             "type": "string",
             "description": "Complete initial task for the teammate."
+          },
+          "template_id": {
+            "type": "string",
+            "description": "Optional saved teammate template ID. When provided, missing fields are filled from the template."
           },
           "context": {
             "type": "string",
