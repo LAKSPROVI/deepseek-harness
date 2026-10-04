@@ -316,13 +316,45 @@
       "name": "skill",
       "description": "Load the full instructions for a skill. Call it before acting on a task that names or clearly matches a skill in the session skill catalog.",
       "parameters": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "The exact skill name from the available skills list."
-          }
-        },
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Unique teammate name or natural label (e.g. \"revisor\"). Required unless template_id is used."
+            },
+            "description": {
+              "type": "string",
+              "description": "Short description of the delegated responsibility. Required unless template_id is used."
+            },
+            "prompt": {
+              "type": "string",
+              "description": "Complete initial task for the teammate. Required unless template_id is used."
+            },
+            "template_id": {
+              "type": "string",
+              "description": "Optional saved teammate template ID. When provided, missing fields are populated from the saved template."
+            },
+            "context": {
+              "type": "string",
+              "description": "fresh starts without Lead history; fork inherits completed Lead turns. Defaults to fresh.",
+              "enum": [
+                "fresh",
+                "fork"
+              ]
+            },
+            "llm_provider": {
+              "type": "string",
+              "description": "Optional LLM adapter route (e.g. \"openai\", \"deepseek\", \"anthropic\"). Omit to inherit the Lead provider or template value."
+            },
+            "model": {
+              "type": "string",
+              "description": "Optional provider-owned model id (e.g. \"gpt-5\", \"deepseek-chat\"). Omit to inherit the Lead model or template value."
+            },
+            "persona": {
+              "type": "string",
+              "description": "Optional teammate-only system persona describing its role and constraints."
+            }
+          },
         "required": [
           "name"
         ]
