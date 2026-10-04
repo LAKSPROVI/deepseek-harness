@@ -22,7 +22,7 @@ import { ArchiveSessionMenuItem, ArchiveSessionRowButton, SessionArchiveConfirmD
 import { ForkSessionMenuItem } from '../src/client/session-actions/ForkSession.tsx'
 import { PinSessionMenuItem, PinSessionRowButton } from '../src/client/session-actions/PinSession.tsx'
 import { RenameSessionMenuItem, SessionRenameDialog } from '../src/client/session-actions/RenameSession.tsx'
-import { SetSessionStatusMenuItem } from '../src/client/session-actions/SetSessionStatus.ts'
+import { SetSessionStatusMenuItem } from '../src/client/session-actions/SetSessionStatus.tsx'
 import { RowActionToast } from '../src/client/session-actions/RowActionToast.tsx'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
