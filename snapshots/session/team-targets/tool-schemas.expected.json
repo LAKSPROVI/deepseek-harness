@@ -447,11 +447,11 @@
     },
     {
       "name": "team_roster_dismiss",
-      "description": "Dismiss one or more teammates, interrupting their current turn and stopping their message delivery.",
+      "description": "Interrupt and dismiss all active teammates, or specific named teammates, in one batch call to clean up the team.",
       "parameters": {
         "properties": {
           "names": {
-            "description": "Names of the teammates to dismiss. Omit to dismiss every active teammate.",
+            "description": "Optional list of specific teammate names to dismiss. If omitted, all active teammates are dismissed.",
             "items": {
               "type": "string"
             },
@@ -517,7 +517,7 @@
     },
     {
       "name": "team_squad_spawn",
-      "description": "Spawn every member of a saved squad preset, creating durable teammates with their own names.",
+      "description": "Spawn an entire multi-agent squad preset in this session in one batch operation.",
       "parameters": {
         "properties": {
           "squad_id": {
