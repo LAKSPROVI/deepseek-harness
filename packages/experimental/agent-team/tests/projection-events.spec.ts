@@ -5,8 +5,9 @@ import SessionStore, { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset, Sess
 import type { SessionEvent, SessionEventMap, SessionEventType } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { teamProjectionDefinition, teamProjectionView } from '../src/projection.ts'
-import type { TeamDebateSnapshot, TeamProjectionState, TeamState } from '../src/projection.ts'
+import type { TeamProjectionState, TeamState } from '../src/projection.ts'
 import { TeamDebateId, TeamId, TeamMessageId, TeamTaskId } from '../src/types.ts'
+import type { TeamDebateSnapshot } from '../src/types.ts'
 import type { TeamMemberSnapshot, TeamMessageSnapshot, TeamTaskSnapshot } from '../src/types.ts'
 
 const ROOT = SessionId('team-root')

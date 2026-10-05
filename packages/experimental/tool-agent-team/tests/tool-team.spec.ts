@@ -1078,7 +1078,7 @@ describe('Team tools settings, squad, and debate paths', () => {
       debate_id: second.id,
       expected_revision: second.revision,
       action: 'pause',
-    })) as { status: string }
+    })) as { revision: number; status: string }
     expect(paused.status).toBe('paused')
     const resumed = parsedJson(await execute(ctx, lead, 'team_debate_update', {
       debate_id: second.id,

@@ -30,7 +30,8 @@ import { ForkSessionMenuItem } from '../src/client/session-actions/ForkSession.t
 import { PinSessionMenuItem, PinSessionRowButton } from '../src/client/session-actions/PinSession.tsx'
 import { RenameSessionMenuItem, SessionRenameDialog } from '../src/client/session-actions/RenameSession.tsx'
 import { RowActionToast } from '../src/client/session-actions/RowActionToast.tsx'
-import { createWorkspaceViewStore } from '../src/client/stores.ts'
+import { SetSessionStatusMenuItem, SessionStatusDialog } from '../src/client/session-actions/SetSessionStatus.tsx'
+import { createWorkspaceViewStore, type CustomSessionStatus } from '../src/client/stores.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { ShortcutRegistry } from '../../shortcuts/src/client/registry.ts'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
@@ -654,4 +655,64 @@ it('shows effective Session shortcuts while menu clicks keep the row target', ()
   expect(requestSessionRename).toHaveBeenCalledWith(ROW.sessionId, ROW.displayTitle)
   expect(forkSession).toHaveBeenCalledWith(ROW.sessionId)
   expect(archiveSession).toHaveBeenCalledWith(ROW.sessionId)
+})
+
+describe('SetSessionStatus action', () => {
+  /** Locale seats in the fork English dictionary, whose labels the assertions read. */
+  const menuRowEn = (menu: MenuOpenState): MenuRowProps => ({
+    ...ROW, useMenuOpenState: () => menu, useShortcuts: hook([]), t: tEn, ...standard,
+  })
+  const overlayEn: OverlayProps = { t: tEn, ...standard }
+
+  it('menu row closes the menu, then asks for the status picker', () => {
+    const { state, setMenuOpen } = openMenu()
+    const requestSessionStatus = vi.fn()
+    render(<SetSessionStatusMenuItem {...menuRowEn(state)} requestSessionStatus={requestSessionStatus} />)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Definir status...' }))
+    expect(requestSessionStatus).toHaveBeenCalledWith(ROW.sessionId)
+    expect(setMenuOpen).toHaveBeenCalledWith(false)
+  })
+
+  /** The dialog over a test-owned request source; settling clears the request the way apply does. */
+  function statusDialog(setSessionStatus: (id: SessionId, status: CustomSessionStatus) => void) {
+    const request = createSnapshotStore<SessionId | null>(null)
+    const settleSessionStatus = vi.fn(() => { request.set(null) })
+    render(
+      <SessionStatusDialog
+        {...overlayEn}
+        useStatusRequest={bindSnapshotSelector(request)}
+        settleSessionStatus={settleSessionStatus}
+        setSessionStatus={setSessionStatus}
+      />,
+    )
+    const ask = (): void => { act(() => { request.set(ROW.sessionId) }) }
+    return { settleSessionStatus, ask }
+  }
+
+  it('renders nothing until a status pick is requested', () => {
+    statusDialog(vi.fn())
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('defaults the draft, applies the picked status, and settles', () => {
+    const setSessionStatus = vi.fn()
+    const { settleSessionStatus, ask } = statusDialog(setSessionStatus)
+    ask()
+    expect(screen.getByRole('dialog', { name: 'Definir status...' })).toBeTruthy()
+    // The draft starts on the waiting-decision option.
+    expect((screen.getByLabelText('Aguardando decisão') as HTMLInputElement).checked).toBe(true)
+    // Cancelling settles without applying.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(settleSessionStatus).toHaveBeenCalled()
+    expect(setSessionStatus).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    ask()
+    // Pick another option, then saving applies it and settles.
+    fireEvent.click(screen.getByLabelText('Não lida'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(setSessionStatus).toHaveBeenCalledWith(ROW.sessionId, 'unread')
+    expect(settleSessionStatus).toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
 })

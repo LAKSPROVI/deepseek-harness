@@ -367,6 +367,27 @@ describe('deriveGroups', () => {
     ).items[0]).toMatchObject({ id: parent.id, runningSubagentCount: 1 })
   })
 
+  it('marks sessions whose schedule projection lists active entries', () => {
+    const scheduled = summary('scheduled', 30)
+    const idle = summary('idle', 20)
+    // The schedule projection is not on the typed map; the form-guarded raw
+    // storage shape is exactly what the list projection reads it through.
+    const withValues = (values: Record<string, unknown>): SessionProjectionSnapshot =>
+      ({ values: values as SessionProjectionSnapshot['values'], state: 'ready', error: null })
+    const sessions = {
+      ...list(scheduled, idle),
+      projectionsBySession: {
+        [scheduled.id]: withValues({ schedule: [{ id: 'job-1' }] }),
+        [idle.id]: withValues({ schedule: [] }),
+      },
+    }
+    const nodes = deriveGroups(
+      sessions, [workspace('alpha', ['scheduled', 'idle'])], noRows, noAttention, view(['alpha']),
+    )[0]!.sessions
+    expect(nodes.find(node => node.id === scheduled.id)).toMatchObject({ hasActiveSchedule: true })
+    expect(nodes.find(node => node.id === idle.id)).toMatchObject({ hasActiveSchedule: false })
+  })
+
   it('uses current child status only for members of the direct parent catalog', () => {
     const parent = summary('parent', 1)
     const child = { ...summary('child', 2), running: false }

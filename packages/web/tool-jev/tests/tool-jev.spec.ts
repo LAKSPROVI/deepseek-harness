@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 
-import { apply, DEFAULT_JEV_MODEL, name, parseJevArgs } from '../src/index.ts'
+import { apply, DEFAULT_JEV_MODEL, formatJevOutput, name, parseJevArgs } from '../src/index.ts'
 
 describe('tool-jev', () => {
   it('exposes the plugin name', () => {
@@ -87,6 +87,103 @@ describe('tool-jev', () => {
     expect(sent.state).toBe('Cliente relata urgencia.')
     expect(Object.keys(sent.questions)).toEqual(['a'])
 
+    vi.unstubAllGlobals()
+    delete process.env.TYPESAFE_API_KEY
+  })
+
+  it('rejects every malformed questions shape', () => {
+    expect(() => parseJevArgs({ state: 's' })).toThrow('questions must be a non-empty array')
+    expect(() => parseJevArgs({ state: 's', questions: [] })).toThrow('questions must be a non-empty array')
+    expect(() => parseJevArgs({ state: 's', questions: [42] })).toThrow('every question must be an object')
+    expect(() => parseJevArgs({ state: 's', questions: [{ type: 'noul', instructions: 'x' }] }))
+      .toThrow('every question requires a non-blank name')
+    expect(() => parseJevArgs({ state: 's', questions: [{ name: 'a', type: 'noul', instructions: ' ' }] }))
+      .toThrow('instructions must be non-blank')
+    expect(() => parseJevArgs({ state: 42, questions: [{ name: 'a', type: 'noul', instructions: 'x' }] }))
+      .toThrow('state must be a non-blank string')
+  })
+
+  it('keeps choice criteria as a named object and score criteria as a rubric array', () => {
+    expect(() => parseJevArgs({
+      state: 's', questions: [{ name: 'a', type: 'choice', instructions: 'x', criteria: [] }],
+    })).toThrow('requires a non-empty criteria object')
+    expect(() => parseJevArgs({
+      state: 's', questions: [{ name: 'a', type: 'score', instructions: 'x', criteria: { weak: 'w' } }],
+    })).toThrow('requires a non-empty criteria rubric array')
+    const parsed = parseJevArgs({
+      state: 's',
+      questions: [{ name: 'pick', type: 'choice', instructions: 'x', criteria: { first: 'one', second: 'two' } }],
+    })
+    expect(parsed.questions.pick?.criteria).toEqual({ first: 'one', second: 'two' })
+  })
+
+  it('trims an explicit model and falls back on blank or non-string values', () => {
+    const question = [{ name: 'a', type: 'noul', instructions: 'x' }]
+    expect(parseJevArgs({ state: 's', model: ' custom ', questions: question }).model).toBe('custom')
+    expect(parseJevArgs({ state: 's', model: '   ', questions: question }).model).toBe(DEFAULT_JEV_MODEL)
+    expect(parseJevArgs({ state: 's', model: 42, questions: question }).model).toBe(DEFAULT_JEV_MODEL)
+  })
+
+  it('fences one answer set as a json document', () => {
+    expect(formatJevOutput({ a: 1 })).toBe('```json\n{\n  "a": 1\n}\n```')
+  })
+
+  /** The registered-tool harness shared by the execute-path tests below. */
+  function registeredTool(config: Record<string, unknown>) {
+    const registered: Array<{ name: string; def: { execute: (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown> } }> = []
+    const ctx = {
+      tools: {
+        get: vi.fn(() => ({})),
+        register: vi.fn((definition: {
+          name: string
+          execute: (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown>
+        }) => { registered.push({ name: definition.name, def: definition }) }),
+      },
+    } as unknown as Context
+    apply(ctx, { model: DEFAULT_JEV_MODEL, ...config } as never)
+    return registered
+  }
+
+  it('skips registration when disabled and rejects a bad timeout budget', () => {
+    expect(registeredTool({ enabled: false })).toEqual([])
+    expect(() => registeredTool({ enabled: true, timeoutMs: 0 })).toThrow('timeoutMs must be a positive integer')
+    expect(() => registeredTool({ enabled: true, timeoutMs: 1.5 })).toThrow('timeoutMs must be a positive integer')
+    expect(registeredTool({ enabled: true }).length).toBe(1)
+  })
+
+  it('fails loudly without an API key and surfaces API errors', async () => {
+    delete process.env.TYPESAFE_API_KEY
+    const noKey = registeredTool({ enabled: true, timeoutMs: 5_000 })
+    await expect(noKey[0]!.def.execute(
+      { state: 's', questions: [{ name: 'a', type: 'noul', instructions: 'x' }] },
+      { signal: new AbortController().signal },
+    )).rejects.toThrow('TYPESAFE_API_KEY is not set')
+
+    const fetchMock = vi.fn().mockResolvedValue(new Response('upstream exploded', { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+    process.env.TYPESAFE_API_KEY = 'test-key'
+    const failing = registeredTool({ enabled: true, timeoutMs: 5_000 })
+    await expect(failing[0]!.def.execute(
+      { state: 's', questions: [{ name: 'a', type: 'noul', instructions: 'x' }] },
+      { signal: new AbortController().signal },
+    )).rejects.toThrow('TypeSafe API 503: upstream exploded')
+    vi.unstubAllGlobals()
+    delete process.env.TYPESAFE_API_KEY
+  })
+
+  it('defaults a missing model and missing answers in the tool output', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      usage: { input_tokens: 2, output_tokens: 1 },
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    process.env.TYPESAFE_API_KEY = 'test-key'
+    const tool = registeredTool({ enabled: true, timeoutMs: 5_000 })
+    const result = await tool[0]!.def.execute(
+      { state: 's', questions: [{ name: 'a', type: 'noul', instructions: 'x' }] },
+      { signal: new AbortController().signal },
+    ) as { model: string; answersJson: string }
+    expect(result.model).toBe('')
+    expect(result.answersJson).toBe('{}')
     vi.unstubAllGlobals()
     delete process.env.TYPESAFE_API_KEY
   })
