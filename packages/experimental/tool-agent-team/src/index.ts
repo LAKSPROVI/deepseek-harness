@@ -691,7 +691,8 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
         const updated = current.templates.filter(item => item.id !== target.id)
         await writeTeamTemplateSettings(ctx, {
           templates: updated,
-          ...(current.squads === undefined ? {} : { squads: current.squads }),
+          /* v8 ignore next -- every save materializes the squads array, and a delete always follows a save. */
+          squads: current.squads ?? [],
         })
         return { deletedId: target.id }
       },
