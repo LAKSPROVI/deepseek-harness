@@ -12,7 +12,7 @@ Tool schemas are registry-global while the effective sandbox mode is session-spe
 
 `approveEscalation` treats a schema-valid requested mode equal to the call's effective mode as an idempotent no-op. It returns the effective mode without consulting the approval service, and the tool executes once under the policy already in force. The exception applies only to the closed `ESCALATION_TARGETS` vocabulary; a narrower target, `read-only` as a requested target, or any unknown value still fails before execution. Strictly wider requests retain the existing approval flow and one-call grant.
 
-This normalization revises the non-widening case in [the original sandbox decision](../feature/2026-07-06-sandbox.md) and remains in the shared sandbox Service Definition so bash, PowerShell, and in-process filesystem consumers cannot diverge. It changes no session state, records no approval event, and grants no capability the call did not already possess.
+This normalization revises the non-widening case in the original sandbox decision and remains in the shared sandbox Service Definition so bash, PowerShell, and in-process filesystem consumers cannot diverge. It changes no session state, records no approval event, and grants no capability the call did not already possess.
 
 ## Alternatives considered
 

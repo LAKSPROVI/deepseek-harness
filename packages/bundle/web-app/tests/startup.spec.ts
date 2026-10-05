@@ -162,6 +162,7 @@ describe('web command-line provider', () => {
       openBrowser: true,
       publicUrl: 'https://web.example/ui',
       trustedHosts: ['lab.internal'],
+      presetRoot: WEB_PRESET_ROOT,
     })
     expect(observed.readerConfig).toEqual({
       host: '127.0.0.1',
