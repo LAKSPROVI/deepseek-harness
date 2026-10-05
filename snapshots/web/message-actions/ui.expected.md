@@ -26,8 +26,8 @@
 - button "Branch into a new conversation" [disabled]
 - text: Available only on the last message of a completed turn {{clock}} Now give the final answer. {{clock}}
 - button "Copy"
-- status: Worked
-- button "Took {{duration}}" [disabled]
+- status: Completed
+- button "Completed in {{duration}}" [disabled]
 - paragraph: DONE
 - button "Copy"
 - button "Good response"
@@ -35,8 +35,8 @@
 - button "Branch into a new conversation"
 - text: {{clock}} Keep this later input in the original conversation. {{clock}}
 - button "Copy"
-- status: Worked
-- button "Took {{duration}}" [disabled]
+- status: Completed
+- button "Completed in {{duration}}" [disabled]
 - paragraph: ORIGINAL ONLY
 - button "Copy"
 - button "Good response"
