@@ -969,6 +969,13 @@ describe('Team tools settings, squad, and debate paths', () => {
     const emptySquads = parsedJson(await execute(ctx, lead, 'team_squad_list', {})) as { squads: unknown[] }
     expect(emptySquads.squads).toEqual([])
 
+    // A saved squad rides along through the template writes below.
+    const squadSaved = parsedJson(await execute(ctx, lead, 'team_squad_save', {
+      title: 'Squad de Teste',
+      description: 'Time de teste',
+      members: [{ name: 'tester', description: 'Testa', prompt: 'Teste', context: 'fresh' }],
+    })) as { squad: { id: string } }
+
     // Save without context (defaults to fresh) and without an explicit id.
     const saved = parsedJson(await execute(ctx, lead, 'team_template_save', {
       title: 'Redator Padrao',
@@ -983,6 +990,10 @@ describe('Team tools settings, squad, and debate paths', () => {
     expect(deleted.deletedId).toBe(saved.template.id)
     const listed = parsedJson(await execute(ctx, lead, 'team_template_list', {})) as { templates: unknown[] }
     expect(listed.templates).toEqual([])
+    const squadDeleted = parsedJson(await execute(ctx, lead, 'team_squad_delete', {
+      id: squadSaved.squad.id,
+    })) as { deletedId: string }
+    expect(squadDeleted.deletedId).toBe(squadSaved.squad.id)
   })
 
   it('saves, upserts, spawns by title, and dismisses squads with explicit names', async () => {
@@ -1038,7 +1049,7 @@ describe('Team tools settings, squad, and debate paths', () => {
   it('drives the structured debate through the team tools', async () => {
     const { ctx, lead } = await setup(['hang'])
     const spawned = parsedJson(await execute(ctx, lead, 'spawn_teammate', {
-      name: 'debate-worker', description: 'Debatedor', prompt: 'Debate o tema',
+      name: 'debate-worker', description: 'Debatedor', prompt: 'Debate o tema', persona: 'Debatedor formal',
     })) as { member: { target: string } }
     const workerName = spawned.member.target
 

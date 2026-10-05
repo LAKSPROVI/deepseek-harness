@@ -65,6 +65,7 @@ function readTeamTemplateSettings(context: Context): TeamTemplateSettings {
 /** Persist the complete team template settings value. */
 async function writeTeamTemplateSettings(context: Context, value: TeamTemplateSettings): Promise<void> {
   const store = teamSettingsStore(context)
+  /* v8 ignore next 2 -- every writer reads the store first; a missing service fails at the read above. */
   if (store === undefined) throw new Error('Settings service is unavailable')
   await store.update(TEAM_TEMPLATE_SETTINGS_NAMESPACE, value)
 }
@@ -748,9 +749,10 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
       output: jsonOutput(SQUAD_DELETE_VALUE_SCHEMA),
       async execute(args, _exec) {
         const current = readTeamTemplateSettings(ctx)
-        const target = findByIdOrTitle(current.squads ?? [], args.id)
+        const squads = current.squads ?? []
+        const target = findByIdOrTitle(squads, args.id)
         if (target === undefined) throw new Error(`Squad preset "${args.id}" not found in saved squads`)
-        const updated = (current.squads ?? []).filter(item => item.id !== target.id)
+        const updated = squads.filter(item => item.id !== target.id)
         await writeTeamTemplateSettings(ctx, { templates: current.templates, squads: updated })
         return { deletedId: target.id }
       },

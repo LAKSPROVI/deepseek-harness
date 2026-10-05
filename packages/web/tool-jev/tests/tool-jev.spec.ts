@@ -103,6 +103,16 @@ describe('tool-jev', () => {
       .toThrow('state must be a non-blank string')
   })
 
+  it('treats non-string instructions as blank and accepts a valid score rubric', () => {
+    expect(() => parseJevArgs({ state: 's', questions: [{ name: 'a', type: 'noul', instructions: 42 }] }))
+      .toThrow('instructions must be non-blank')
+    const parsed = parseJevArgs({
+      state: 's',
+      questions: [{ name: 'grade', type: 'score', instructions: 'How strong is the case?', criteria: ['weak', 'strong'] }],
+    })
+    expect(parsed.questions.grade?.criteria).toEqual(['weak', 'strong'])
+  })
+
   it('keeps choice criteria as a named object and score criteria as a rubric array', () => {
     expect(() => parseJevArgs({
       state: 's', questions: [{ name: 'a', type: 'choice', instructions: 'x', criteria: [] }],
@@ -129,15 +139,21 @@ describe('tool-jev', () => {
   })
 
   /** The registered-tool harness shared by the execute-path tests below. */
+  interface RegisteredJevTool {
+    name: string
+    execute: (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown>
+    output: {
+      render: (args: unknown, value: unknown) => Array<{ type: 'text'; text: string }>
+      presentationMeta: () => { kind: string }
+    }
+    isConcurrencySafe: (args: unknown) => boolean
+  }
   function registeredTool(config: Record<string, unknown>) {
-    const registered: Array<{ name: string; def: { execute: (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown> } }> = []
+    const registered: RegisteredJevTool[] = []
     const ctx = {
       tools: {
         get: vi.fn(() => ({})),
-        register: vi.fn((definition: {
-          name: string
-          execute: (args: unknown, exec: { signal: AbortSignal }) => Promise<unknown>
-        }) => { registered.push({ name: definition.name, def: definition }) }),
+        register: vi.fn((definition: RegisteredJevTool) => { registered.push(definition) }),
       },
     } as unknown as Context
     apply(ctx, { model: DEFAULT_JEV_MODEL, ...config })
@@ -154,7 +170,7 @@ describe('tool-jev', () => {
   it('fails loudly without an API key and surfaces API errors', async () => {
     delete process.env.TYPESAFE_API_KEY
     const noKey = registeredTool({ enabled: true, timeoutMs: 5_000 })
-    await expect(noKey[0]!.def.execute(
+    await expect(noKey[0]!.execute(
       { state: 's', questions: [{ name: 'a', type: 'noul', instructions: 'x' }] },
       { signal: new AbortController().signal },
     )).rejects.toThrow('TYPESAFE_API_KEY is not set')
@@ -163,7 +179,7 @@ describe('tool-jev', () => {
     vi.stubGlobal('fetch', fetchMock)
     process.env.TYPESAFE_API_KEY = 'test-key'
     const failing = registeredTool({ enabled: true, timeoutMs: 5_000 })
-    await expect(failing[0]!.def.execute(
+    await expect(failing[0]!.execute(
       { state: 's', questions: [{ name: 'a', type: 'noul', instructions: 'x' }] },
       { signal: new AbortController().signal },
     )).rejects.toThrow('TypeSafe API 503: upstream exploded')
@@ -178,12 +194,24 @@ describe('tool-jev', () => {
     vi.stubGlobal('fetch', fetchMock)
     process.env.TYPESAFE_API_KEY = 'test-key'
     const tool = registeredTool({ enabled: true, timeoutMs: 5_000 })
-    const result = await tool[0]!.def.execute(
+    const result = await tool[0]!.execute(
       { state: 's', questions: [{ name: 'a', type: 'noul', instructions: 'x' }] },
       { signal: new AbortController().signal },
     ) as { model: string; answersJson: string }
     expect(result.model).toBe('')
     expect(result.answersJson).toBe('{}')
+
+    // The registered definition renders its fenced JSON output, reports a
+    // generic presentation, and declares valid API reads concurrency-safe.
+    const def = tool[0]!
+    expect(def.output.render({}, { a: 1 })).toEqual([{ type: 'text', text: formatJevOutput({ a: 1 }) }])
+    expect(def.output.presentationMeta()).toEqual({ kind: 'generic' })
+    expect(def.isConcurrencySafe({
+      state: 's',
+      questions: [{ name: 'a', type: 'noul', instructions: 'x' }],
+    })).toBe(true)
+    expect(def.isConcurrencySafe({})).toBe(false)
+
     vi.unstubAllGlobals()
     delete process.env.TYPESAFE_API_KEY
   })

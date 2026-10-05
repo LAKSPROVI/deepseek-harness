@@ -1936,6 +1936,8 @@ describe('team template settings validation', () => {
     expect(() => {
       validateTeamTemplateSettings({ templates: [{ ...template, llmProvider: 'deepseek' }] })
     }).toThrow(/must define provider and model together/)
+    // A template-only value with no squads key completes and skips squad validation.
+    expect(() => { validateTeamTemplateSettings({ templates: [template] }) }).not.toThrow()
   })
 
   it('rejects duplicate squad ids and half-defined member model routes', () => {
