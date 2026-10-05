@@ -1931,11 +1931,11 @@ describe('team template settings validation', () => {
     const template: SavedTeamTemplate = {
       id: 'tpl-1', title: 'Revisor', name: 'revisor', description: 'Revisa', prompt: 'Revise', context: 'fresh',
     }
-    expect(() => validateTeamTemplateSettings({ templates: [template, { ...template }] }))
+    expect(() => { validateTeamTemplateSettings({ templates: [template, { ...template }] }) })
       .toThrow(/duplicate teammate template id/)
-    expect(() => validateTeamTemplateSettings({
-      templates: [{ ...template, llmProvider: 'deepseek' }],
-    })).toThrow(/must define provider and model together/)
+    expect(() => {
+      validateTeamTemplateSettings({ templates: [{ ...template, llmProvider: 'deepseek' }] })
+    }).toThrow(/must define provider and model together/)
   })
 
   it('rejects duplicate squad ids and half-defined member model routes', () => {
@@ -1943,14 +1943,16 @@ describe('team template settings validation', () => {
       id: 'squad-1', title: 'Banco', description: 'Time de revisao',
       members: [{ name: 'member-a', description: 'Revisa', prompt: 'Revise', context: 'fork' }],
     }
-    expect(() => validateTeamTemplateSettings({ templates: [], squads: [squad, { ...squad }] }))
+    expect(() => { validateTeamTemplateSettings({ templates: [], squads: [squad, { ...squad }] }) })
       .toThrow(/duplicate squad preset id/)
-    expect(() => validateTeamTemplateSettings({
-      templates: [],
-      squads: [{
-        ...squad,
-        members: [{ name: 'member-a', description: 'Revisa', prompt: 'Revise', context: 'fork', model: 'x' }],
-      }],
-    })).toThrow(/must define provider and model together/)
+    expect(() => {
+      validateTeamTemplateSettings({
+        templates: [],
+        squads: [{
+          ...squad,
+          members: [{ name: 'member-a', description: 'Revisa', prompt: 'Revise', context: 'fork', model: 'x' }],
+        }],
+      })
+    }).toThrow(/must define provider and model together/)
   })
 })

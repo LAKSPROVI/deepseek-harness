@@ -373,7 +373,7 @@ describe('deriveGroups', () => {
     // The schedule projection is not on the typed map; the form-guarded raw
     // storage shape is exactly what the list projection reads it through.
     const withValues = (values: Record<string, unknown>): SessionProjectionSnapshot =>
-      ({ values: values as SessionProjectionSnapshot['values'], state: 'ready', error: null })
+      ({ values, state: 'ready', error: null })
     const sessions = {
       ...list(scheduled, idle),
       projectionsBySession: {

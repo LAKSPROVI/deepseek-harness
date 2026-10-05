@@ -700,7 +700,7 @@ describe('SetSessionStatus action', () => {
     ask()
     expect(screen.getByRole('dialog', { name: 'Definir status...' })).toBeTruthy()
     // The draft starts on the waiting-decision option.
-    expect((screen.getByLabelText('Aguardando decisão') as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>('Aguardando decisão').checked).toBe(true)
     // Cancelling settles without applying.
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(settleSessionStatus).toHaveBeenCalled()

@@ -1032,7 +1032,7 @@ describe('Team tools settings, squad, and debate paths', () => {
     expect(deleted.deletedId).toBe(saved.squad.id)
     const empty = parsedJson(await execute(ctx, lead, 'team_squad_list', {})) as { squads: unknown[] }
     expect(empty.squads).toEqual([])
-    await ctx.agentTeams.interrupt(lead, spawned.spawnedMembers[2]!.target)
+    ctx.agentTeams.interrupt(lead, spawned.spawnedMembers[2]!.target)
   }, 120_000)
 
   it('drives the structured debate through the team tools', async () => {

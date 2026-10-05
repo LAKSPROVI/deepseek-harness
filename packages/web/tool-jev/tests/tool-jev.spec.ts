@@ -140,7 +140,7 @@ describe('tool-jev', () => {
         }) => { registered.push({ name: definition.name, def: definition }) }),
       },
     } as unknown as Context
-    apply(ctx, { model: DEFAULT_JEV_MODEL, ...config } as never)
+    apply(ctx, { model: DEFAULT_JEV_MODEL, ...config })
     return registered
   }
 

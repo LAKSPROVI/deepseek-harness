@@ -207,7 +207,7 @@ describe('Agent Teams projection events', () => {
       version: 2,
       teamId: TEAM,
       debate: debate({ id: TeamDebateId('debate-2') }),
-    }, SessionSeq(1))]).debate).toMatchObject({ id: expect.anything(), revision: 1 })
+    }, SessionSeq(1))]).debate).toMatchObject({ id: TeamDebateId('debate-2'), revision: 1 })
   })
 
   it('rejects every invalid persisted task dependency relation', () => {
