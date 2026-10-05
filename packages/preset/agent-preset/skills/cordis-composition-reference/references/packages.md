@@ -478,7 +478,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 
 | Package | Config | Description |
 |---|---|---|
-| `@deepseek-ai/dsh-transcription` | yes | Abstract speech-to-text capability seam (ctx.transcription) for the DeepSeek Harness — provider registry, registration-order-independent selection, payload bounds, request/result vocabulary, and the TranscriptionError taxonomy |
+| `@deepseek-ai/dsh-transcription` | yes | Abstract speech-to-text capability seam (ctx.transcription) for the DeepSeek Harness â€” provider registry, registration-order-independent selection, payload bounds, request/result vocabulary, and the TranscriptionError taxonomy |
 | `@deepseek-ai/dsh-transcription-groq` | yes | Groq-backed speech-to-text provider (OpenAI-compatible Whisper transcriptions API) for the DeepSeek Harness transcription capability seam (ctx.transcription) |
 | `@deepseek-ai/dsh-voice-input` | no | Browser-facing Remote surface that transcribes one uploaded audio utterance through the DeepSeek Harness transcription seam |
 
@@ -492,6 +492,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 
 | Package | Config | Description |
 |---|---|---|
+| `@deepseek-ai/dsh-tool-jev` | yes | Model-facing jev_decide tool: typed decisions with calibrated confidence from the TypeSafe AI System One API |
 | `@deepseek-ai/dsh-tool-web` | yes | Model-facing web tools (web_search, web_fetch) over the DeepSeek Harness web capability seam (ctx.web) |
 | `@deepseek-ai/dsh-web` | yes | Abstract web access capability seam (ctx.web) for the DeepSeek Harness — search/fetch provider registry, registration-order-independent selection, request/result vocabulary, and the WebError taxonomy |
 | `@deepseek-ai/dsh-web-fetch-http` | yes | Anonymous public HTTP(S) fetch provider for the DeepSeek Harness web capability seam (ctx.web) |

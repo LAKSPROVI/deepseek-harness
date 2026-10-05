@@ -4,7 +4,10 @@
     - text: /
     - 'button "Switch subagent: event-sourcing researcher"': event-sourcing researcher
   - text: Standard mode
+  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "Automações"
   - button "More actions"
+  - button "Anotações e lembretes da sessão": Anotações
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]
@@ -23,5 +26,7 @@
 - textbox "Parent session offline; sending is unavailable but you can still stop the run" [disabled]
 - button "Add files or run commands" [disabled]
 - 'button "Access mode, current: Custom" [disabled]': Custom
+- button "Hold to talk"
+- status
 - button "Stop generating"
 - button "Send message" [disabled]

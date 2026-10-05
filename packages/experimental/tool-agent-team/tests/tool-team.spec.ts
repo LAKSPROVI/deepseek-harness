@@ -22,7 +22,7 @@ import { serialize } from '@deepseek-ai/dsh-llm-deepseek/src/serialize.ts'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import TeamService, {
-  type TeamTemplateSettings, validateTeamTemplateSettings,
+  type SavedTeamSquad, type SavedTeamTemplate, type TeamTemplateSettings, validateTeamTemplateSettings,
 } from '../../agent-team/src/index.ts'
 import * as toolTeam from '../src/index.ts'
 
@@ -76,7 +76,11 @@ afterEach(async () => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
-async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legacyControl = false) {
+async function setup(
+  script: ConstructorParameters<typeof MockAdapter>[0],
+  legacyControl = false,
+  options: { withoutSettings?: boolean } = {},
+) {
   const ctx = new Context()
   contexts.add(ctx)
   await mountAgentLoopTestDependencies(ctx)
@@ -96,19 +100,21 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legac
   // leem o namespace via `ctx.get('settings')`, entao um store KV em memoria com a
   // validacao do schema satisfaz o contrato que as tools usam.
   const store = new Map<string, unknown>()
-  ctx.provide('settings', {
-    get: (ns: string) => store.get(ns),
-    update: async (ns: string, patch: object) => {
-      const next = { ...(store.get(ns) as object | undefined ?? {}), ...patch }
-      validateTeamTemplateSettings(next as TeamTemplateSettings)
-      store.set(ns, next)
-    },
-  } as never)
+  if (options.withoutSettings !== true) {
+    ctx.provide('settings', {
+      get: (ns: string) => store.get(ns),
+      update: async (ns: string, patch: object) => {
+        const next = { ...(store.get(ns) as object | undefined ?? {}), ...patch }
+        validateTeamTemplateSettings(next as TeamTemplateSettings)
+        store.set(ns, next)
+      },
+    } as never)
+  }
   const fiber = await ctx.plugin(toolTeam)
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
   const lead = await ctx.agentLoop.create(SessionId('tool-team-lead'), { provider: 'mock', model: 'mock' })
-  return { ctx, lead, fiber, adapter }
+  return { ctx, lead, fiber, adapter, store }
 }
 
 function execute(
@@ -129,6 +135,11 @@ function execute(
 
 function text(result: Awaited<ReturnType<typeof execute>>): string {
   return result.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+}
+
+/** Parse one tool call's JSON text output. */
+function parsedJson(result: Awaited<ReturnType<typeof execute>>): unknown {
+  return JSON.parse(text(result))
 }
 
 function spawnedChildId(ctx: Context, lead: Agent, result: Awaited<ReturnType<typeof execute>>): SessionId {
@@ -763,10 +774,10 @@ describe('dsh-tool-team', () => {
   it('manages reusable teammate templates via team_template_save, list, delete', async () => {
     const { ctx, lead } = await setup([])
 
-    const emptyList = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    const emptyList = parsedJson(await execute(ctx, lead, 'team_template_list', {})) as { templates: SavedTeamTemplate[] }
     expect(emptyList).toEqual({ templates: [] })
 
-    const saved = JSON.parse(text(await execute(ctx, lead, 'team_template_save', {
+    const saved = parsedJson(await execute(ctx, lead, 'team_template_save', {
       title: 'Pesquisador Juridico Senior',
       name: 'pesquisador-juridico-senior',
       description: 'Pesquisa doutrina e jurisprudencia',
@@ -775,7 +786,7 @@ describe('dsh-tool-team', () => {
       llm_provider: 'deepseek',
       model: 'deepseek-chat',
       persona: 'Especialista em pesquisa juridica',
-    })))
+    })) as { template: SavedTeamTemplate }
     expect(saved.template).toMatchObject({
       title: 'Pesquisador Juridico Senior',
       name: 'pesquisador-juridico-senior',
@@ -788,61 +799,61 @@ describe('dsh-tool-team', () => {
     })
     expect(saved.template.id).toBeTruthy()
 
-    const list = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    const list = parsedJson(await execute(ctx, lead, 'team_template_list', {})) as { templates: SavedTeamTemplate[] }
     expect(list.templates).toHaveLength(1)
-    expect(list.templates[0].title).toBe('Pesquisador Juridico Senior')
+    expect(list.templates[0]!.title).toBe('Pesquisador Juridico Senior')
 
-    const saved2 = JSON.parse(text(await execute(ctx, lead, 'team_template_save', {
+    const saved2 = parsedJson(await execute(ctx, lead, 'team_template_save', {
       title: 'Pesquisador Juridico Senior',
       name: 'pesquisador-juridico-senior',
       description: 'Atualizado: pesquisa doutrina, jurisprudencia e legislacao',
       prompt: 'Pesquise completamente',
       context: 'fork',
-    })))
+    })) as { template: SavedTeamTemplate }
     expect(saved2.template.description).toContain('Atualizado')
     expect(saved2.template.context).toBe('fork')
 
-    const list2 = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    const list2 = parsedJson(await execute(ctx, lead, 'team_template_list', {})) as { templates: SavedTeamTemplate[] }
     expect(list2.templates).toHaveLength(1)
-    expect(list2.templates[0].description).toContain('Atualizado')
+    expect(list2.templates[0]!.description).toContain('Atualizado')
 
-    const deleted = JSON.parse(text(await execute(ctx, lead, 'team_template_delete', {
+    const deleted = parsedJson(await execute(ctx, lead, 'team_template_delete', {
       id: saved2.template.id,
-    })))
+    })) as { deletedId: string }
     expect(deleted.deletedId).toBe(saved2.template.id)
 
-    const emptyAgain = JSON.parse(text(await execute(ctx, lead, 'team_template_list', {})))
+    const emptyAgain = parsedJson(await execute(ctx, lead, 'team_template_list', {})) as { templates: SavedTeamTemplate[] }
     expect(emptyAgain.templates).toHaveLength(0)
   })
 
   it('spawns teammate from saved template via template_id', async () => {
     const { ctx, lead } = await setup(['hang'])
 
-    const saved = JSON.parse(text(await execute(ctx, lead, 'team_template_save', {
+    const saved = parsedJson(await execute(ctx, lead, 'team_template_save', {
       title: 'Revisor de Contratos',
       description: 'Revisa clausulas contratuais',
       prompt: 'Revise o contrato enviado',
       context: 'fresh',
       llm_provider: 'deepseek',
       model: 'deepseek-chat',
-    })))
+    })) as { template: SavedTeamTemplate }
     const templateId = saved.template.id
 
-    const spawned = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+    const spawned = parsedJson(await execute(ctx, lead, 'spawn_teammate', {
       template_id: templateId,
-    })))
+    })) as { member: { name: string; target: string; description: string } }
     expect(spawned.member).toMatchObject({
       target: 'revisor-de-contratos',
       description: 'Revisa clausulas contratuais',
     })
 
-    const spawned2 = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+    const spawned2 = parsedJson(await execute(ctx, lead, 'spawn_teammate', {
       template_id: templateId,
       name: 'revisor-especial',
       description: 'Revisao especial',
       prompt: 'Prompt customizado',
       context: 'fork',
-    })))
+    })) as { member: { name: string; target: string; description: string } }
     expect(spawned2.member).toMatchObject({
       target: 'revisor-especial',
       description: 'Revisao especial',
@@ -852,7 +863,7 @@ describe('dsh-tool-team', () => {
   it('manages and spawns multi-agent squads via team_squad_save, list, spawn, delete', async () => {
     const { ctx, lead } = await setup(['hang', 'hang'])
 
-    const saved = JSON.parse(text(await execute(ctx, lead, 'team_squad_save', {
+    const saved = parsedJson(await execute(ctx, lead, 'team_squad_save', {
       title: 'Esquadrao Juridico Rapido',
       description: 'Pesquisador e Revisor trabalhando em conjunto',
       members: [
@@ -871,61 +882,221 @@ describe('dsh-tool-team', () => {
           context: 'fresh',
         },
       ],
-    })))
+    })) as { squad: SavedTeamSquad }
     expect(saved.squad).toMatchObject({
       title: 'Esquadrao Juridico Rapido',
       description: 'Pesquisador e Revisor trabalhando em conjunto',
     })
     expect(saved.squad.members).toHaveLength(2)
-    expect(saved.squad.members[0].name).toBe('pesquisador')
-    expect(saved.squad.members[1].name).toBe('revisor')
+    expect(saved.squad.members[0]!.name).toBe('pesquisador')
+    expect(saved.squad.members[1]!.name).toBe('revisor')
 
-    const list = JSON.parse(text(await execute(ctx, lead, 'team_squad_list', {})))
+    const list = parsedJson(await execute(ctx, lead, 'team_squad_list', {})) as { squads: SavedTeamSquad[] }
     expect(list.squads).toHaveLength(1)
-    expect(list.squads[0].title).toBe('Esquadrao Juridico Rapido')
+    expect(list.squads[0]!.title).toBe('Esquadrao Juridico Rapido')
 
-    const spawned = JSON.parse(text(await execute(ctx, lead, 'team_squad_spawn', {
+    const spawned = parsedJson(await execute(ctx, lead, 'team_squad_spawn', {
       squad_id: saved.squad.id,
-    })))
+    })) as { spawnedMembers: Array<{ target: string }> }
     expect(spawned.spawnedMembers).toHaveLength(2)
-    expect(spawned.spawnedMembers[0].name).toBe('pesquisador')
-    expect(spawned.spawnedMembers[1].name).toBe('revisor')
+    expect(spawned.spawnedMembers[0]!.target).toBe('pesquisador')
+    expect(spawned.spawnedMembers[1]!.target).toBe('revisor')
 
-    const dismissed = JSON.parse(text(await execute(ctx, lead, 'team_roster_dismiss', {})))
+    const dismissed = parsedJson(await execute(ctx, lead, 'team_roster_dismiss', {})) as { dismissedCount: number; dismissedNames: string[] }
     expect(dismissed.dismissedCount).toBe(2)
     expect(dismissed.dismissedNames).toEqual(['pesquisador', 'revisor'])
 
-    const deleted = JSON.parse(text(await execute(ctx, lead, 'team_squad_delete', {
+    const deleted = parsedJson(await execute(ctx, lead, 'team_squad_delete', {
       id: saved.squad.id,
-    })))
+    })) as { deletedId: string }
     expect(deleted.deletedId).toBe(saved.squad.id)
 
-    const listAfter = JSON.parse(text(await execute(ctx, lead, 'team_squad_list', {})))
+    const listAfter = parsedJson(await execute(ctx, lead, 'team_squad_list', {})) as { squads: SavedTeamSquad[] }
     expect(listAfter.squads).toHaveLength(0)
   }, 20000)
 
   it('normalizes natural names in spawn_teammate to lower-kebab-case', async () => {
     const { ctx, lead } = await setup(['hang', 'hang', 'hang'])
 
-    const spawned = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+    const spawned = parsedJson(await execute(ctx, lead, 'spawn_teammate', {
       name: 'Revisor de Contratos - Senior',
       description: 'Test normalization',
       prompt: 'Test prompt',
-    })))
-    expect(spawned.member.name).toBe('revisor-de-contratos-senior')
+    })) as { member: { target: string } }
+    expect(spawned.member.target).toBe('revisor-de-contratos-senior')
 
-    const spawned2 = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+    const spawned2 = parsedJson(await execute(ctx, lead, 'spawn_teammate', {
       name: 'pesquisador_juridico (tributario)',
       description: 'Test normalization 2',
       prompt: 'Test prompt 2',
-    })))
-    expect(spawned2.member.name).toBe('pesquisador-juridico-tributario')
+    })) as { member: { target: string } }
+    expect(spawned2.member.target).toBe('pesquisador-juridico-tributario')
 
-    const spawned3 = JSON.parse(text(await execute(ctx, lead, 'spawn_teammate', {
+    const spawned3 = parsedJson(await execute(ctx, lead, 'spawn_teammate', {
       name: 'valid-name-123',
       description: 'Test normalization 3',
       prompt: 'Test prompt 3',
-    })))
-    expect(spawned3.member.name).toBe('valid-name-123')
+    })) as { member: { target: string } }
+    expect(spawned3.member.target).toBe('valid-name-123')
   }, 20000)
+})
+
+describe('Team tools settings, squad, and debate paths', () => {
+  it('fails loudly when the settings service is absent', async () => {
+    const { ctx, lead } = await setup([], false, { withoutSettings: true })
+    const listed = await execute(ctx, lead, 'team_template_list', {})
+    expect(listed.isError).toBe(true)
+    expect(text(listed)).toContain('Settings service is unavailable')
+    const saved = await execute(ctx, lead, 'team_template_save', {
+      title: 'Sem settings', description: 'Sem settings', prompt: 'Sem settings',
+    })
+    expect(saved.isError).toBe(true)
+    expect(text(saved)).toContain('Settings service is unavailable')
+  })
+
+  it('surfaces template and squad lookup failures and defaults', async () => {
+    const { ctx, lead } = await setup([])
+    const badTemplate = await execute(ctx, lead, 'spawn_teammate', { template_id: 'ghost-template' })
+    expect(badTemplate.isError).toBe(true)
+    expect(text(badTemplate)).toContain('not found in saved templates')
+    const missingFields = await execute(ctx, lead, 'spawn_teammate', {})
+    expect(missingFields.isError).toBe(true)
+    expect(text(missingFields)).toContain('requires name, description, and prompt')
+    expect((await execute(ctx, lead, 'team_template_delete', { id: 'ghost' })).isError).toBe(true)
+    expect((await execute(ctx, lead, 'team_squad_delete', { id: 'ghost-squad' })).isError).toBe(true)
+    expect((await execute(ctx, lead, 'team_squad_spawn', { squad_id: 'ghost-squad' })).isError).toBe(true)
+
+    const emptySquads = parsedJson(await execute(ctx, lead, 'team_squad_list', {})) as { squads: unknown[] }
+    expect(emptySquads.squads).toEqual([])
+
+    // A saved squad rides along through the template writes below.
+    const squadSaved = parsedJson(await execute(ctx, lead, 'team_squad_save', {
+      title: 'Squad de Teste',
+      description: 'Time de teste',
+      members: [{ name: 'tester', description: 'Testa', prompt: 'Teste', context: 'fresh' }],
+    })) as { squad: { id: string } }
+
+    // Save without context (defaults to fresh) and without an explicit id.
+    const saved = parsedJson(await execute(ctx, lead, 'team_template_save', {
+      title: 'Redator Padrao',
+      description: 'Redige documentos',
+      prompt: 'Redija o documento',
+    })) as { template: { id: string; context: string } }
+    expect(saved.template.context).toBe('fresh')
+    // Delete by title resolves through the id-or-title lookup.
+    const deleted = parsedJson(await execute(ctx, lead, 'team_template_delete', {
+      id: 'Redator Padrao',
+    })) as { deletedId: string }
+    expect(deleted.deletedId).toBe(saved.template.id)
+    const listed = parsedJson(await execute(ctx, lead, 'team_template_list', {})) as { templates: unknown[] }
+    expect(listed.templates).toEqual([])
+    const squadDeleted = parsedJson(await execute(ctx, lead, 'team_squad_delete', {
+      id: squadSaved.squad.id,
+    })) as { deletedId: string }
+    expect(squadDeleted.deletedId).toBe(squadSaved.squad.id)
+  })
+
+  it('saves, upserts, spawns by title, and dismisses squads with explicit names', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    const members = [
+      {
+        name: 'fork-member', description: 'Membro fork', prompt: 'Trabalhe', context: 'fork',
+        llm_provider: 'deepseek', model: 'deepseek-chat', persona: 'Persona do membro',
+      },
+      { name: 'fresh-member', description: 'Membro fresh', prompt: 'Trabalhe', context: 'fresh' },
+      { description: 'Membro sem nome com persona numerica', prompt: 'Trabalhe', persona: 42 },
+    ]
+    const saved = parsedJson(await execute(ctx, lead, 'team_squad_save', {
+      title: 'Squad de Revisao', description: 'Time de revisao', members,
+    })) as { squad: { id: string; members: Array<{ name: string; persona?: string }> } }
+    expect(saved.squad.members).toHaveLength(3)
+    // The nameless member derives its name from the description and the numeric
+    // persona is coerced to an empty string.
+    expect(saved.squad.members[2]!.name).toContain('membro-sem-nome')
+    expect(saved.squad.members[2]!.persona).toBe('')
+
+    const listed = parsedJson(await execute(ctx, lead, 'team_squad_list', {})) as { squads: Array<{ id: string }> }
+    expect(listed.squads).toHaveLength(1)
+
+    // Spawn by title and confirm every member landed.
+    const spawned = parsedJson(await execute(ctx, lead, 'team_squad_spawn', {
+      squad_id: 'squad de revisao',
+    })) as { squadId: string; spawnedMembers: Array<{ target: string }> }
+    expect(spawned.squadId).toBe(saved.squad.id)
+    expect(spawned.spawnedMembers).toHaveLength(3)
+
+    // Dismiss two members by explicit name.
+    const dismissed = parsedJson(await execute(ctx, lead, 'team_roster_dismiss', {
+      names: [spawned.spawnedMembers[0]!.target, spawned.spawnedMembers[1]!.target],
+    })) as { dismissedCount: number }
+    expect(dismissed.dismissedCount).toBe(2)
+
+    // Saving the same title again replaces the preset instead of duplicating it.
+    const savedAgain = parsedJson(await execute(ctx, lead, 'team_squad_save', {
+      title: 'Squad de Revisao', description: 'Time de revisao atualizado', members: [members[0]],
+    })) as { squad: { id: string } }
+    expect(savedAgain.squad.id).toBe(saved.squad.id)
+    const listedAgain = parsedJson(await execute(ctx, lead, 'team_squad_list', {})) as { squads: unknown[] }
+    expect(listedAgain.squads).toHaveLength(1)
+
+    const deleted = parsedJson(await execute(ctx, lead, 'team_squad_delete', { id: saved.squad.id })) as { deletedId: string }
+    expect(deleted.deletedId).toBe(saved.squad.id)
+    const empty = parsedJson(await execute(ctx, lead, 'team_squad_list', {})) as { squads: unknown[] }
+    expect(empty.squads).toEqual([])
+    ctx.agentTeams.interrupt(lead, spawned.spawnedMembers[2]!.target)
+  }, 120_000)
+
+  it('drives the structured debate through the team tools', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    const spawned = parsedJson(await execute(ctx, lead, 'spawn_teammate', {
+      name: 'debate-worker', description: 'Debatedor', prompt: 'Debate o tema', persona: 'Debatedor formal',
+    })) as { member: { target: string } }
+    const workerName = spawned.member.target
+
+    const noDebate = parsedJson(await execute(ctx, lead, 'team_debate_get', {})) as Record<string, unknown>
+    expect(noDebate).toEqual({})
+
+    const started = parsedJson(await execute(ctx, lead, 'team_debate_start', {
+      topic: 'Which implementation is safer?',
+      participants: ['lead', workerName],
+      max_rounds: 1,
+    })) as { id: string; revision: number; phase: string; status: string }
+    expect(started).toMatchObject({ revision: 1, phase: 'positions', status: 'active' })
+
+    const seen = parsedJson(await execute(ctx, lead, 'team_debate_get', {})) as { debate: { id: string } }
+    expect(seen.debate.id).toBe(started.id)
+
+    // Advance through every phase of the single round; the last advance completes it.
+    let revision = started.revision
+    for (let phase = 0; phase < 5; phase++) {
+      const next = parsedJson(await execute(ctx, lead, 'team_debate_update', {
+        debate_id: started.id,
+        expected_revision: revision,
+        action: 'advance',
+      })) as { revision: number; status: string }
+      revision = next.revision
+    }
+    const finishedView = parsedJson(await execute(ctx, lead, 'team_debate_get', {})) as { debate: { status: string } }
+    expect(finishedView.debate.status).toBe('completed')
+
+    // A second debate without an explicit round limit accepts pause without
+    // note and resume with note.
+    const second = parsedJson(await execute(ctx, lead, 'team_debate_start', {
+      topic: 'A competing proposal',
+      participants: ['lead', workerName],
+    })) as { id: string; revision: number }
+    const paused = parsedJson(await execute(ctx, lead, 'team_debate_update', {
+      debate_id: second.id,
+      expected_revision: second.revision,
+      action: 'pause',
+    })) as { revision: number; status: string }
+    expect(paused.status).toBe('paused')
+    const resumed = parsedJson(await execute(ctx, lead, 'team_debate_update', {
+      debate_id: second.id,
+      expected_revision: paused.revision,
+      action: 'resume',
+      note: 'human cleared the block',
+    })) as { status: string }
+    expect(resumed.status).toBe('active')
+  }, 120_000)
 })

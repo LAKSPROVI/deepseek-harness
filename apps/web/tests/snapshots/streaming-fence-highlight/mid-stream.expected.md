@@ -1,7 +1,10 @@
 - banner:
   - navigation "Session hierarchy": Stream one TypeScript fence for
   - text: Standard mode
+  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "Automações"
   - button "More actions"
+  - button "Anotações e lembretes da sessão": Anotações
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]
@@ -17,6 +20,8 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Hold to talk"
+- status
 - button "Select model, current streaming-fence-highlight-test/streaming-fence": streaming-fence-highlight-test/streaming-fence
 - button "Stop generating"
 

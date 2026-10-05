@@ -84,7 +84,7 @@ async function expectHeadlessStream(normalized: string, expectedPath: string): P
 
 /** Serve one deterministic DeepSeek-compatible response while retaining its request body. */
 async function deepseekDefaultsServer(
-  options: { waitForTitleRequest?: boolean; piAiCompatibility?: true } = {},
+  options: { waitForTitleRequest?: boolean; piAiCompatibility?: true; heartbeatMs?: number } = {},
 ): Promise<DeepSeekDefaultsServer> {
   const requests: JsonObject[] = []
   const paths: string[] = []
@@ -102,7 +102,7 @@ async function deepseekDefaultsServer(
         if (keepAlives-- > 0
           || (options.waitForTitleRequest === true && !requests.some(request => request.max_tokens === 64))) {
           response.write(': keep-alive\n\n')
-          timer = setTimeout(write, 60)
+          timer = setTimeout(write, options.heartbeatMs ?? 60)
           return
         }
         if (options.piAiCompatibility !== true) {
@@ -123,7 +123,7 @@ async function deepseekDefaultsServer(
           '',
         ].join('\n\n'))
       }
-      let timer = setTimeout(write, 60)
+      let timer = setTimeout(write, options.heartbeatMs ?? 60)
       response.once('close', () => { clearTimeout(timer) })
     })
   })
@@ -584,7 +584,12 @@ describe('headless stream-json snapshots', () => {
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
   it('keeps provider comments alive and sends DeepSeek defaults through the one-shot app', async () => {
-    const server = await deepseekDefaultsServer()
+    // Heartbeats at 200 ms (payload ~800 ms) with a 450 ms idle budget: the 90 ms
+    // margin of the upstream 60/150 timing does not survive a loaded shared runner,
+    // which retries the agent request and breaks the request count. The comment
+    // liveness proof stays intact — 450 ms without a pulse still dies before the
+    // payload arrives.
+    const server = await deepseekDefaultsServer({ heartbeatMs: 200 })
     try {
       const result = await runLoaderSmoke({
         label: 'DeepSeek adapter defaults headless stream-json snapshot',

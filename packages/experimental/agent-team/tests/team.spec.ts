@@ -14,10 +14,14 @@ import { deliverSubagentPrompt, type HostPromptDeliverer } from '@deepseek-ai/ds
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
-import TeamService, { TeamError, TeamId, TeamMessageId, TeamTaskId } from '../src/index.ts'
+import TeamService, {
+  TeamError, TeamDebateId, TeamId, TeamMessageId, TeamTaskId, validateTeamTemplateSettings,
+} from '../src/index.ts'
 import { TeamRuntimeLifecycle } from '../src/lifecycle.ts'
 import { teamProjectionDefinition } from '../src/projection.ts'
-import type { TeamMemberSnapshot, TeamMessageSnapshot, TeamTaskSnapshot } from '../src/index.ts'
+import type {
+  SavedTeamSquad, SavedTeamTemplate, TeamMemberSnapshot, TeamMessageSnapshot, TeamTaskSnapshot,
+} from '../src/index.ts'
 import { TestSessionQuery } from './test-session-query.ts'
 
 const SIGNAL = new AbortController().signal
@@ -1847,5 +1851,110 @@ describe('Team mailbox and waiting', () => {
 
     ctx.agentTeams.interrupt(lead, 'debate-worker')
     await waitNoAgent(ctx, created.member.id)
+  })
+
+  it('rejects every invalid debate start and transition path', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    const created = await spawn(ctx, lead, 'debate-worker')
+    await waitRunning(ctx, created.member.id)
+
+    // maxRounds bounds: below one, above the cap, and non-integer.
+    for (const maxRounds of [0, 9, 1.5]) {
+      await expect(ctx.agentTeams.startDebate(lead, {
+        topic: 'Which implementation is safer?',
+        participants: ['lead', 'debate-worker'],
+        maxRounds,
+      })).rejects.toMatchObject({ code: 'TEAM_INVALID_ARGUMENT' })
+    }
+    // Participants must be 2 through 10 unique names of live members.
+    await expect(ctx.agentTeams.startDebate(lead, {
+      topic: 'Which implementation is safer?', participants: ['lead'],
+    })).rejects.toMatchObject({ code: 'TEAM_INVALID_ARGUMENT' })
+    await expect(ctx.agentTeams.startDebate(lead, {
+      topic: 'Which implementation is safer?', participants: ['lead', 'lead'],
+    })).rejects.toMatchObject({ code: 'TEAM_INVALID_ARGUMENT' })
+    await expect(ctx.agentTeams.startDebate(lead, {
+      topic: 'Which implementation is safer?', participants: ['lead', 'ghost'],
+    })).rejects.toMatchObject({ code: 'TEAM_MEMBER_NOT_FOUND' })
+
+    // Transitions without a debate.
+    await expect(ctx.agentTeams.updateDebate(lead, {
+      debateId: TeamDebateId('missing'), expectedRevision: 1, action: 'pause',
+    })).rejects.toMatchObject({ code: 'TEAM_DEBATE_NOT_FOUND' })
+
+    const debate = await ctx.agentTeams.startDebate(lead, {
+      topic: 'Which implementation is safer?',
+      participants: ['lead', 'debate-worker'],
+      maxRounds: 1,
+    })
+    // complete requires an active synthesis; resume requires paused.
+    await expect(ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: debate.revision, action: 'complete',
+    })).rejects.toMatchObject({ code: 'TEAM_DEBATE_TRANSITION' })
+    await expect(ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: debate.revision, action: 'resume',
+    })).rejects.toMatchObject({ code: 'TEAM_DEBATE_TRANSITION' })
+    const paused = await ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: debate.revision, action: 'pause', note: 'hold',
+    })
+    // pause requires active.
+    await expect(ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: paused.revision, action: 'pause',
+    })).rejects.toMatchObject({ code: 'TEAM_DEBATE_TRANSITION' })
+    const resumed = await ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: paused.revision, action: 'resume',
+    })
+    // Advance through every phase of the single round; the last advance
+    // completes the debate because the round budget is spent.
+    let revision = resumed.revision
+    const phases = ['critique', 'rebuttal', 'verification', 'synthesis'] as const
+    for (const phase of phases) {
+      const next = await ctx.agentTeams.updateDebate(lead, {
+        debateId: debate.id, expectedRevision: revision, action: 'advance',
+      })
+      expect(next).toMatchObject({ phase, round: 1, status: 'active' })
+      revision = next.revision
+    }
+    const finished = await ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: revision, action: 'advance',
+    })
+    expect(finished).toMatchObject({ status: 'completed', phase: 'synthesis', round: 1 })
+    // A completed debate rejects every further transition.
+    await expect(ctx.agentTeams.updateDebate(lead, {
+      debateId: debate.id, expectedRevision: finished.revision, action: 'pause',
+    })).rejects.toMatchObject({ code: 'TEAM_DEBATE_COMPLETED' })
+  }, 120_000)
+})
+
+describe('team template settings validation', () => {
+  it('rejects duplicate template ids and half-defined model routes', () => {
+    const template: SavedTeamTemplate = {
+      id: 'tpl-1', title: 'Revisor', name: 'revisor', description: 'Revisa', prompt: 'Revise', context: 'fresh',
+    }
+    expect(() => { validateTeamTemplateSettings({ templates: [template, { ...template }] }) })
+      .toThrow(/duplicate teammate template id/)
+    expect(() => {
+      validateTeamTemplateSettings({ templates: [{ ...template, llmProvider: 'deepseek' }] })
+    }).toThrow(/must define provider and model together/)
+    // A template-only value with no squads key completes and skips squad validation.
+    expect(() => { validateTeamTemplateSettings({ templates: [template] }) }).not.toThrow()
+  })
+
+  it('rejects duplicate squad ids and half-defined member model routes', () => {
+    const squad: SavedTeamSquad = {
+      id: 'squad-1', title: 'Banco', description: 'Time de revisao',
+      members: [{ name: 'member-a', description: 'Revisa', prompt: 'Revise', context: 'fork' }],
+    }
+    expect(() => { validateTeamTemplateSettings({ templates: [], squads: [squad, { ...squad }] }) })
+      .toThrow(/duplicate squad preset id/)
+    expect(() => {
+      validateTeamTemplateSettings({
+        templates: [],
+        squads: [{
+          ...squad,
+          members: [{ name: 'member-a', description: 'Revisa', prompt: 'Revise', context: 'fork', model: 'x' }],
+        }],
+      })
+    }).toThrow(/must define provider and model together/)
   })
 })

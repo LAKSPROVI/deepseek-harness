@@ -327,7 +327,9 @@ function applyCurrentTeamEvent(state: TeamProjectionState, event: TeamSessionEve
     case 'team/debate': {
       const debate = event.data.debate
       const prior = state.debate
-      if (prior !== undefined && debate.revision !== prior.revision + 1) {
+      // Contiguity binds the transitions of one debate: a different id starts a
+      // fresh revision space at one.
+      if (prior !== undefined && debate.id === prior.id && debate.revision !== prior.revision + 1) {
         throw new Error(`team debate "${debate.id}" revision is not contiguous`)
       }
       return { ...state, debate }

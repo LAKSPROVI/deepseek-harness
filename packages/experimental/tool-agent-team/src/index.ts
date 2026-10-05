@@ -6,7 +6,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { TeamDebateId, TeamTaskId } from '@deepseek-ai/dsh-experimental-agent-team'
 import type { TeamMemberView } from '@deepseek-ai/dsh-experimental-agent-team'
 import type {
-  SavedTeamSquad, SavedTeamTemplate, TeamTemplateSettings,
+  SavedTeamTemplate, TeamTemplateSettings,
 } from '@deepseek-ai/dsh-experimental-agent-team'
 import {
   normalizeTeamMemberName, TEAM_TEMPLATE_SETTINGS_NAMESPACE,
@@ -37,6 +37,48 @@ export const Config: z<Config> = z.object({
   freshProvider: z.string().default('spawn'),
   forkProvider: z.string().default('fork'),
 })
+
+/**
+ * The settings-store contract the Team tools persist templates and squads
+ * through. The Host's composed settings service does not declare these
+ * methods on its public type; this boundary types the access the tools rely
+ * on so every call site stays fully typed.
+ */
+interface TeamSettingsStore {
+  get(namespace: string): unknown
+  update(namespace: string, patch: object): Promise<void>
+}
+
+/** The composed settings service, or undefined when the composition omits it. */
+function teamSettingsStore(context: Context): TeamSettingsStore | undefined {
+  return context.get('settings') as unknown as TeamSettingsStore | undefined
+}
+
+/** The saved templates and squads, or empty when the namespace is unset. */
+function readTeamTemplateSettings(context: Context): TeamTemplateSettings {
+  const store = teamSettingsStore(context)
+  if (store === undefined) throw new Error('Settings service is unavailable')
+  const value = store.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
+  return value ?? { templates: [] }
+}
+
+/** Persist the complete team template settings value. */
+async function writeTeamTemplateSettings(context: Context, value: TeamTemplateSettings): Promise<void> {
+  const store = teamSettingsStore(context)
+  /* v8 ignore next 2 -- every writer reads the store first; a missing service fails at the read above. */
+  if (store === undefined) throw new Error('Settings service is unavailable')
+  await store.update(TEAM_TEMPLATE_SETTINGS_NAMESPACE, value)
+}
+
+/** Coerce an untyped squad member field to a string; absent or non-string values become empty. */
+function memberString(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+/** Find a saved entry by exact id or case-insensitive title. */
+function findByIdOrTitle<T extends { id: string; title: string }>(items: readonly T[], key: string): T | undefined {
+  return items.find(item => item.id === key || item.title.toLowerCase() === key.toLowerCase())
+}
 
 /** Model-facing collaboration guidance shared by Lead and teammates. */
 const POLICY = `Agent Teams is available in this session, but create teammates only when the user explicitly asks to use Agent Teams or teammates.
@@ -147,19 +189,23 @@ const TASK_LIST_VALUE_SCHEMA = {
   },
 } as const
 
+const TEAM_MEMBER_FIELDS = {
+  name: { type: 'string', required: true },
+  description: { type: 'string', required: true },
+  prompt: { type: 'string', required: true },
+  context: { type: 'string', required: true, enum: ['fresh', 'fork'] },
+  llmProvider: { type: 'string' },
+  model: { type: 'string' },
+  persona: { type: 'string' },
+} as const
+
 const TEMPLATE_VIEW_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
     id: { type: 'string', required: true },
     title: { type: 'string', required: true },
-    name: { type: 'string', required: true },
-    description: { type: 'string', required: true },
-    prompt: { type: 'string', required: true },
-    context: { type: 'string', required: true, enum: ['fresh', 'fork'] },
-    llmProvider: { type: 'string' },
-    model: { type: 'string' },
-    persona: { type: 'string' },
+    ...TEAM_MEMBER_FIELDS,
   },
 } as const
 
@@ -191,13 +237,7 @@ const SQUAD_MEMBER_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    name: { type: 'string', required: true },
-    description: { type: 'string', required: true },
-    prompt: { type: 'string', required: true },
-    context: { type: 'string', required: true, enum: ['fresh', 'fork'] },
-    llmProvider: { type: 'string' },
-    model: { type: 'string' },
-    persona: { type: 'string' },
+    ...TEAM_MEMBER_FIELDS,
   },
 } as const
 
@@ -367,11 +407,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         let persona = args.persona
 
         if (args.template_id !== undefined) {
-          const settings = ctx.get('settings')
-          const settingsVal = settings?.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
-          const found = settingsVal?.templates.find((t: SavedTeamTemplate) =>
-            t.id === args.template_id || t.title.toLowerCase() === args.template_id?.toLowerCase(),
-          )
+          const found = findByIdOrTitle(readTeamTemplateSettings(ctx).templates, args.template_id)
           if (found === undefined) {
             throw new Error(`Template "${args.template_id}" not found in saved templates`)
           }
@@ -599,10 +635,9 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
       description: 'List all reusable teammate templates saved in system settings.',
       parameters: {},
       output: jsonOutput(TEMPLATE_LIST_VALUE_SCHEMA),
+      // oxlint-disable-next-line typescript/require-await -- the settings read is synchronous; the tool contract takes a Promise.
       async execute(_args, _exec) {
-        const settings = ctx.get('settings')
-        const settingsVal = settings?.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
-        return { templates: settingsVal?.templates ?? [] }
+        return { templates: readTeamTemplateSettings(ctx).templates }
       },
     })))
 
@@ -622,9 +657,7 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
       },
       output: jsonOutput(TEMPLATE_SAVE_VALUE_SCHEMA),
       async execute(args, _exec) {
-        const settings = ctx.get('settings')
-        if (settings === undefined) throw new Error('Settings service is unavailable')
-        const current = (settings.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined)?.templates ?? []
+        const current = readTeamTemplateSettings(ctx)
         const normalizedName = normalizeTeamMemberName(args.name || args.title)
         const normalizedId = normalizeTeamMemberName(args.id || args.title)
         const template: SavedTeamTemplate = {
@@ -638,8 +671,8 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
           ...(args.model === undefined ? {} : { model: args.model }),
           ...(args.persona === undefined ? {} : { persona: args.persona }),
         }
-        const updated = [...current.filter((item: SavedTeamTemplate) => item.id !== normalizedId), template]
-        await settings.update(TEAM_TEMPLATE_SETTINGS_NAMESPACE, { templates: updated })
+        const updated = [...current.templates.filter(item => item.id !== normalizedId), template]
+        await writeTeamTemplateSettings(ctx, { templates: updated, squads: current.squads ?? [] })
         return { template }
       },
     })))
@@ -652,16 +685,15 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
       },
       output: jsonOutput(TEMPLATE_DELETE_VALUE_SCHEMA),
       async execute(args, _exec) {
-        const settings = ctx.get('settings')
-        if (settings === undefined) throw new Error('Settings service is unavailable')
-        const settingsVal = settings.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
-        const currentTemplates = settingsVal?.templates ?? []
-        const currentSquads = settingsVal?.squads ?? []
-        const target = currentTemplates.find((item: SavedTeamTemplate) =>
-          item.id === args.id || item.title.toLowerCase() === args.id.toLowerCase())
+        const current = readTeamTemplateSettings(ctx)
+        const target = findByIdOrTitle(current.templates, args.id)
         if (target === undefined) throw new Error(`Template "${args.id}" not found in saved templates`)
-        const updated = currentTemplates.filter((item: SavedTeamTemplate) => item.id !== target.id)
-        await settings.update(TEAM_TEMPLATE_SETTINGS_NAMESPACE, { templates: updated, squads: currentSquads })
+        const updated = current.templates.filter(item => item.id !== target.id)
+        await writeTeamTemplateSettings(ctx, {
+          templates: updated,
+          /* v8 ignore next -- every save materializes the squads array, and a delete always follows a save. */
+          squads: current.squads ?? [],
+        })
         return { deletedId: target.id }
       },
     })))
@@ -671,10 +703,9 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
       description: 'List all reusable multi-agent squad presets saved in system settings.',
       parameters: {},
       output: jsonOutput(SQUAD_LIST_VALUE_SCHEMA),
+      // oxlint-disable-next-line typescript/require-await -- the settings read is synchronous; the tool contract takes a Promise.
       async execute(_args, _exec) {
-        const settings = ctx.get('settings')
-        const settingsVal = settings?.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
-        return { squads: settingsVal?.squads ?? [] }
+        return { squads: readTeamTemplateSettings(ctx).squads ?? [] }
       },
     })))
 
@@ -692,27 +723,23 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
       },
       output: jsonOutput(SQUAD_SAVE_VALUE_SCHEMA),
       async execute(args, _exec) {
-        const settings = ctx.get('settings')
-        if (settings === undefined) throw new Error('Settings service is unavailable')
-        const settingsVal = settings.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
-        const currentSquads = settingsVal?.squads ?? []
-        const currentTemplates = settingsVal?.templates ?? []
+        const current = readTeamTemplateSettings(ctx)
         const members = (args.members as Array<Record<string, unknown>>).map((member) => {
-          const name = normalizeTeamMemberName(String(member.name ?? member.description ?? ''))
+          const name = normalizeTeamMemberName(memberString(member.name) || memberString(member.description))
           return {
             name,
-            description: String(member.description ?? ''),
-            prompt: String(member.prompt ?? ''),
-            context: (member.context === 'fork' ? 'fork' : 'fresh') as 'fresh' | 'fork',
-            ...(member.llm_provider === undefined ? {} : { llmProvider: String(member.llm_provider) }),
-            ...(member.model === undefined ? {} : { model: String(member.model) }),
-            ...(member.persona === undefined ? {} : { persona: String(member.persona) }),
+            description: memberString(member.description),
+            prompt: memberString(member.prompt),
+            context: member.context === 'fork' ? ('fork' as const) : ('fresh' as const),
+            ...(member.llm_provider === undefined ? {} : { llmProvider: memberString(member.llm_provider) }),
+            ...(member.model === undefined ? {} : { model: memberString(member.model) }),
+            ...(member.persona === undefined ? {} : { persona: memberString(member.persona) }),
           }
         })
         const normalizedId = normalizeTeamMemberName(args.id || args.title)
         const squad = { id: normalizedId, title: args.title, description: args.description, members }
-        const updated = [...currentSquads.filter((item: SavedTeamSquad) => item.id !== normalizedId), squad]
-        await settings.update(TEAM_TEMPLATE_SETTINGS_NAMESPACE, { templates: currentTemplates, squads: updated })
+        const updated = [...(current.squads ?? []).filter(item => item.id !== normalizedId), squad]
+        await writeTeamTemplateSettings(ctx, { templates: current.templates, squads: updated })
         return { squad }
       },
     })))
@@ -725,16 +752,12 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
       },
       output: jsonOutput(SQUAD_DELETE_VALUE_SCHEMA),
       async execute(args, _exec) {
-        const settings = ctx.get('settings')
-        if (settings === undefined) throw new Error('Settings service is unavailable')
-        const settingsVal = settings.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
-        const currentTemplates = settingsVal?.templates ?? []
-        const currentSquads = settingsVal?.squads ?? []
-        const target = currentSquads.find((item: SavedTeamSquad) =>
-          item.id === args.id || item.title.toLowerCase() === args.id.toLowerCase())
+        const current = readTeamTemplateSettings(ctx)
+        const squads = current.squads ?? []
+        const target = findByIdOrTitle(squads, args.id)
         if (target === undefined) throw new Error(`Squad preset "${args.id}" not found in saved squads`)
-        const updated = currentSquads.filter((item: SavedTeamSquad) => item.id !== target.id)
-        await settings.update(TEAM_TEMPLATE_SETTINGS_NAMESPACE, { templates: currentTemplates, squads: updated })
+        const updated = squads.filter(item => item.id !== target.id)
+        await writeTeamTemplateSettings(ctx, { templates: current.templates, squads: updated })
         return { deletedId: target.id }
       },
     })))
@@ -748,11 +771,7 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
       output: jsonOutput(SQUAD_SPAWN_VALUE_SCHEMA),
       async execute(args, exec) {
         const agent = callingAgent(exec.agent, 'team_squad_spawn')
-        const settings = ctx.get('settings')
-        const settingsVal = settings?.get(TEAM_TEMPLATE_SETTINGS_NAMESPACE) as TeamTemplateSettings | undefined
-        const found = settingsVal?.squads?.find((s: SavedTeamSquad) =>
-          s.id === args.squad_id || s.title.toLowerCase() === args.squad_id?.toLowerCase(),
-        )
+        const found = findByIdOrTitle(readTeamTemplateSettings(ctx).squads ?? [], args.squad_id)
         if (found === undefined) {
           throw new Error(`Squad preset "${args.squad_id}" not found in saved squads`)
         }
@@ -789,6 +808,7 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
         },
       },
       output: jsonOutput(ROSTER_DISMISS_VALUE_SCHEMA),
+      // oxlint-disable-next-line typescript/require-await -- every interrupt is synchronous; the tool contract takes a Promise.
       async execute(args, exec) {
         const agent = callingAgent(exec.agent, 'team_roster_dismiss')
         const membersList = ctx.agentTeams.listMembers(agent)

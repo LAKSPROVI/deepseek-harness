@@ -2,7 +2,10 @@
 
 - banner:
   - navigation "Session hierarchy": {{workspace}}
+  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "Automações"
   - button "More actions"
+  - button "Anotações e lembretes da sessão": Anotações
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]
@@ -21,6 +24,8 @@
 - 'button "Access mode, current: Auto review EXP"':
   - text: Auto review
   - superscript: EXP
+- button "Hold to talk"
+- status
 - button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
 - button "Send message" [disabled]
 - button "1 turns 2 steps"
@@ -29,7 +34,10 @@
 
 - banner:
   - navigation "Session hierarchy": {{workspace}}
+  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "Automações"
   - button "More actions"
+  - button "Anotações e lembretes da sessão": Anotações
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]
@@ -52,6 +60,8 @@
 - 'button "Access mode, current: Auto review EXP"':
   - text: Auto review
   - superscript: EXP
+- button "Hold to talk"
+- status
 - button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
 - button "Send message" [disabled]
 - button "1 turns 2 steps"

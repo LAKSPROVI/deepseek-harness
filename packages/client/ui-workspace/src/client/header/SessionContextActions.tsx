@@ -16,6 +16,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { MenuSurface } from '@deepseek-ai/dsh-client-ui-primitives'
 import { NS } from '../locales.ts'
 import css from './SessionContextActions.module.css'
 
@@ -106,7 +107,7 @@ export function SessionContextActions({
       </button>
 
       {open && (
-        <div className={css.menu} role="menu" aria-label={t('context.newSession.aria')}>
+        <MenuSurface className={css.menu} role="menu" aria-label={t('context.newSession.aria')}>
           <button
             type="button"
             className={css.menuItem}
@@ -147,7 +148,7 @@ export function SessionContextActions({
               <span className={css.menuDesc}>{t('menu.forkDesc')}</span>
             </div>
           </button>
-        </div>
+        </MenuSurface>
       )}
     </div>
   )

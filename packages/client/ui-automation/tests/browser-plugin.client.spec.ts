@@ -56,7 +56,9 @@ async function bench() {
     name: 'root',
     children: { 'conversation.session.header.actions': { kind: 'list', scope: 'session' } },
   } as never, (() => null) as never)
-  const fiber = ctx.plugin({ inject: [...inject], apply: clientCtx => mountAutomationUi(clientCtx, {} as never) })
+  // The namespace the way api-remotes mounts it in production.
+  ctx.provide('remote.automations', automations)
+  const fiber = ctx.plugin({ inject: [...inject], apply: clientCtx => mountAutomationUi(clientCtx) })
   await fiber.await()
   const entry = ctx.slots.entries('conversation.session.header.actions')[0]
   return { ctx, fiber, calls, entry, face: entry?.inject as unknown as (() => AutomationActionProps) | undefined }

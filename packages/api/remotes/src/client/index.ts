@@ -25,6 +25,7 @@ import workspaceRemote from '@deepseek-ai/dsh-api-workspace-controller/remote'
 import terminalRemote from '@deepseek-ai/dsh-api-terminal-controller/remote'
 import workspaceFilesRemote from '@deepseek-ai/dsh-api-workspace-files/remote'
 import voiceInputRemote from '@deepseek-ai/dsh-voice-input/remote'
+import automationRemote from '@deepseek-ai/dsh-automation/remote'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 
 export type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
@@ -184,6 +185,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       permissionPresetsRemote, subagentsRemote, sessionRemote, jobRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
       officeToPdfRemote,
       voiceInputRemote,
+      automationRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

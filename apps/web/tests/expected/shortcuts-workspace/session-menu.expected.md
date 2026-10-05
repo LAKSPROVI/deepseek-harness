@@ -1,5 +1,6 @@
 - menu:
   - menuitem "Pin session"
   - menuitem "Rename"
+  - menuitem "Definir status..."
   - menuitem "Fork session"
   - menuitem "Archive session"

@@ -1,7 +1,10 @@
 - banner:
   - navigation "Session hierarchy": Use the ask_user_question tool to
   - text: Standard mode
+  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "Automações"
   - button "More actions"
+  - button "Anotações e lembretes da sessão": Anotações
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]

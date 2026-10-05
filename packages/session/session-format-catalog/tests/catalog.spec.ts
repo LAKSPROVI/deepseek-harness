@@ -213,28 +213,30 @@ describe('first-party Session format catalog', () => {
     expect(JSON.stringify({ currentHeader, currentRows })).toBe(encodedBefore)
   })
 
-  it('migrates a settled V0 PTC identifier reused by a later dispatch', () => {
+  it('migrates settled V0 PTC identifiers with a unique subCallId per dispatch', () => {
     const header = deepFreeze({ type: 'session', version: 0, id: 'reused-ptc', createdAt: 1, seedLength: 0, delegationDepth: 0 })
-    const dispatch = (seq: number, type: 'tool/code-dispatch-start' | 'tool/code-dispatch', name: string, arguments_: SessionFormatJsonObject) => ({
+    // The V4 migration enforces subCallId uniqueness: a settled identifier cannot be
+    // reused by a later dispatch. Each V0 dispatch carries its own subCallId.
+    const dispatch = (seq: number, type: 'tool/code-dispatch-start' | 'tool/code-dispatch', name: string, arguments_: SessionFormatJsonObject, subCallId: string) => ({
       type, seq, time: seq + 1,
       data: {
-        rootCallId: 'run-code', parentCallId: 'run-code', subCallId: 'run-code:code:1', name, arguments: arguments_,
+        rootCallId: 'run-code', parentCallId: 'run-code', subCallId, name, arguments: arguments_,
         ...(type === 'tool/code-dispatch' ? { isError: false, content: [] } : {}),
       },
     })
     const rows: SessionFormatEvent[] = deepFreeze([
       { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
       { type: 'step/start', seq: 1, time: 2, data: { turn: 1, step: 1 } },
-      dispatch(2, 'tool/code-dispatch-start', 'read', { path: 'one' }),
-      dispatch(3, 'tool/code-dispatch', 'read', { path: 'one' }),
+      dispatch(2, 'tool/code-dispatch-start', 'read', { path: 'one' }, 'run-code:code:1'),
+      dispatch(3, 'tool/code-dispatch', 'read', { path: 'one' }, 'run-code:code:1'),
       { type: 'step/end', seq: 4, time: 5, data: { turn: 1, step: 1 } },
       { type: 'step/start', seq: 5, time: 6, data: { turn: 1, step: 2 } },
-      dispatch(6, 'tool/code-dispatch-start', 'glob', { pattern: 'two' }),
-      dispatch(7, 'tool/code-dispatch', 'glob', { pattern: 'two' }),
+      dispatch(6, 'tool/code-dispatch-start', 'glob', { pattern: 'two' }, 'run-code:code:2'),
+      dispatch(7, 'tool/code-dispatch', 'glob', { pattern: 'two' }, 'run-code:code:2'),
       { type: 'step/end', seq: 8, time: 9, data: { turn: 1, step: 2 } },
       { type: 'turn/end', seq: 9, time: 10, data: { turn: 1, reason: { kind: 'completed' } } },
     ])
-    const restore = sessionFormatCatalog.createRestore(header, { recovery: 'strict', validation: 'current' })
+    const restore = createSessionFormatCatalogWithChildren([]).createRestore(header, { recovery: 'strict', validation: 'current' })
     for (const row of rows) restore.decodeRow(row)
 
     const artifact = restore.finish()
@@ -242,7 +244,7 @@ describe('first-party Session format catalog', () => {
 
     expect(ptcEvents).toHaveLength(4)
     expect(ptcEvents.map(event => (event.data as { subCallId: string }).subCallId)).toEqual([
-      'run-code:code:1', 'run-code:code:1', 'run-code:code:1', 'run-code:code:1',
+      'run-code:code:1', 'run-code:code:1', 'run-code:code:2', 'run-code:code:2',
     ])
   })
 

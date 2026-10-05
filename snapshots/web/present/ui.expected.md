@@ -1,7 +1,10 @@
 - banner:
   - navigation "Session hierarchy": Use one run_code program to
   - text: PTC mode
+  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "Automações"
   - button "More actions"
+  - button "Anotações e lembretes da sessão": Anotações
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]
@@ -52,6 +55,8 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Hold to talk"
+- status
 - button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
 - button "Send message" [disabled]
 - button "1 turns 2 steps · {{throughput}} tok/s": 1 turns 2 steps{{throughput}} tok/s

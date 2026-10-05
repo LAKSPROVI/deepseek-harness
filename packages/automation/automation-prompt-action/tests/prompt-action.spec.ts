@@ -10,6 +10,8 @@ interface HarnessOptions {
   failAt?: 'attach' | 'title' | 'followup'
   /** Which rollback step fails after a `followup` failure, to exercise the warn-and-continue paths. */
   failRollback?: 'detach' | 'dispose'
+  /** Resolve to a broken agent preset, to exercise the preflight rejection. */
+  brokenPreset?: boolean
   /** Selection reported by the default-model seam; `reasoningEffort` exercises the effort carry-over. */
   selection?: { provider: string; model: string; reasoningEffort?: string }
 }
@@ -68,7 +70,10 @@ function harness(options: HarnessOptions = {}): Harness {
       currentSelection() { calls.push('default-model'); return options.selection ?? { provider: 'p', model: 'm' } },
     },
     agentPresets: {
-      async resolve(name?: string) { calls.push(`preset-resolve:${name ?? '<default>'}`); return { id: name ?? 'standard' } },
+      async resolve(name?: string) {
+        calls.push(`preset-resolve:${name ?? '<default>'}`)
+        return { id: name ?? 'standard', ...(options.brokenPreset === true ? { broken: 'preset config is missing' } : {}) }
+      },
       async standingKeyFor(name: string) { calls.push(`standing:${name}`); return {} },
       async mount(_agentCtx: unknown, name: string) { calls.push(`mount:${name}`); return { id: name } },
     },
@@ -143,6 +148,13 @@ describe('openPromptSession', () => {
       content: [{ type: 'text', text: 'Faça X' }],
       source: { kind: 'automation', taskId: 'task-1', runId: 'run-1', form: 'notice', summary: 'automation task "Revisar prazos" run run-1' },
     })])
+  })
+
+  it('rejects the preflight when the resolved agent preset is broken', async () => {
+    const test = harness({ brokenPreset: true })
+    await expect(openPromptSession(test.ctx, { actionType: 'CUSTOM_PROMPT' }, { prompt: 'p', workspacePath: '/workspace' }, run))
+      .rejects.toThrow(/agent preset .* is unavailable: preset config is missing/)
+    expect(test.calls).toEqual(['permission-resolve:workspace-write', 'preset-resolve:<default>'])
   })
 
   it('lets the payload override the deployment preset, permission, and title', async () => {

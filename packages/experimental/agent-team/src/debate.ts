@@ -128,6 +128,7 @@ export class TeamDebateBoard {
         const index = PHASES.indexOf(current.phase)
         if (index < PHASES.length - 1) {
           const nextPhase = PHASES[index + 1]
+          /* v8 ignore next 3 -- index is below the bound above, so the element always exists. */
           if (nextPhase === undefined) {
             throw new TeamError('debate phase sequence is incomplete', 'TEAM_DEBATE_TRANSITION')
           }
