@@ -1,6 +1,6 @@
 ---
 description: "从插件管理页启用实验性语音输入。"
-kind: "package-bundle"
+kind: "package-reference"
 ---
 
 # @deepseek-ai/dsh-experimental-voice-input-bundle

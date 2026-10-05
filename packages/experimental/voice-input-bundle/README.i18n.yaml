@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/voice-input-bundle/README.md
 /:
-  en: a610a36da32c92ad
-  zh: 19434bfe1701828d
+  en: bdaa2ce1d951d02c
+  zh: f7b0b3cc45d83df1
 /deepseek-ai-dsh-experimental-voice-input-bundle:
   en: 338585d3575a8f90
   zh: 22a493cbeefec8f0
