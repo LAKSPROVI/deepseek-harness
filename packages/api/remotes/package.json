@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-api-remotes",
   "description": "Remote BFF assembly for application-selected Host capabilities",
-  "version": "0.1.7-rc.2",
+  "version": "0.2.1-alpha.1",
   "publishConfig": {
     "access": "public"
   },
@@ -51,7 +51,6 @@
   ],
   "dependencies": {
     "@deepseek-ai/dsh-deque": "workspace:*",
-    "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-util-values": "workspace:*"
   },
   "peerDependencies": {
@@ -95,7 +94,16 @@
     "@deepseek-ai/dsh-typert-protocol": "workspace:*",
     "@deepseek-ai/dsh-user-approval": "workspace:*",
     "@deepseek-ai/dsh-user-questions": "workspace:*",
-    "@deepseek-ai/dsh-voice-input": "workspace:*",
+"@deepseek-ai/dsh-voice-input": "workspace:*",
+    "@deepseek-ai/dsh-command-feedback": "workspace:*",
+"@deepseek-ai/dsh-api-terminal-controller": "workspace:*",
+"@deepseek-ai/dsh-plugin-manager": "workspace:*",
+"@deepseek-ai/dsh-client-ui-plugin-manager": "workspace:*",
+"@deepseek-ai/dsh-office-to-pdf": "workspace:*",
+"@deepseek-ai/dsh-api-account-controller": "workspace:*",
+"@deepseek-ai/dsh-deepseek-account": "workspace:*",
+"@deepseek-ai/dsh-client-product-analytics": "workspace:*",
+    "@deepseek-ai/cordis": "workspace:~",
     "zod": "^4.4.3"
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-voice-input",
   "description": "Browser-facing Remote surface that transcribes one uploaded audio utterance through the DeepSeek Harness transcription seam",
-  "version": "0.1.7-rc.2",
+  "version": "0.2.1-alpha.1",
   "publishConfig": {
     "access": "public"
   },
@@ -47,7 +47,6 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-invariants": "workspace:*",
     "@deepseek-ai/dsh-transcription": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~"
@@ -55,7 +54,6 @@
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-include": "workspace:~",
     "@deepseek-ai/cordis-plugin-loader": "workspace:~",
-    "@deepseek-ai/dsh-invariants": "workspace:*",
     "@deepseek-ai/dsh-transcription": "workspace:*",
     "@deepseek-ai/dsh-transcription-groq": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:*",

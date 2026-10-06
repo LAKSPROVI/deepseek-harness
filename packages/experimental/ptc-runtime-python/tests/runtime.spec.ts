@@ -5076,12 +5076,16 @@ describe('PythonPtcRuntime — hostile peer', () => {
     // with several workers sharing a box. This budget bounds the run without letting a
     // loaded runner's scheduling latency read as a `timeout` — what this test asserts
     // is the O(depth) memory shape, not a speed claim.
-    const { runtime } = await setup({ maxValueBytes: 20 * 1024 * 1024, addressSpaceMb: 384, maxWallMs: 60_000 })
+    // 120s wall: hosted 2-4 vCPU runners running the partitioned coverage lane
+    // shared across workers put the 6M-element Python walk past the original
+    // 60s boundary; the memory-shape assertion needs ~11s idle, so 120s still
+    // bounds the run while absorbing loaded-runner scheduling latency.
+    const { runtime } = await setup({ maxValueBytes: 20 * 1024 * 1024, addressSpaceMb: 384, maxWallMs: 120_000 })
     const result = await runtime.run(runtime.resolve({ program: 'return [0] * 6_000_000', bindings: [] }))
     expect(result.error).toBeUndefined()
     expect(Array.isArray(result.value)).toBe(true)
     expect((result.value as number[]).length).toBe(6_000_000)
-  }, 90_000)
+  }, 150_000)
 
   it('validates wide binding arguments in O(depth), not O(width)', async () => {
     // The completion-value walks are budgeted; this one is not. `dispatch` runs

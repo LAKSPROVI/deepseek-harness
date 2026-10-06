@@ -12,8 +12,8 @@
   - button "Jump to turn 1"
   - button "Jump to turn 2"
 - button "Load earlier"
-- status: Worked
-- button "Worked"
+- status: Completed
+- button "Completed"
 - paragraph: DONE
 - button "Copy"
 - button "Good response"
@@ -21,8 +21,8 @@
 - button "Branch into a new conversation"
 - text: {{clock}}
 - button "compact Compacted 5 history items (~{{tokens}} tokens)"
-- status: Worked
-- button "Took {{duration}}" [disabled]
+- status: Completed
+- button "Completed in {{duration}}" [disabled]
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Read Only"': Read Only

@@ -28,8 +28,8 @@
   - img "queued.png"
 - text: Compare with this screenshot {{clock}}
 - button "Copy"
-- status: Worked
-- button "Took {{duration}}"
+- status: Completed
+- button "Completed in {{duration}}"
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
 - button "Copy"
 - button "Good response"
@@ -37,8 +37,8 @@
 - button "Branch into a new conversation"
 - text: {{clock}} Continue with the queued comparison {{clock}}
 - button "Copy"
-- status: Worked
-- button "Took {{duration}}"
+- status: Completed
+- button "Completed in {{duration}}"
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
 - button "Copy"
 - button "Good response"

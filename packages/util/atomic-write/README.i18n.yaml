@@ -30,11 +30,11 @@
   en: 93b537308f7c88c7
   zh: 282e0d2042aeb1be
 /deepseek-ai-dsh-atomic-write/understand-the-implementation/source-map:
-  en: 725509a8b621c668
-  zh: c11e3ffdf73af844
+  en: aee5320dc8746377
+  zh: f35dbbf350f7b5cf
 /deepseek-ai-dsh-atomic-write/understand-the-implementation/write-path:
-  en: 960a7acf3b38d994
-  zh: b210a1b2e33f4377
+  en: 2770345880d15d3d
+  zh: f366041f1be93be1
 /deepseek-ai-dsh-atomic-write/understand-the-implementation/why-the-swap-stays-safe:
   en: 784e985c1fb3a25e
   zh: 4afda1b9bf5f29cc

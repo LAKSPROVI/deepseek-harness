@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-transcription",
   "description": "Abstract speech-to-text capability seam (ctx.transcription) for the DeepSeek Harness â€” provider registry, registration-order-independent selection, payload bounds, request/result vocabulary, and the TranscriptionError taxonomy",
-  "version": "0.1.7-rc.2",
+  "version": "0.2.1-alpha.1",
   "publishConfig": {
     "access": "public"
   },
@@ -32,7 +32,6 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/dsh-invariants": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~"
   },
@@ -40,7 +39,6 @@
     "@deepseek-ai/schemastery": "workspace:~"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-invariants": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~"
   }
