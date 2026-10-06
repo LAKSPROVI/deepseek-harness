@@ -12,8 +12,8 @@
   - button "Jump to turn 1"
   - button "Jump to turn 2"
 - button "Load earlier"
-- status: Worked
-- button "Worked"
+- status: Completed
+- button "Completed"
 - paragraph: DONE
 - button "Copy"
 - button "Good response"

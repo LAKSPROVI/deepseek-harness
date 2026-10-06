@@ -12,8 +12,8 @@
   - button "Jump to turn 1"
   - button "Jump to turn 2"
 - button "Load earlier"
-- status: Worked
-- button "Worked" [expanded]
+- status: Completed
+- button "Completed" [expanded]
 - button "Analysis completed" [expanded]
 - button "Think Both files have been read. a.txt contains \"alpha\" and b.txt contains \"beta\". I'll now reply with DONE as instructed."
 - paragraph: DONE
