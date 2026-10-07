@@ -310,3 +310,14 @@ describe('request-level dynamic profiles', () => {
     expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(before)
   })
 })
+
+it('withdraws and restores a declared gateway catalog without replacing its configuration', async () => {
+  const ctx = await boot(await home(), { providers: { '9router': { api: 'anthropic-messages', baseURL: 'https://router.test/v1', apiKeyEnv: 'PI_DYNAMIC_KEY', models: [{ id: 'A', input: ['text'] }] } } })
+  const settings = configurations.get(ctx)!
+  expect((await ctx.llm.listModels('9router')).map(model => model.id)).toEqual(['A'])
+  await settings.update({ providers: { '9router': { models: [] } } })
+  expect(await ctx.llm.listModels('9router')).toEqual([])
+  expect(settings.entry.options.config).toMatchObject({ providers: { '9router': { api: 'anthropic-messages', baseURL: 'https://router.test/v1', apiKeyEnv: 'PI_DYNAMIC_KEY' } } })
+  await settings.update({ providers: { '9router': { models: [{ id: 'B', input: ['text'] }] } } })
+  expect((await ctx.llm.listModels('9router')).map(model => model.id)).toEqual(['B'])
+})

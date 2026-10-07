@@ -28,7 +28,7 @@ import type {
   ToolSchema,
   ToolUpdate,
 } from './types.ts'
-import { executeRouterSync, readRouterSyncStatus } from './router-sync.ts'
+import { executeRouterSync, readRouterSyncStatus, readRouterCatalogLease, watchRouterCatalog } from './router-sync.ts'
 import { freezeMessage } from './message.ts'
 import { resolveRetryPolicy } from './retry-policy.ts'
 import type { ResolvedRetryPolicy } from './retry-policy.ts'
@@ -342,6 +342,7 @@ export interface DirectoryRegistrationHandle {
  * API, interceptable via the `llm/stream` waterfall.
  */
 export class LlmRuntime extends TypertRemoteService {
+  private readonly routerHome = process.env.DSH_HOME
   private adapters = new Map<string, AdapterRegistration>()
   private directory = new Map<string, LlmConfigurableProvider>()
   private discoveries = new Map<
@@ -351,6 +352,7 @@ export class LlmRuntime extends TypertRemoteService {
 
   constructor(ctx: Context) {
     super(ctx, 'llm')
+    ctx.effect(() => watchRouterCatalog(this.routerHome, () =>{  this.emitAdaptersUpdated() }), 'llm: router catalog lease')
   }
 
   /** Notify topology observers without letting one broken listener veto the commit. */
@@ -723,7 +725,8 @@ export class LlmRuntime extends TypertRemoteService {
     const adapter = this.registration(provider).adapter
     const models = await adapter.listModels(provider)
     const seen = new Set<string>()
-    return models.map((model) => {
+    const lease = await readRouterCatalogLease(provider === '9router' ? this.routerHome : undefined)
+    return models.filter(model => lease.ids === undefined || lease.ids.has(model.id)).map((model) => {
       if (
         typeof model.provider !== 'string'
         || model.provider !== provider
@@ -765,11 +768,20 @@ export class LlmRuntime extends TypertRemoteService {
     return this.resolveModelInfoFor(this.registration(provider), model, signal)
   }
 
+  /** Managed routes require a current positive lease before resolution or dispatch. */
+  private async assertRouterModel(provider: string, model: string): Promise<void> {
+    if (provider !== '9router') return
+    const lease = await readRouterCatalogLease(this.routerHome)
+    if (lease.ids !== undefined && !lease.ids.has(model)) {
+      throw new LlmError('Router model has no current availability confirmation', 'ROUTER_MODEL_UNAVAILABLE')
+    }
+  }
   private async resolveModelInfoFor(
     registration: AdapterRegistration,
     model: string,
     signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
+    await this.assertRouterModel(registration.provider.id, model)
     const resolved = await registration.adapter.resolveModel(registration.provider.id, model, signal)
     return this.normalizeModelInfo(registration, model, resolved)
   }
@@ -954,6 +966,7 @@ export class LlmRuntime extends TypertRemoteService {
    * @returns a prepared config and its registration-bound stream entry point.
    */
   async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall> {
+    await this.assertRouterModel(config.provider, config.model)
     const registration = this.registration(config.provider)
     const adapterCall = await registration.adapter.prepareCall(config.provider, config.model, signal)
     const modelInfo = this.normalizeModelInfo(registration, config.model, adapterCall.model)
@@ -1056,6 +1069,7 @@ export class LlmRuntime extends TypertRemoteService {
   ): AsyncGenerator<StreamChunk> {
     let iterator: AsyncIterator<StreamChunk>
     try {
+      await this.assertRouterModel(options.provider, options.model)
       const registration = prepared?.registration ?? this.registration(options.provider)
       const adapter = registration.adapter
       let modelInfo: LlmResolvedModelInfo
@@ -1104,6 +1118,7 @@ export class LlmRuntime extends TypertRemoteService {
         }
         if (Object.isFrozen(resolvedOptions)) deepFreeze(projectedOptions)
       }
+      await this.assertRouterModel(options.provider, options.model)
       const stream = dispatch(this.forAdapter(projectedOptions, adapter))
       iterator = stream[Symbol.asyncIterator]()
     } catch (error: unknown) {
