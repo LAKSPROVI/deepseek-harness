@@ -51,7 +51,7 @@ it('keeps unmanaged routes independent and fails closed on missing or malformed 
 class Adapter extends LlmAdapter {
   calls = 0
   override async listModels(provider: string) { return ['A', 'B'].map(id => ({ provider, id, name: id })) }
-  override async * stream(): AsyncIterable<StreamChunk> { this.calls++; yield { type: 'text-delta', index: 0, text: 'started' } }
+  override async * stream(): AsyncIterable<StreamChunk> { this.calls++; yield { type: 'block-start', index: 0, blockType: 'text' } }
 }
 
 it('filters native choices and rejects a prepared dispatch after its confirmation expires', async () => {
@@ -140,8 +140,10 @@ it('rechecks confirmation after asynchronous adapter preparation and preserves a
   await writeFile(stateFile, JSON.stringify(lease()))
   class StartedAdapter extends Adapter {
     override async * stream(): AsyncIterable<StreamChunk> {
-      this.calls++; yield { type: 'text-delta', index: 0, text: 'started' }
+      this.calls++; yield { type: 'block-start', index: 0, blockType: 'text' }
       await writeFile(stateFile, JSON.stringify({ ok: false }))
+      yield { type: 'text-delta', index: 0, text: 'continued' }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'continued' } }
       yield { type: 'finish', reason: { kind: 'stop' } }
     }
   }
