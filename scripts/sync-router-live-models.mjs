@@ -1,0 +1,249 @@
+#!/usr/bin/env node
+/** Synchronize a proved router catalog into an existing Harness provider through Settings RPC. */
+import { createServer } from 'node:net'
+import { randomUUID, createHash } from 'node:crypto'
+import { readFile, writeFile, rename, mkdir, link, unlink, copyFile } from 'node:fs/promises'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { isDeepStrictEqual, parseArgs } from 'node:util'
+
+const proofFields = ['text', 'tools', 'anthropicTools', 'anthropicStream']
+const record = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+const fail = code => Object.assign(new Error(code), { code })
+const positive = value => Number.isSafeInteger(value) && value > 0
+const normalize = value => new URL(value).href.replace(/\/$/u, '')
+function timestamp(value) {
+  return typeof value === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/u.test(value) ? Date.parse(value) : NaN
+}
+
+/** Project only fresh, concrete Anthropic agent models; retain options by exact ID. */
+export function selectModels(catalog, previous = [], now = Date.now()) {
+  if (!record(catalog) || catalog.x_9r_catalog?.availability_mode !== 'strict') throw fail('catalog_not_strict')
+  if (!Array.isArray(catalog.data) || catalog.data.length > 20000) throw fail('catalog_invalid')
+  const seen = new Set()
+  for (const row of catalog.data) {
+    if (!record(row) || typeof row.id !== 'string' || !row.id.trim() || seen.has(row.id)) throw fail('catalog_invalid')
+    seen.add(row.id)
+  }
+  const existing = new Map(previous.map(model => [model.id, model]))
+  return catalog.data.filter(row => {
+    const evidence = row.x_9r
+    if (!record(evidence) || evidence.available !== true || evidence.kind !== 'chat' || row.id.startsWith('9r/')) return false
+    const checked = timestamp(evidence.checked_at); const expires = timestamp(evidence.expires_at)
+    return Number.isFinite(checked) && Number.isFinite(expires) && checked <= now + 5000
+      && expires > now && expires > checked && expires - checked <= 600000
+      && evidence.protocols?.anthropic === 'proved'
+      && proofFields.every(field => evidence.capabilities?.[field] === 'proved')
+  }).map(row => {
+    const prior = existing.get(row.id)
+    const result = { ...prior, id: row.id, name: prior?.name ?? (typeof row.name === 'string' ? row.name : row.id), input: ['text'] }
+    if (positive(row.capabilities?.contextWindow)) result.contextWindow = Math.min(row.capabilities.contextWindow, positive(prior?.contextWindow) ? prior.contextWindow : 850000, 850000)
+    else if (positive(result.contextWindow)) result.contextWindow = Math.min(result.contextWindow, 850000)
+    if (positive(row.capabilities?.maxOutput)) result.maxTokens = Math.min(row.capabilities.maxOutput, positive(prior?.maxTokens) ? prior.maxTokens : row.capabilities.maxOutput)
+    if (positive(result.contextWindow) && positive(result.maxTokens)) result.maxTokens = Math.min(result.maxTokens, result.contextWindow)
+    return result
+  }).sort((left, right) => left.id.localeCompare(right.id, 'en'))
+}
+
+function providerView(document, provider, catalogUrl) {
+  if (document.writable !== true) throw fail('settings_read_only')
+  const matches = document.namespaces.filter(view => record(view.value?.providers?.[provider]))
+  if (matches.length !== 1) throw fail('provider_missing_or_ambiguous')
+  const view = matches[0]; const route = view.value.providers[provider]
+  if (route.api !== 'anthropic-messages' || typeof route.baseURL !== 'string' || normalize(route.baseURL) !== normalize(catalogUrl)) throw fail('provider_mismatch')
+  if (!Array.isArray(route.models)) throw fail('provider_models_invalid')
+  return { view, route }
+}
+
+/** One revision-checked update. Unconfirmed listings remove stale selectable choices. */
+export async function syncOnce(options) {
+  const { rpc, fetchCatalog, backup, provider = '9router', catalogUrl, now = Date.now } = options
+  let target = providerView(await rpc('settings/describe', {}), provider, catalogUrl)
+  const preferences = new Map((options.modelPreferences ?? []).map(model => [model.id, model]))
+  const remember = async () => { for (const model of target.route.models) preferences.set(model.id, model); await options.savePreferences?.([...preferences.values()]) }
+  await remember()
+  let catalog; let catalogError
+  try { catalog = await fetchCatalog(); selectModels(catalog, target.route.models, now()) }
+  catch { catalogError = 'catalog_unconfirmed' }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const models = catalogError ? [] : selectModels(catalog, [...preferences.values()], now())
+    const changed = !isDeepStrictEqual(models, target.route.models)
+    if (changed) {
+      await backup()
+      try {
+        await rpc('settings/mutate', { ns: target.view.ns, expectedRevision: target.view.revision, ops: [{ op: 'set', path: ['providers', provider, 'models'], value: models }] })
+      } catch (error) {
+        if (error.code !== 'settings/conflict' || attempt === 2) throw error
+        target = providerView(await rpc('settings/describe', {}), provider, catalogUrl)
+        await remember()
+        continue
+      }
+    }
+    const synchronizedAtMs = now()
+    return { ok: !catalogError, ...(catalogError ? { error: catalogError } : {}), synchronizedAt: new Date(synchronizedAtMs).toISOString(), catalogModelIds: models.map(model => model.id), validUntil: new Date(Math.min(synchronizedAtMs + 60000, synchronizedAtMs + (options.intervalMs ?? 30000) * 2, ...models.map(model => timestamp(catalog.data.find(row => row.id === model.id).x_9r.expires_at)))).toISOString(), catalogGeneration: typeof catalog?.x_9r_catalog?.generation === 'string' ? catalog.x_9r_catalog.generation : null, publishedChatModels: models.length, availableRoutes: models.length, totalRoutes: Array.isArray(catalog?.data) ? catalog.data.length : 0, changed }
+  }
+  throw fail('settings_conflict')
+}
+
+async function boundedJson(response) {
+  if (!response.ok) throw fail('http_failed')
+  const reader = response.body?.getReader(); if (!reader) throw fail('body_missing')
+  let length = 0; const chunks = []
+  try {
+    for (;;) {
+      const { done, value } = await reader.read(); if (done) break
+      length += value.length; if (length > 4 * 1024 * 1024) throw fail('body_too_large')
+      chunks.push(value)
+    }
+  } finally { await reader.cancel().catch(() => {}) }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+}
+
+/** Authenticated HTTP transport, using the local launch token only for its cookie exchange. */
+export function createTransport({ appUrl, catalogUrl, launchLog, apiKey, timeoutMs = 8000 }) {
+  const app = new URL(appUrl); const catalog = new URL(catalogUrl)
+  if (app.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(app.hostname) || app.username || app.password || app.search || app.hash) throw fail('app_url_invalid')
+  if (catalog.protocol !== 'https:' && !(catalog.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(catalog.hostname))) throw fail('catalog_url_invalid')
+  if (catalog.username || catalog.password || catalog.search || catalog.hash) throw fail('catalog_url_invalid')
+  let cookie
+  async function authenticate() {
+    const log = await readFile(launchLog, 'utf8')
+    const urls = log.match(/https?:\/\/[^\s]+/gu) ?? []
+    const launch = urls.map(value => { try { return new URL(value) } catch { return null } }).filter(url => url?.origin === app.origin && url.searchParams.has('token')).at(-1)
+    if (!launch) throw fail('app_auth_unavailable')
+    const response = await fetch(launch, { redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) })
+    cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ')
+    await response.body?.cancel()
+    if (response.status !== 303 || !cookie) throw fail('app_auth_failed')
+  }
+  return {
+    fetchCatalog: async () => {
+      if (!apiKey) throw fail('catalog_key_missing')
+      const url = new URL(normalize(catalog.href) + '/models')
+      url.searchParams.set('kind', 'chat'); url.searchParams.set('protocol', 'anthropic'); url.searchParams.set('capability', proofFields.join(','))
+      return boundedJson(await fetch(url, { headers: { authorization: `Bearer ${apiKey}` }, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) }))
+    },
+    rpc: async (method, args) => {
+      if (!cookie) await authenticate()
+      const request = () => fetch(new URL(`api/${method}`, app), { method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: app.origin }, body: JSON.stringify({ type: 'client-request', rpcId: randomUUID(), method, payload: { args } }), redirect: 'error', signal: AbortSignal.timeout(timeoutMs) })
+      let response = await request()
+      if (response.status === 401) { await response.body?.cancel(); await authenticate(); response = await request() }
+      const envelope = await boundedJson(response)
+      if (envelope.type !== 'server-response' || !record(envelope.result)) throw fail('rpc_invalid')
+      if (envelope.result.ok !== true) throw fail(envelope.result.error?.code === 'settings/conflict' ? 'settings/conflict' : 'settings_refused')
+      return envelope.result.value
+    },
+  }
+}
+
+async function atomicJson(file, value) {
+  await mkdir(path.dirname(file), { recursive: true })
+  const temporary = `${file}.${randomUUID()}.tmp`
+  try { await writeFile(temporary, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' }); await rename(temporary, file) }
+  finally { await unlink(temporary).catch(() => {}) }
+}
+
+/** Copy and verify the active patch before an API mutation; never expose its content. */
+export function profileBackup(profile, directory) {
+  return async () => {
+    await mkdir(directory, { recursive: true })
+    const source = await readFile(profile)
+    const digest = createHash('sha256').update(source).digest('hex')
+    const destination = path.join(directory, `cordis.patch-${digest}.yml`)
+    try { await copyFile(profile, destination, 1) } catch (error) { if (error.code !== 'EEXIST') throw fail('backup_failed') }
+    if (createHash('sha256').update(await readFile(destination)).digest('hex') !== digest) throw fail('backup_failed')
+  }
+}
+
+/** Run once or poll, keeping one exclusive process lock until completion. */
+export async function main(defaults = {}, argv = process.argv.slice(2)) {
+  const { values } = parseArgs({ args: argv, options: { home: { type: 'string' }, 'app-url': { type: 'string' }, 'catalog-url': { type: 'string' }, 'launch-log': { type: 'string' }, provider: { type: 'string' }, 'api-key-env': { type: 'string' }, 'interval-ms': { type: 'string' }, 'backup-dir': { type: 'string' }, watch: { type: 'boolean' } } })
+  const settings = { ...defaults, ...values }
+  if (settings.provider !== undefined && settings.provider !== '9router') throw fail('provider_mismatch')
+  const home = settings.home ?? process.env.DSH_HOME
+  if (!home || !settings['app-url'] || !settings['catalog-url'] || !settings['launch-log']) throw fail('configuration_missing')
+  const interval = Number(settings['interval-ms'] ?? 30000)
+  if (!Number.isSafeInteger(interval) || interval < 1000) throw fail('interval_invalid')
+  const key = process.env[settings['api-key-env'] ?? 'ROUTER_API_KEY']
+  const transport = createTransport({ appUrl: settings['app-url'], catalogUrl: settings['catalog-url'], launchLog: settings['launch-log'], apiKey: key })
+  const preferencesFile = path.join(home, 'router-live-model-preferences.json')
+  let modelPreferences = []
+  try { modelPreferences = JSON.parse(await readFile(preferencesFile, 'utf8')); if (!Array.isArray(modelPreferences)) throw fail('preferences_invalid') }
+  catch (error) { if (error.code !== 'ENOENT') throw fail('preferences_invalid') }
+  const savePreferences = async models => { if (!isDeepStrictEqual(models, modelPreferences)) { await atomicJson(preferencesFile, models); modelPreferences = models } }
+  const lockFile = path.join(home, 'sync-9router-models.lock')
+  const requestFile = path.join(home, 'sync-9router-models-request.json')
+  const stateFile = path.join(home, 'sync-9router-models-state.json')
+  const acquire = async () => {
+    const temporary = `${lockFile}.${randomUUID()}.tmp`
+    try {
+      await writeFile(temporary, JSON.stringify({ pid: process.pid }), { flag: 'wx' })
+      await link(temporary, lockFile)
+    } finally { await unlink(temporary).catch(() => {}) }
+  }
+  try { await acquire() }
+  catch (error) {
+    if (error.code !== 'EEXIST') throw fail('lock_failed')
+    const ownerText = await readFile(lockFile, 'utf8')
+    const owner = JSON.parse(ownerText)
+    if (!positive(owner.pid)) throw fail('lock_invalid')
+    let alive = false
+    try { process.kill(owner.pid, 0); alive = true }
+    catch (probe) { if (probe.code !== 'ESRCH') throw fail('lock_owner_unconfirmed') }
+    if (alive) {
+      if (settings.watch) return { ok: true, alreadyRunning: true }
+      const requestId = randomUUID()
+      await atomicJson(requestFile, { requestId })
+      const deadline = Date.now() + 20000
+      do {
+        await new Promise(resolve => setTimeout(resolve, 250))
+        try { const state = JSON.parse(await readFile(stateFile, 'utf8')); if (state.completedRequest === requestId) { process.stdout.write(JSON.stringify(state) + '\n'); return state } }
+        catch (error) { if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw fail('state_unreadable') }
+      } while (Date.now() < deadline)
+      throw fail('sync_request_timeout')
+    }
+    // Serialize dead-owner recovery with a crash-released OS lock, then recheck membership.
+    // The socket accepts no protocol or data; an unrelated port collision fails closed.
+    const mutex = createServer(socket => { socket.destroy() })
+    const port = 44000 + createHash('sha256').update(path.resolve(home).toLowerCase()).digest().readUInt32BE(0) % 10000
+    try {
+      await new Promise((resolve, reject) => {
+        mutex.once('error', reject)
+        mutex.listen({ host: '127.0.0.1', port, exclusive: true }, resolve)
+      })
+      if (await readFile(lockFile, 'utf8') !== ownerText) throw fail('lock_owner_changed')
+      await unlink(lockFile); await acquire()
+    } finally { await new Promise(resolve => { mutex.close(() => { resolve() }) }) }
+  }
+  let stopped = false
+  const stop = () => { stopped = true }
+  process.on('SIGINT', stop); process.on('SIGTERM', stop)
+  try {
+    await writeFile(path.join(home, 'router-live-catalog.enabled'), '1\n')
+    do {
+      let requestId
+      try { const request = JSON.parse(await readFile(requestFile, 'utf8')); if (typeof request.requestId === 'string') requestId = request.requestId }
+      catch (error) { if (error.code !== 'ENOENT') throw fail('request_invalid') }
+      let state
+      try {
+        state = await syncOnce({ ...transport, modelPreferences, savePreferences, catalogUrl: settings['catalog-url'], provider: settings.provider ?? '9router', intervalMs: interval, backup: profileBackup(path.join(home, 'profiles/web/cordis.patch.yml'), settings['backup-dir'] ?? path.join(home, 'backups/router-live-catalog')) })
+      } catch (error) {
+        const allowed = ['provider_mismatch', 'settings_read_only', 'provider_missing_or_ambiguous', 'settings_conflict', 'backup_failed', 'app_auth_unavailable', 'app_auth_failed']
+        state = { ok: false, error: allowed.includes(error.code) ? error.code : 'app_unavailable', synchronizedAt: new Date().toISOString() }
+      }
+      if (requestId) state.completedRequest = requestId
+      await atomicJson(stateFile, state)
+      if (!settings.watch) { process.stdout.write(JSON.stringify(state) + '\n'); return state }
+      const next = Date.now() + interval
+      while (!stopped && Date.now() < next) {
+        try { const request = JSON.parse(await readFile(requestFile, 'utf8')); if (request.requestId !== requestId) break }
+        catch (error) { if (error.code !== 'ENOENT') throw fail('request_invalid') }
+        await new Promise(resolve => { const wake = () => { clearTimeout(timer); process.off('SIGINT', wake); process.off('SIGTERM', wake); resolve() }; const timer = setTimeout(wake, Math.min(500, next - Date.now())); process.once('SIGINT', wake); process.once('SIGTERM', wake) })
+      }
+    } while (!stopped)
+  } finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); await unlink(lockFile) }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main().then(result => { if (result?.ok === false) process.exitCode = 1 }).catch(() => { process.stderr.write('router_sync_failed\n'); process.exitCode = 1 })
+}
