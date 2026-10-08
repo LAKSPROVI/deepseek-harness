@@ -59,7 +59,7 @@ function register(config: Config): ToolDefinition {
   const ctx = new Context()
   let definition: ToolDefinition | undefined
   ctx.provide('tools', { register: (value: ToolDefinition) => { definition = value } } as Context['tools'])
-  apply(ctx, { enabled: true, ...config })
+  apply(ctx, { enabled: true, apiUrl: config.apiUrl, model: config.model, timeoutMs: config.timeoutMs })
   if (definition === undefined) throw new Error('JEV tool did not register')
   return definition
 }
