@@ -11,18 +11,63 @@
 /deepseek-ai-dsh-tool-jev/summary:
   en: 9b5820ccc7b692c3
   zh: fda41b07e04c5870
+/deepseek-ai-dsh-tool-jev/table-of-contents:
+  en: 23386452a66b2fbd
+  zh: b8df00b4ca8f39a6
 /deepseek-ai-dsh-tool-jev/use-this-package:
   en: 4d0a590fdb0d79d5
   zh: e32b6a59fdccdfc7
 /deepseek-ai-dsh-tool-jev/use-this-package/configuration:
-  en: 4f69d4c7538a1ff9
-  zh: 6e23920a836214ce
-/deepseek-ai-dsh-tool-jev/model-experience:
-  en: 49304393a479876f
-  zh: 6c8b02d52e672639
+  en: c16ce0531f1ddd1e
+  zh: 9ad53aafc3b511f8
+/deepseek-ai-dsh-tool-jev/understand-the-implementation:
+  en: 6a3f717ef244598b
+  zh: fe19c4ff760e4792
 /deepseek-ai-dsh-tool-jev/further-exploration:
-  en: 17662e60317619cd
-  zh: e055eb00f3471337
-/deepseek-ai-dsh-tool-jev/dev-note:
-  en: 0c5e4765f73eaab1
-  zh: 85d6fec53cd5bcbd
+  en: 98f57b07f18d41eb
+  zh: 728041bbcf53e726
+/deepseek-ai-dsh-tool-jev/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-tool-jev/model-experience/tool-schema:
+  en: e4c7376d4f29dbd5
+  zh: 6b7a9eaf69c9ea53
+/deepseek-ai-dsh-tool-jev/model-experience/tool-schema/what-the-model-sees:
+  en: 4e24169a2976d116
+  zh: ed3562fc185fc6ca
+/deepseek-ai-dsh-tool-jev/model-experience/tool-schema/token-effect:
+  en: aa0241cfa9b34021
+  zh: c5c4a81289c6f937
+/deepseek-ai-dsh-tool-jev/model-experience/tool-schema/kv-cache-effect:
+  en: c34155195edd197c
+  zh: d6c0bc5d90da9b6d
+/deepseek-ai-dsh-tool-jev/model-experience/call-arguments:
+  en: f3d6a26dc2ef1458
+  zh: ddef87e880124c6d
+/deepseek-ai-dsh-tool-jev/model-experience/call-arguments/what-the-model-sees:
+  en: 39b58248c8985a36
+  zh: 3b2acf3887f28160
+/deepseek-ai-dsh-tool-jev/model-experience/call-arguments/token-effect:
+  en: cdf5247f3ac2e270
+  zh: 19cfc4018872b29e
+/deepseek-ai-dsh-tool-jev/model-experience/call-arguments/kv-cache-effect:
+  en: b792e2c863e907c2
+  zh: 6a3cee1b7d0aa787
+/deepseek-ai-dsh-tool-jev/model-experience/tool-result:
+  en: f8ffc2b983f05ffc
+  zh: 8573891441963be4
+/deepseek-ai-dsh-tool-jev/model-experience/tool-result/what-the-model-sees:
+  en: 82dd0ccfbc3e1434
+  zh: 4569932aa57569f8
+/deepseek-ai-dsh-tool-jev/model-experience/tool-result/token-effect:
+  en: 49892fd6624066f2
+  zh: 7b2499f4187208c2
+/deepseek-ai-dsh-tool-jev/model-experience/tool-result/kv-cache-effect:
+  en: 1c3ff2da9ce556f7
+  zh: 711c69b2c317152f
+/deepseek-ai-dsh-tool-jev/known-limitations-and-deferred-work:
+  en: 07175743ab39d41d
+  zh: 78f94bd0e2ad749e
+/deepseek-ai-dsh-tool-jev/known-limitations-and-deferred-work/dev-note:
+  en: 0a1253c6f7b5e8b9
+  zh: da7889ebf877d93b

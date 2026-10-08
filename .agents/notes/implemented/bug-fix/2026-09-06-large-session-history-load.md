@@ -6,7 +6,7 @@ English | [中文](2026-09-06-large-session-history-load.zh.md)
 
 ## Problem
 
-Opening a very large session in the web client blocked for minutes. The largest session in one operator's archive (a 31 MB compressed event log) took a measured 76 seconds — 162 seconds under machine load — to serve one history page of `PAGE_MESSAGES` (50) messages, because the Host computes a render view for every tool event on the page at pagination time. The original fix (September 6, commits `e5f8fa1be8` and `87f484f49b` under the old apiproxy client) paired an 180-second extended unary deadline with an 8-message first page; both were lost when the 0.1.7 upstream integration replaced that client wholesale, and this note went with them. The 2026-10-01 robustness audit found the regression re-opened in `packages/api/session-controller`: the open path again requested the full 50-message window.
+Opening a very large session in the web client blocked for minutes. The largest session in one operator's archive (a 31 MB compressed event log) took a measured 76 seconds — 162 seconds under machine load — to serve one history page of `PAGE_MESSAGES` (50) messages, because the Host computes a render view for every tool event on the page at pagination time. The original fix (September 6, under the old apiproxy client) paired an 180-second extended unary deadline with an 8-message first page; both were lost when the 0.1.7 upstream integration replaced that client wholesale, and this note went with them. The 2026-10-01 robustness audit found the regression re-opened in `packages/api/session-controller`: the open path again requested the full 50-message window.
 
 ## Decision
 
