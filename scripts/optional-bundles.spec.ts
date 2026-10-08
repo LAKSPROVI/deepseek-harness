@@ -64,6 +64,30 @@ describe('optional bundles', () => {
     }
   })
 
+  it('composes explicitly installed local SenseVoice without replacing shipped voice input', () => {
+    const name = '@deepseek-ai/dsh-experimental-voice-input-bundle'
+    const { dir, patches } = bundle(name)
+    const manifest = JSON.parse(readFileSync(resolve(dir, 'package.json'), 'utf8')) as {
+      files: string[]
+      exports: Record<string, string | object>
+    }
+    expect(manifest.files).toContain('cordis.patch.yml')
+    expect(manifest.exports['./cordis.patch.yml']).toBe('./cordis.patch.yml')
+    expect(OPTIONAL_BUNDLES).not.toContain(name)
+    const warnings: string[] = []
+    const composed = composeEntries([...shipped, patches], message => warnings.push(message))
+    expect(warnings).toEqual([])
+    const ids = composed.map(entry => entry.id)
+    expect(ids).toHaveLength(new Set(ids).size)
+    expect(composed.find(entry => entry.id === 'ui-voice-input')?.name)
+      .toBe('@deepseek-ai/dsh-client-ui-voice-input')
+    expect(composed.find(entry => entry.id === 'ui-sensevoice-input')?.name)
+      .toBe('@deepseek-ai/dsh-experimental-client-ui-voice-input')
+    expect(composed.find(entry => entry.id === 'speech-to-text-sensevoice')?.name)
+      .toBe('@deepseek-ai/dsh-experimental-speech-to-text-sensevoice')
+    expect(composeEntries(shipped).some(entry => entry.id === 'speech-to-text-sensevoice')).toBe(false)
+  })
+
   it('delivers the Schedule service and task page without a Host clock row', () => {
     const composed = composeEntries(shipped)
     // The delivered composition carries the Host Schedule service and its task

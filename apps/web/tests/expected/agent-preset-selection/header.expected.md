@@ -1,8 +1,8 @@
 - navigation "Session hierarchy": Seeded turn
 - button "1 subagent"
 - text: Minimal mode
-- button "Opções de nova conversa e contexto": Novo Chat
+- button "New conversation and context options": New Chat
 - button "Automações"
+- button "Session notes and reminders": Notes
 - button "More actions"
-- button "Anotações e lembretes da sessão": Anotações
 - button "Open right sidebar"

@@ -536,7 +536,23 @@ describe.skipIf(!isWin32 || !pwshAvailable())('windows-acl runner', () => {
     const granted = join(scratchRoot, 'fullcontrol-root')
     const child = join(granted, 'child')
     mkdirSync(granted)
+    // A CREATOR OWNER ACE can turn into an explicit child FullControl allow,
+    // which precedes an inherited deny. This case exercises an inherited grant.
+    const prepared = spawnSync('pwsh', ['-NoLogo', '-NonInteractive', '-NoProfile', '-Command', `
+$acl = Get-Acl -LiteralPath '${granted}'
+$acl.SetAccessRuleProtection($true, $false)
+foreach ($entry in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($entry) }
+$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+$acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow'))
+Set-Acl -LiteralPath '${granted}' -AclObject $acl
+`], { encoding: 'utf8', timeout: 60_000 })
+    expect(prepared.status, `stderr: ${prepared.stderr}`).toBe(0)
     mkdirSync(child)
+    const inherited = spawnSync('pwsh', ['-NoLogo', '-NonInteractive', '-NoProfile', '-Command', `
+$entries = @((Get-Acl -LiteralPath '${child}').Access)
+if ($entries.Count -eq 0 -or @($entries | Where-Object { -not $_.IsInherited }).Count -ne 0) { throw 'Expected inherited child DACL' }
+`], { encoding: 'utf8', timeout: 60_000 })
+    expect(inherited.status, `stderr: ${inherited.stderr}`).toBe(0)
     writeFileSync(join(granted, 'file.txt'), 'x')
     writeFileSync(join(child, 'deep.txt'), 'x')
     const grant = AclWriteGrant.create(workspaceWriteSid(granted))

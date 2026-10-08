@@ -1,9 +1,9 @@
 - banner:
   - navigation "Session hierarchy": Use the read tool twice
-  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "New conversation and context options": New Chat
   - button "Automações"
+  - button "Session notes and reminders": Notes
   - button "More actions"
-  - button "Anotações e lembretes da sessão": Anotações
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]
@@ -11,9 +11,10 @@
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
-- button "Load earlier"
+- text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. {{clock}}"
+- button "Copy"
 - status: Completed
-- button "Completed"
+- button "Completed in {{duration}}"
 - paragraph: DONE
 - button "Copy"
 - button "Good response"

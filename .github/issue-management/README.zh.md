@@ -47,6 +47,8 @@ REST 读取使用仓库 `GITHUB_TOKEN`。Project 校验使用独立的 App token
 
 PR 打开时，工作流按配置时区中的 PR 创建日期，为每个被引用 Issue（包括信息型引用）初始化空的 Project `Start Date`。此生命周期操作可以添加 Project 归属，并需要 Project 写权限；信息型引用的读取豁免仅适用于 PR 校验。已有 Start Date 值会保留。
 
+生命周期预检先用仓库 token 读取当前 PR 的 Issue 引用，再创建 Project App token。打开 PR 时，所有引用的 Issue 都需要 Project 访问权限；其他 PR 事件仅对解决型 Issue 需要该权限。没有适用 Issue 的事件无需创建 token，也不会修改 GitHub。实时读取失败仍会使任务失败。App token 使用当前仓库的所有者和仓库名称。
+
 -----
 
 <a id="configuration-and-limitations"></a>

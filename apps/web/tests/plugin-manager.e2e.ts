@@ -28,6 +28,12 @@ const MODE = webSnapshotMode()
 /** The profile manifest's bundles as the scaffold initializes them. */
 const SCAFFOLD_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', SCAFFOLD_DEFAULTS_BUNDLE]
 
+/** Wait for the bundle write and inventory refresh to leave its switch ready. */
+async function waitForBundleSwitch(toggle: Locator, enabled: boolean): Promise<void> {
+  await toggle.and(toggle.page().locator(`[aria-checked="${enabled}"]:enabled`)).waitFor({ timeout: 20_000 })
+  expect(await toggle.getAttribute('aria-checked')).toBe(String(enabled))
+}
+
 describe('web e2e: plugin manager', () => {
   let scaffold: WebScaffold
   let browser: Browser
@@ -442,7 +448,11 @@ describe('web e2e: plugin manager', () => {
     expect(await panel.getByText('实验性', { exact: true }).count())
       .toBe(OPTIONAL_BUNDLES.filter(name => name.startsWith('@deepseek-ai/dsh-experimental-')).length)
     expect(await panel.locator('[data-plugin-package="@deepseek-ai/dsh-experimental-inspector"]').count()).toBe(0)
-    expect(await panel.getByRole('switch', { name: '启用 语音输入', exact: true }).getAttribute('aria-checked')).toBe('false')
+    expect(await panel.getByRole('switch', { name: '启用 语音输入', exact: true }).count()).toBe(0)
+    expect(await panel.locator('[data-plugin-package="@deepseek-ai/dsh-experimental-voice-input-bundle"]').count()).toBe(0)
+    const nativeVoice = [...scaffold.ctx.loader.entries()].find(entry => entry.options.id === 'ui-voice-input')
+    expect(nativeVoice?.options.name).toBe('@deepseek-ai/dsh-client-ui-voice-input')
+    expect(nativeVoice?.fiber?.state).toBe(FiberState.ACTIVE)
     expect(await panel.getByRole('switch', { name: '启用 开发者工具', exact: true }).getAttribute('aria-checked')).toBe('false')
     expect(await panel.getByText('查看调试会话原始数据、聊天消息分组数据，以及调试 NodeJS 后端', { exact: true }).count()).toBe(1)
     expect(await panel.getByText(/Cordis|Chrome DevTools/).count()).toBe(0)
@@ -642,7 +652,8 @@ describe('web e2e: plugin manager', () => {
       await toggle.click()
       try {
         await expect.poll(() => teamRows().filter(entry => entry.fiber?.state === FiberState.ACTIVE).length, { timeout: 20_000 }).toBe(3)
-        await expect.poll(() => toggle.getAttribute('aria-checked')).toBe('true')
+        // Host fibers can activate before the RPC finishes and the browser refreshes its inventory.
+        await waitForBundleSwitch(toggle, true)
         await action.waitFor({ timeout: 20_000 })
         await action.getByRole('button', { name: '智能体团队', exact: true }).click()
         const teamPanel = teamPage.getByRole('dialog', { name: '智能体团队', exact: true })
@@ -666,6 +677,7 @@ describe('web e2e: plugin manager', () => {
         if (await toggle.getAttribute('aria-checked') === 'true') await toggle.click()
         await expect.poll(() => teamRows().filter(entry => entry.fiber?.state === FiberState.ACTIVE).length, { timeout: 20_000 }).toBe(0)
         await expect.poll(() => action.count(), { timeout: 20_000 }).toBe(0)
+        await waitForBundleSwitch(toggle, false)
       }
       expect(teamTripwire.pageErrors).toEqual([])
       expect(teamTripwire.warnings).toEqual([])
@@ -957,9 +969,12 @@ describe('web e2e: startup-applied plugin management', () => {
       expect(mounted()?.fiber?.state).toBeUndefined()
       await toggle.click()
       // The selection is saved and the switch turns on, but nothing mounts before the next start; a toast says so.
-      await expect.poll(bundles).toEqual([...SCAFFOLD_BUNDLES, '@fixture/bundle'])
-      await expect.poll(() => toggle.getAttribute('aria-checked')).toBe('true')
-      await page.getByText('更改将在下次启动生效', { exact: true }).waitFor({ timeout: 10_000 })
+      // The notice can expire while the inventory refresh still leaves the switch busy.
+      await Promise.all([
+        expect.poll(bundles).toEqual([...SCAFFOLD_BUNDLES, '@fixture/bundle']),
+        waitForBundleSwitch(toggle, true),
+        page.getByText('更改将在下次启动生效', { exact: true }).waitFor({ timeout: 10_000 }),
+      ])
       expect(mounted()?.fiber?.state).toBeUndefined()
       // The pack's page lists its rows from their declarations, with no live entry to switch.
       await panel.getByRole('button', { name: '查看 @fixture/bundle' }).click()
@@ -969,7 +984,7 @@ describe('web e2e: startup-applied plugin management', () => {
 
       await toggle.click()
       await expect.poll(bundles).toEqual(SCAFFOLD_BUNDLES)
-      await expect.poll(() => toggle.getAttribute('aria-checked')).toBe('false')
+      await waitForBundleSwitch(toggle, false)
       expect(tripwire.pageErrors).toEqual([])
     } finally {
       await browser?.close()
