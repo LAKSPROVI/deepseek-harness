@@ -7,7 +7,7 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
-## 摘要
+## 概述
 
 `jev_decide` 调用 TypeSafe AI（Jev）System One API，针对一个 state 评估一组类型化问题，并返回带概率分布与校准置信度的结构化答案。每个问题只做一次边界清晰的判断——从命名选项中 `choice`、按评分标准 `score`、或对命题真伪做 `noul` 判定；多个问题在同一次调用中并行评估。请在代码中组合各因子，而不是把多个因素挤进一个问题。
 
@@ -18,7 +18,7 @@ kind: "package-reference"
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
 - [已知限制与后续工作](#known-limitations-and-deferred-work)
-- [开发说明](#dev-note)
+- [开发备注](#dev-note)
 
 <a id="use-this-package"></a>
 
@@ -124,6 +124,6 @@ API 密钥在执行时从 `TYPESAFE_API_KEY` 环境变量读取；绝不进入 c
 
 <a id="dev-note"></a>
 
-### 开发说明
+### 开发备注
 
 无。
