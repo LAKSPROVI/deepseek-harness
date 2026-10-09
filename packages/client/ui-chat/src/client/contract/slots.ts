@@ -216,6 +216,8 @@ export type ChatStore = ReturnType<typeof createChatStore>
 /** In-memory reader position resilient to transcript reflow. */
 export interface ChatScrollPosition {
   readonly anchorKey: string
+  /** Durable event needed to reload an anchor outside the opening history window. */
+  readonly anchorSeq?: SessionSeq | undefined
   readonly anchorTop: number
   readonly scrollTop: number
 }

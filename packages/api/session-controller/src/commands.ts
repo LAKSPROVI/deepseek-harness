@@ -4,6 +4,7 @@ import { modelAvailable } from './catalog.ts'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import { scopeOf } from '@deepseek-ai/dsh-scope'
 import type { Agent, ModelSelection as AgentModelSelection } from '@deepseek-ai/dsh-agent'
 import { AttachmentError } from '@deepseek-ai/dsh-attachment'
 import type {
@@ -152,7 +153,7 @@ export class SessionCommandController {
     const agent = await this.resolveAgent(request.sessionId)
     return this.agents.serializeImageAdmission(agent, async () => {
       try {
-        await this.requireModel(request)
+        await this.requireModel(request, agent)
         const resolved = await this.ctx.llm.resolveCallConfig({
           provider: request.provider,
           model: request.model,
@@ -376,8 +377,11 @@ export class SessionCommandController {
     return hasImage ? this.agents.serializeImageAdmission(agent, admit) : admit()
   }
 
-  private async requireModel(selection: Pick<AgentModelSelection, 'provider' | 'model'>): Promise<void> {
-    if (!await modelAvailable(this.ctx, selection)) {
+  private async requireModel(selection: Pick<AgentModelSelection, 'provider' | 'model'>, agent: Agent): Promise<void> {
+    const count = selection.provider === '9router'
+      ? this.ctx.get('tools')?.wireToolCount(scopeOf(agent.ctx))
+      : undefined
+    if (!await modelAvailable(this.ctx, selection, count)) {
       throw new RemoteError('session/model-unavailable', 'Select an available model before sending a message.',
         { provider: selection.provider, model: selection.model })
     }

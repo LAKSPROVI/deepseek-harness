@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+`wireToolCount(scope)` 按作用域限制和展示方式读取注册表的有效 schema 数量。计数包含已暴露的 PTC 执行器，不运行提示 waterfall，也不改变 Agent 已组装的模型选择。
+
 在任何 agent 调用工具的地方挂载 `dsh-tools`：它提供 `ctx.tools`，即每个工具插件注册进去、循环分发所经过的注册表。注册一个工具就足以让它可见——注册表会自动把其 schema 送入系统提示词组装。
 
 ### 注册工具

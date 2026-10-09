@@ -1,5 +1,6 @@
 /** Turn-aware DOM scrolling and geometry, without history-loading or follow policy. */
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { ChatScrollPosition } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import { scrollMetrics, ScrollFollow, type ViewportMetrics } from './use-scroll-follow.ts'
@@ -202,6 +203,7 @@ export class ChatViewport {
     const key = anchor?.dataset.chatAnchorKey
     return anchor === null || key === undefined ? null : {
       anchorKey: key,
+      anchorSeq: this.anchorSeq(anchor),
       anchorTop: anchor.getBoundingClientRect().top - viewport.top,
       scrollTop: scroller.scrollTop,
     }
@@ -269,11 +271,13 @@ export class ChatViewport {
   /**
    * Restore a semantic anchor with a raw-position fallback.
    * @param position - semantic scroll memory; raw top is used only if its row is absent.
-   * @returns the actual landing, or null while detached.
+   * @param fallback - permit raw-position fallback after history loading has ended.
+   * @returns the actual landing, or null while detached or awaiting its anchor.
    */
-  restore(position: ChatScrollPosition): ViewportLanding | null {
+  restore(position: ChatScrollPosition, fallback = true): ViewportLanding | null {
     const row = this.anchor(position.anchorKey)
     if (row !== null) return this.align(row, position.anchorTop, null)
+    if (!fallback) return null
     const metrics = this.metrics()
     return metrics === null ? null : this.write(position.scrollTop, metrics, null)
   }
@@ -314,6 +318,7 @@ export class ChatViewport {
       row, group,
       position: position ?? {
         anchorKey: key,
+        anchorSeq: this.anchorSeq(row),
         anchorTop: top - elements.scroller.getBoundingClientRect().top,
         scrollTop: elements.scroller.scrollTop,
       },
@@ -376,7 +381,7 @@ export class ChatViewport {
     if (metrics === null) return null
     const top = row.getBoundingClientRect().top - elements.scroller.getBoundingClientRect().top
     const target = metrics.top + top - position.anchorTop
-    return this.write(target, metrics, null, { key: position.anchorKey, top })
+    return this.write(target, metrics, null, { key: position.anchorKey, top, seq: position.anchorSeq })
   }
 
   /**
@@ -396,16 +401,22 @@ export class ChatViewport {
     return landing
   }
 
+  private anchorSeq(row: HTMLElement): SessionSeq | undefined {
+    const value = row.dataset.chatAnchorSeq
+    const seq = value === undefined ? NaN : Number(value)
+    return Number.isSafeInteger(seq) && seq >= 0 ? SessionSeq(seq) : undefined
+  }
+
   private align(row: HTMLElement, offset: number, turn: number | null): ViewportLanding | null {
     const metrics = this.metrics()
     if (metrics === null || this.elements === null) return null
     const top = row.getBoundingClientRect().top - this.elements.scroller.getBoundingClientRect().top
-    return this.write(metrics.top + top - offset, metrics, turn, { key: row.dataset.chatAnchorKey, top })
+    return this.write(metrics.top + top - offset, metrics, turn, { key: row.dataset.chatAnchorKey, top, seq: this.anchorSeq(row) })
   }
 
   private write(
     target: number, metrics: ViewportMetrics, turn: number | null,
-    anchor?: { key: string | undefined; top: number },
+    anchor?: { key: string | undefined; top: number; seq?: SessionSeq | undefined },
   ): ViewportLanding | null {
     if (this.elements === null) return null
     const top = Math.max(0, Math.min(metrics.floor, target))
@@ -416,6 +427,7 @@ export class ChatViewport {
       turn,
       position: anchor?.key === undefined ? null : {
         anchorKey: anchor.key,
+        anchorSeq: anchor.seq,
         anchorTop: anchor.top - (actual - metrics.top),
         scrollTop: actual,
       },
