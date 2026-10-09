@@ -3,8 +3,8 @@
   - text: 标准模式
   - button "新会话与上下文选项": 新会话
   - button "自动化"
-  - button "更多操作"
   - button "会话备注与待办提醒": 备注
+  - button "更多操作"
   - button "打开右侧边栏"
   - tablist:
     - tab "对话" [selected]

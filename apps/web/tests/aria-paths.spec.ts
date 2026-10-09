@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { normalizeAria } from './scaffold.ts'
 
 describe('Web ARIA workspace paths', () => {
+  it.each(['/home/runner/work/_temp/dsh-web-ws-unique', 'C:\\tmp\\dsh-web-ws-unique'])('normalizes %s after the Chinese installation label', (cwd) => {
+    expect(normalizeAria(`- paragraph: 安装位置：${cwd}/.dsh-home/profiles/scaffold`, cwd, false))
+      .toBe('- paragraph: 安装位置：{{cwd}}/.dsh-home/profiles/scaffold')
+  })
+
   it('preserves closing JSON quote escapes after a known native path', () => {
     const cwd = 'C:\\tmp\\dsh-web-ws-unique'
     const snapshot = String.raw`- cell "{\"file_path\":\"C:\\tmp\\dsh-web-ws-unique\\a.txt\"}"`

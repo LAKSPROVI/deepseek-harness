@@ -25,6 +25,8 @@ Use `dsh-tools` to expose typed capabilities to models, validate calls, enforce 
 <a id="use-this-package"></a>
 ## Use this package
 
+`wireToolCount(scope)` reads the registry's effective schema count under the scope's restrictions and presentation. It includes the PTC executor when exposed and does not run prompt waterfalls or change the Agent's assembled model selection.
+
 Mount `dsh-tools` wherever agents call tools: it provides `ctx.tools`, the registry every tool plugin registers into and the loop dispatches through. Registering a tool is enough to make it visible — the registry feeds its schemas into the system-prompt assembly automatically.
 
 ### Register a tool

@@ -1071,7 +1071,7 @@ function normalizeClientTimeZones(value: unknown): unknown {
   return value
 }
 
-const WEB_PATH_TEXT_BOUNDARY_RE = /[\s<>'"`()\[\]{},;:!?=]/
+const WEB_PATH_TEXT_BOUNDARY_RE = /[\s<>'"`()\[\]{},;:：!?=]/
 const WEB_FILE_URI_PATH_PREFIX_RE = /(?:^|[^a-z0-9+.-])file:\/\/\/?$/i
 
 function isWebCwdMatch(value: string, start: number, length: number): boolean {

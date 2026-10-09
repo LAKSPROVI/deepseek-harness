@@ -29,6 +29,8 @@ Use `@deepseek-ai/dsh-llm` to stream model calls through configured provider ada
 
 Any composition that calls a model provider — an agent loop, a session-title generator, a compaction summarizer — streams its requests through this service. Mount it together with at least one provider adapter; the service itself has no configuration and no provider wire code.
 
+For `9router` routes named `gh/gpt*`, catalog choices must also fit the current tool presentation: OpenAI Chat Completions accepts at most 128 tool schemas. `listModels(provider, wireToolCount)` accepts a caller's scoped count; omission reads the global tool registry when mounted. Tool or prompt changes invalidate the directory. Dispatch checks the complete projected tool set after asynchronous preparation and rejects excess schemas with `ROUTER_MODEL_TOOL_LIMIT` before adapter stream dispatch. It never truncates tools or changes presentation. Explicit scoped PTC can remain compatible because it exposes one `run_code` schema; native scopes keep every registered tool. Synchronization RPC status counts usable default-context models and reports confirmed routes excluded by this tool limit separately from upstream availability.
+
 ### When to choose it
 
 Choose this package whenever a plugin or composition needs to call a model: it is the only supported path into provider adapters, and it keeps one vocabulary across the loop, the session log, and every consumer. Do not reach for it when you need provider-specific wire behavior (that belongs in an adapter such as `dsh-llm-deepseek` or `dsh-llm-pi-ai`) or retry execution (that belongs in `dsh-llm-retry`).

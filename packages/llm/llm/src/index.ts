@@ -353,6 +353,12 @@ export class LlmRuntime extends TypertRemoteService {
   constructor(ctx: Context) {
     super(ctx, 'llm')
     ctx.effect(() => watchRouterCatalog(this.routerHome, () =>{  this.emitAdaptersUpdated() }), 'llm: router catalog lease')
+    // These optional registries depend on LLM; their existing emit events need no reverse dependency.
+    const onChange = ctx.on.bind(ctx) as (
+      name: 'system-prompt/change' | 'tools/change', listener: () => void,
+    ) => () => void
+    onChange('system-prompt/change', () => { this.emitAdaptersUpdated() })
+    onChange('tools/change', () => { this.emitAdaptersUpdated() })
   }
 
   /** Notify topology observers without letting one broken listener veto the commit. */
@@ -658,7 +664,7 @@ export class LlmRuntime extends TypertRemoteService {
    */
   @Remote
   async routerSyncStatus(): Promise<RouterSyncStatus> {
-    return await readRouterSyncStatus()
+    return this.routerStatusForCatalog(await readRouterSyncStatus(this.routerHome))
   }
 
   /**
@@ -667,7 +673,26 @@ export class LlmRuntime extends TypertRemoteService {
    */
   @Remote
   async triggerRouterSync(): Promise<RouterSyncStatus> {
-    return await executeRouterSync()
+    return this.routerStatusForCatalog(await executeRouterSync(this.routerHome))
+  }
+
+  /** Expose the default-context usable count beside upstream availability facts. */
+  private async routerStatusForCatalog(status: RouterSyncStatus): Promise<RouterSyncStatus> {
+    if (!this.adapters.has('9router')) return status
+    const lease = await readRouterCatalogLease(this.routerHome)
+    if (lease.ids === undefined) return status
+    const healthy = await this.listModels('9router', 0)
+    const toolCount = this.routerToolCount()
+    const models = healthy.filter(model => this.routerToolsCompatible('9router', model.id, toolCount))
+    const excluded = healthy.length - models.length
+    const diagnostic = excluded > 0
+      ? `${excluded} confirmed router models are incompatible with the current tool set`
+      : undefined
+    return {
+      ...status,
+      publishedChatModels: models.length,
+      ...diagnostic === undefined ? {} : { error: [status.error, diagnostic].filter(Boolean).join('; ') },
+    }
   }
 
   /**
@@ -712,14 +737,17 @@ export class LlmRuntime extends TypertRemoteService {
    * does not constrain core routing. Catalog-driven entry points may restrict
    * selection and submission to the advertised models.
    * @param provider - registered provider route to inspect.
-   * @returns detached model metadata in adapter-preferred order.
+   * @param wireToolCount - schemas visible to this caller; omission reads the global tool presentation.
+   * @returns detached model metadata in adapter-preferred order, excluding incompatible router routes.
    */
-  async listModels(provider: string): Promise<LlmModelInfo[]> {
+  async listModels(provider: string, wireToolCount?: number): Promise<LlmModelInfo[]> {
     const adapter = this.registration(provider).adapter
     const models = await adapter.listModels(provider)
     const seen = new Set<string>()
     const lease = await readRouterCatalogLease(provider === '9router' ? this.routerHome : undefined)
-    return models.filter(model => lease.ids === undefined || lease.ids.has(model.id)).map((model) => {
+    const toolCount = provider === '9router' ? wireToolCount ?? this.routerToolCount() : 0
+    return models.filter(model => (lease.ids === undefined || lease.ids.has(model.id))
+      && this.routerToolsCompatible(provider, model.id, toolCount)).map((model) => {
       if (
         typeof model.provider !== 'string'
         || model.provider !== provider
@@ -759,6 +787,28 @@ export class LlmRuntime extends TypertRemoteService {
     signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
     return this.resolveModelInfoFor(this.registration(provider), model, signal)
+  }
+
+  /** Read the optional tool registry without importing its LLM-dependent implementation. */
+  private routerToolCount(): number {
+    const tools = this.ctx.get('tools') as { wireToolCount(): number } | undefined
+    return tools?.wireToolCount() ?? 0
+  }
+
+  /** OpenAI Chat Completions admits at most 128 tool declarations on these router routes. */
+  private routerToolsCompatible(provider: string, model: string, count: number): boolean {
+    return provider !== '9router' || !model.startsWith('gh/gpt') || count <= 128
+  }
+
+  /** Reject incompatible complete requests without dropping any configured tools. */
+  private assertRouterTools(options: GenerateOptions): void {
+    const count = options.tools?.length ?? 0
+    if (!this.routerToolsCompatible(options.provider, options.model, count)) {
+      throw new LlmError(
+        `Router model "${options.model}" accepts at most 128 tools; this request contains ${count}. Select a compatible model or explicitly use PTC.`,
+        'ROUTER_MODEL_TOOL_LIMIT',
+      )
+    }
   }
 
   /** Managed routes require a current positive lease before resolution or dispatch. */
@@ -1112,6 +1162,7 @@ export class LlmRuntime extends TypertRemoteService {
         if (Object.isFrozen(resolvedOptions)) deepFreeze(projectedOptions)
       }
       await this.assertRouterModel(options.provider, options.model)
+      this.assertRouterTools(projectedOptions)
       const stream = dispatch(this.forAdapter(projectedOptions, adapter))
       iterator = stream[Symbol.asyncIterator]()
     } catch (error: unknown) {
