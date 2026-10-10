@@ -238,8 +238,20 @@ export function createTransport({ appUrl, catalogUrl, launchLog, apiKey, timeout
 async function atomicJson(file, value) {
   await mkdir(path.dirname(file), { recursive: true })
   const temporary = `${file}.${randomUUID()}.tmp`
-  try { await writeFile(temporary, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' }); await rename(temporary, file) }
-  finally { await unlink(temporary).catch(() => {}) }
+  try {
+    await writeFile(temporary, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' })
+    // Windows readers may briefly deny replacement. Retain the previous complete JSON,
+    // retry only sharing-related errors, and never extend the original positive lease.
+    const retryDeadline = Date.now() + 1000
+    for (;;) {
+      if (value?.ok === true && typeof value.validUntil === 'string' && Date.now() >= timestamp(value.validUntil)) throw fail('state_expired')
+      try { await rename(temporary, file); break }
+      catch (error) {
+        if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || Date.now() >= retryDeadline) throw error
+        await new Promise(resolve => setTimeout(resolve, Math.min(100, retryDeadline - Date.now())))
+      }
+    }
+  } finally { await unlink(temporary).catch(() => {}) }
 }
 
 /** Copy and verify the active patch before an API mutation; never expose its content. */
@@ -322,7 +334,7 @@ export async function main(defaults = {}, argv = process.argv.slice(2)) {
   process.on('SIGINT', stop); process.on('SIGTERM', stop)
   let loopPhase = 'enabled/write'
   const recordLoopFailure = async (error, phase) => {
-    const allowed = ['EACCES', 'EPERM', 'EBUSY', 'ENOSPC', 'ENOENT', 'EIO', 'EXDEV', 'EEXIST', 'ENOTEMPTY', 'EISDIR', 'ENOTDIR', 'EMFILE', 'ENFILE', 'request_invalid']
+    const allowed = ['EACCES', 'EPERM', 'EBUSY', 'ENOSPC', 'ENOENT', 'EIO', 'EXDEV', 'EEXIST', 'ENOTEMPTY', 'EISDIR', 'ENOTDIR', 'EMFILE', 'ENFILE', 'request_invalid', 'state_expired']
     const code = allowed.includes(error?.code) ? error.code : 'operation_failed'
     // A failed publication never renews the lease; keep only the latest bounded diagnostic.
     await atomicJson(path.join(home, 'sync-9router-models-failure.json'), { ok: false, phase, reason: code, failedAt: new Date().toISOString() }).catch(() => {})
