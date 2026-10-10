@@ -370,3 +370,59 @@ test('catalog HTTP failure exposes status without response body or credentials',
     assert.equal(error.message.includes('SECRET'), false); return true
   })
 })
+
+test('diagnoses successful update stages without changing proof lease or provider preferences', async () => {
+  const api = await import('../sync-router-live-models.mjs')
+  assert.equal(typeof api.syncMeasured, 'function', 'missing measured synchronization')
+  const fixture = host(); const args = { ...options(fixture), fetchCatalog: async () => catalog([model('fresh')]) }
+  const result = await api.syncMeasured(args)
+  assert.equal(result.ok, true); assert.deepEqual(result.catalogModelIds, ['fresh'])
+  assert.equal(Date.parse(result.validUntil) - Date.parse(result.synchronizedAt), 60000)
+  assert.deepEqual(result.diagnostics.phases.map(row => row.phase), ['settings/describe', 'fetchCatalog', 'profileBackup', 'settings/mutate'])
+  assert.ok(result.diagnostics.phases.every(row => row.ok && Number.isSafeInteger(row.ms) && row.ms >= 0))
+})
+
+test('identifies local mutation timeout without exposing secrets or retaining selectable models', async () => {
+  const api = await import('../sync-router-live-models.mjs')
+  assert.equal(typeof api.syncMeasured, 'function', 'missing measured synchronization')
+  const fixture = host(); const original = fixture.rpc
+  const result = await api.syncMeasured({ ...options(fixture), fetchCatalog: async () => catalog([model('fresh')]), rpc: async (method, args) => {
+    if (method === 'settings/mutate') throw Object.assign(new Error('SECRET https://private.example/key'), { name: 'TimeoutError' })
+    return original(method, args)
+  } })
+  assert.equal(result.ok, false); assert.equal(result.error, 'app_unavailable')
+  assert.equal(result.diagnostics.phases.at(-1).phase, 'settings/mutate')
+  assert.equal(result.diagnostics.phases.at(-1).failure, 'timeout')
+  assert.equal(result.validUntil, undefined); assert.equal(result.catalogModelIds, undefined)
+  assert.equal(JSON.stringify(result).includes('SECRET'), false)
+  assert.equal(JSON.stringify(result).includes('private.example'), false)
+})
+
+test('identifies profile backup failure and preserves its public failure code', async () => {
+  const api = await import('../sync-router-live-models.mjs')
+  assert.equal(typeof api.syncMeasured, 'function', 'missing measured synchronization')
+  const fixture = host()
+  const result = await api.syncMeasured({ ...options(fixture), fetchCatalog: async () => catalog([model('fresh')]), backup: async () => {
+    throw Object.assign(new Error('SECRET filesystem path'), { code: 'backup_failed' })
+  } })
+  assert.equal(result.ok, false); assert.equal(result.error, 'backup_failed')
+  assert.equal(result.diagnostics.phases.at(-1).phase, 'profileBackup')
+  assert.equal(result.diagnostics.phases.at(-1).failure, 'backup_failed')
+  assert.equal(fixture.mutations.length, 0); assert.equal(JSON.stringify(result).includes('SECRET'), false)
+})
+
+test('measures retries and conflicts independently and never copies arbitrary error names or codes', async () => {
+  const api = await import('../sync-router-live-models.mjs')
+  assert.equal(typeof api.syncMeasured, 'function', 'missing measured synchronization')
+  const fixture = host(); fixture.setConflict(); let calls = 0
+  const result = await api.syncMeasured({ ...options(fixture), fetchCatalog: async () => {
+    if (++calls === 1) throw Object.assign(new Error('SECRET'), { name: 'TimeoutError' })
+    return catalog([model('fresh')])
+  } })
+  assert.equal(result.ok, true); assert.equal(result.catalogAttempts, 2)
+  assert.equal(result.diagnostics.phases.filter(row => row.phase === 'fetchCatalog').length, 2)
+  assert.equal(result.diagnostics.phases.filter(row => row.phase === 'settings/mutate').length, 2)
+  const failed = await api.syncMeasured({ ...options(host()), rpc: async () => { throw Object.assign(new Error('SECRET'), { code: 'SECRET', name: 'SECRET' }) }, fetchCatalog: async () => catalog([]) })
+  assert.equal(failed.error, 'app_unavailable'); assert.equal(failed.diagnostics.phases[0].failure, 'operation_failed')
+  assert.equal(JSON.stringify(failed).includes('SECRET'), false)
+})

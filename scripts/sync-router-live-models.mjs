@@ -143,6 +143,42 @@ export async function syncOnce(options) {
   throw fail('settings_conflict')
 }
 
+
+const publicSyncFailures = ['provider_mismatch', 'settings_read_only', 'provider_missing_or_ambiguous', 'settings_conflict', 'backup_failed', 'app_auth_unavailable', 'app_auth_failed']
+function operationFailure(error) {
+  if (error?.name === 'TimeoutError') return 'timeout'
+  if (['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'].includes(error?.cause?.code ?? error?.code)) return 'network_failed'
+  if ([...publicSyncFailures, 'settings/conflict', 'settings_refused', 'settings_filter_unsupported', 'rpc_invalid', 'http_failed', 'body_missing', 'body_too_large'].includes(error?.code)) return error.code
+  return 'operation_failed'
+}
+
+/** Run the normal update with bounded stage timings and allowlisted failures.
+ * @param options Same live inputs as syncOnce; no arguments, response bodies, paths or secrets enter diagnostics.
+ * @returns The normal publication result, or a failed confirmation without selectable choices, with sanitized timings.
+ */
+export async function syncMeasured(options) {
+  const started = Date.now(); const phases = []
+  const measure = (phase, fn) => async (...args) => {
+    const start = Date.now(); let failure
+    try { return await fn(...args) }
+    catch (error) { failure = operationFailure(error); throw error }
+    finally { if (phases.length < 32) phases.push({ phase, ms: Date.now() - start, ok: failure === undefined, ...(failure === undefined ? {} : { failure }) }) }
+  }
+  const rpc = (method, args) => measure(method === 'settings/mutate' ? 'settings/mutate' : 'settings/describe', options.rpc)(method, args)
+  let result
+  try {
+    result = await syncOnce({ ...options, rpc,
+      describeSettings: measure('settings/describe', options.describeSettings ?? (() => options.rpc('settings/describe', {}))),
+      fetchCatalog: measure('fetchCatalog', options.fetchCatalog),
+      backup: measure('profileBackup', options.backup),
+      ...(options.savePreferences ? { savePreferences: measure('savePreferences', options.savePreferences) } : {}),
+    })
+  } catch (error) {
+    result = { ok: false, error: publicSyncFailures.includes(error?.code) ? error.code : 'app_unavailable', synchronizedAt: new Date((options.now ?? Date.now)()).toISOString() }
+  }
+  return { ...result, diagnostics: { elapsedMs: Date.now() - started, phases } }
+}
+
 async function boundedJson(response) {
   if (!response.ok) { await response.body?.cancel(); throw Object.assign(fail('http_failed'), { httpStatus: response.status }) }
   const reader = response.body?.getReader(); if (!reader) throw fail('body_missing')
@@ -290,13 +326,7 @@ export async function main(defaults = {}, argv = process.argv.slice(2)) {
       let requestId
       try { const request = JSON.parse(await readFile(requestFile, 'utf8')); if (typeof request.requestId === 'string') requestId = request.requestId }
       catch (error) { if (error.code !== 'ENOENT') throw fail('request_invalid') }
-      let state
-      try {
-        state = await syncOnce({ ...transport, describeSettings, modelPreferences, savePreferences, catalogUrl: settings['catalog-url'], provider: settings.provider ?? '9router', intervalMs: interval, backup: profileBackup(path.join(home, 'profiles/web/cordis.patch.yml'), settings['backup-dir'] ?? path.join(home, 'backups/router-live-catalog')) })
-      } catch (error) {
-        const allowed = ['provider_mismatch', 'settings_read_only', 'provider_missing_or_ambiguous', 'settings_conflict', 'backup_failed', 'app_auth_unavailable', 'app_auth_failed']
-        state = { ok: false, error: allowed.includes(error.code) ? error.code : 'app_unavailable', synchronizedAt: new Date().toISOString() }
-      }
+      const state = await syncMeasured({ ...transport, describeSettings, modelPreferences, savePreferences, catalogUrl: settings['catalog-url'], provider: settings.provider ?? '9router', intervalMs: interval, backup: profileBackup(path.join(home, 'profiles/web/cordis.patch.yml'), settings['backup-dir'] ?? path.join(home, 'backups/router-live-catalog')) })
       if (requestId) state.completedRequest = requestId
       await atomicJson(stateFile, state)
       if (!settings.watch) { process.stdout.write(JSON.stringify(state) + '\n'); return state }
