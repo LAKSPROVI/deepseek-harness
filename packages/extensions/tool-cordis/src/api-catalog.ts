@@ -2679,10 +2679,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Host service backing the generated `ctx.remote.settings` namespace. Every remote read uses `redactSecrets: true`, so a `role(\'secret\')` field cannot ride a response. Writes expose the settings service\'s merge, replacement, and path-addressed operations, and classify every provider refusal as `settings/conflict` or `settings/rejected` with the service\'s message.',
     methods: [
       {
-        signature: '@Remote describe(): SettingsDescribeValue',
+        signature: '@Remote describe(ns?: string): SettingsDescribeValue',
         description: 'Describe every registered namespace for a configuration page: redacted layered values plus the serialized schema the page renders its form from.',
-        parameters: [],
-        returns: 'provider writability, local-document presence, and one view per namespace.',
+        parameters: [{ name: 'ns', description: 'optional entry key; omitted reads all namespaces, missing keys return no views.' }],
+        returns: 'provider writability, local-document presence, and the selected redacted views.',
         throws: ['RemoteError when no settings provider is mounted.'],
       },
       {
@@ -7336,7 +7336,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SettingsDescribeOptions',
-    declaration: 'export interface SettingsDescribeOptions {\n    redactSecrets?: boolean;\n}',
+    declaration: 'export interface SettingsDescribeOptions {\n    redactSecrets?: boolean;\n    ns?: string;\n}',
   },
   {
     name: 'SettingsDescribeValue',

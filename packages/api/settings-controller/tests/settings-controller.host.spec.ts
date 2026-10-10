@@ -104,3 +104,17 @@ it('classifies document preparation failures and cancellation during opening', a
   abort = new AbortController()
   await expect(controller.openSettingsDocument(abort.signal)).rejects.toMatchObject({ code: 'gateway/cancelled' })
 })
+
+it('describes only the requested namespace with redaction and unchanged unrelated revisions', async () => {
+  const { controller } = await boot()
+  const before = controller.describe()
+  const first = before.namespaces.find(row => row.ns === 'first')!
+  const facts = ({ schema: _schema, ...rest }: typeof first) => rest
+  const scoped = controller.describe('first')
+  expect(scoped.writable).toBe(before.writable)
+  expect(scoped.namespaces.map(facts)).toEqual([facts(first)])
+  expect(JSON.stringify(controller.describe('first'))).not.toContain('private')
+  expect(controller.describe('missing').namespaces).toEqual([])
+  expect(() => controller.describe('')).toThrow('nonempty string')
+  expect(controller.describe().namespaces.map(facts)).toEqual(before.namespaces.map(facts))
+})

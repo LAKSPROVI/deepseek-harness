@@ -55,10 +55,38 @@ function providerView(document, provider, catalogUrl) {
   return { view, route }
 }
 
+/** Discover the provider namespace once, then request only its live redacted form.
+ * A removed namespace triggers fresh discovery; revisions and model evidence are never cached.
+ */
+export function createSettingsReader(rpc, provider = '9router') {
+  let ns
+  let supportsFilter = true
+  return async () => {
+    let document
+    try { document = await rpc('settings/describe', ns && supportsFilter ? { ns } : {}) }
+    catch (error) {
+      if (!ns || !supportsFilter || error.code !== 'settings_filter_unsupported') throw error
+      supportsFilter = false
+      document = await rpc('settings/describe', {})
+    }
+    if (!record(document) || !Array.isArray(document.namespaces)) throw fail('rpc_invalid')
+    let matches = document.namespaces.filter(view => record(view.value?.providers?.[provider]))
+    if (ns && matches.length === 0) {
+      ns = undefined
+      document = await rpc('settings/describe', {})
+      if (!record(document) || !Array.isArray(document.namespaces)) throw fail('rpc_invalid')
+      matches = document.namespaces.filter(view => record(view.value?.providers?.[provider]))
+    }
+    ns = matches.length === 1 && typeof matches[0].ns === 'string' ? matches[0].ns : undefined
+    return document
+  }
+}
+
 /** One revision-checked update. Unconfirmed listings remove stale selectable choices. */
 export async function syncOnce(options) {
   const { rpc, fetchCatalog, backup, provider = '9router', catalogUrl, now = Date.now } = options
-  let target = providerView(await rpc('settings/describe', {}), provider, catalogUrl)
+  const describeSettings = options.describeSettings ?? (() => rpc('settings/describe', {}))
+  let target = providerView(await describeSettings(), provider, catalogUrl)
   const preferences = new Map((options.modelPreferences ?? []).map(model => [model.id, model]))
   const remember = async () => { for (const model of target.route.models) preferences.set(model.id, model); await options.savePreferences?.([...preferences.values()]) }
   await remember()
@@ -74,7 +102,7 @@ export async function syncOnce(options) {
         await rpc('settings/mutate', { ns: target.view.ns, expectedRevision: target.view.revision, ops: [{ op: 'set', path: ['providers', provider, 'models'], value: models }] })
       } catch (error) {
         if (error.code !== 'settings/conflict' || attempt === 2) throw error
-        target = providerView(await rpc('settings/describe', {}), provider, catalogUrl)
+        target = providerView(await describeSettings(), provider, catalogUrl)
         await remember()
         continue
       }
@@ -128,9 +156,13 @@ export function createTransport({ appUrl, catalogUrl, launchLog, apiKey, timeout
       const request = () => fetch(new URL(`api/${method}`, app), { method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: app.origin }, body: JSON.stringify({ type: 'client-request', rpcId: randomUUID(), method, payload: { args } }), redirect: 'error', signal: AbortSignal.timeout(appTimeoutMs) })
       let response = await request()
       if (response.status === 401) { await response.body?.cancel(); await authenticate(); response = await request() }
+      if (method === 'settings/describe' && args.ns && response.status === 400) { await response.body?.cancel(); throw fail('settings_filter_unsupported') }
       const envelope = await boundedJson(response)
       if (envelope.type !== 'server-response' || !record(envelope.result)) throw fail('rpc_invalid')
-      if (envelope.result.ok !== true) throw fail(envelope.result.error?.code === 'settings/conflict' ? 'settings/conflict' : 'settings_refused')
+      if (envelope.result.ok !== true) {
+        if (method === 'settings/describe' && args.ns && envelope.result.error?.code === 'gateway/bad-request') throw fail('settings_filter_unsupported')
+        throw fail(envelope.result.error?.code === 'settings/conflict' ? 'settings/conflict' : 'settings_refused')
+      }
       return envelope.result.value
     },
   }
@@ -168,6 +200,7 @@ export async function main(defaults = {}, argv = process.argv.slice(2)) {
   if (!Number.isSafeInteger(appTimeoutMs) || appTimeoutMs <= 0 || appTimeoutMs > 30000) throw fail('app_timeout_invalid')
   const key = process.env[settings['api-key-env'] ?? 'ROUTER_API_KEY']
   const transport = createTransport({ appUrl: settings['app-url'], catalogUrl: settings['catalog-url'], launchLog: settings['launch-log'], apiKey: key, appTimeoutMs })
+  const describeSettings = createSettingsReader(transport.rpc, settings.provider ?? '9router')
   const preferencesFile = path.join(home, 'router-live-model-preferences.json')
   let modelPreferences = []
   try { modelPreferences = JSON.parse(await readFile(preferencesFile, 'utf8')); if (!Array.isArray(modelPreferences)) throw fail('preferences_invalid') }
@@ -228,7 +261,7 @@ export async function main(defaults = {}, argv = process.argv.slice(2)) {
       catch (error) { if (error.code !== 'ENOENT') throw fail('request_invalid') }
       let state
       try {
-        state = await syncOnce({ ...transport, modelPreferences, savePreferences, catalogUrl: settings['catalog-url'], provider: settings.provider ?? '9router', intervalMs: interval, backup: profileBackup(path.join(home, 'profiles/web/cordis.patch.yml'), settings['backup-dir'] ?? path.join(home, 'backups/router-live-catalog')) })
+        state = await syncOnce({ ...transport, describeSettings, modelPreferences, savePreferences, catalogUrl: settings['catalog-url'], provider: settings.provider ?? '9router', intervalMs: interval, backup: profileBackup(path.join(home, 'profiles/web/cordis.patch.yml'), settings['backup-dir'] ?? path.join(home, 'backups/router-live-catalog')) })
       } catch (error) {
         const allowed = ['provider_mismatch', 'settings_read_only', 'provider_missing_or_ambiguous', 'settings_conflict', 'backup_failed', 'app_auth_unavailable', 'app_auth_failed']
         state = { ok: false, error: allowed.includes(error.code) ? error.code : 'app_unavailable', synchronizedAt: new Date().toISOString() }
