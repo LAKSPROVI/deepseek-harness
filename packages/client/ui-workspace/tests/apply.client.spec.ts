@@ -1,3 +1,4 @@
+import { SetSessionStatusMenuItem, SessionStatusDialog } from '../src/client/session-actions/SetSessionStatus.tsx'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
@@ -178,6 +179,43 @@ function viewInstance(slots: SlotRegistry) {
 const settled = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
 
 describe('ui-workspace apply', () => {
+  it('retains an existing Portuguese language when the Workspace contribution unloads', async () => {
+    const b = await bench()
+    onTestFinished(() => b.ctx.fiber.dispose())
+    const removeLanguage = b.locale.addLanguage({ id: 'pt-BR', label: 'Português (Brasil)', fallback: 'en' })
+    const plugin = b.ctx.plugin({ inject: [...inject], apply })
+    await plugin.await()
+    expect(b.locale.getLocale().locales.filter(locale => locale.id === 'pt-BR')).toHaveLength(1)
+    b.locale.setLocale('pt-BR')
+    expect(b.locale.bind('workspace')('status.idle')).toBe('Ociosa')
+    await plugin.dispose()
+    expect(b.locale.getLocale().locales.map(locale => locale.id)).toContain('pt-BR')
+    expect(b.locale.bind('workspace')('status.idle')).toBe('status.idle')
+    removeLanguage()
+  })
+  it('keeps English Session statuses and preserves Portuguese as a disposable language contribution', async () => {
+    const b = await bench()
+    onTestFinished(() => b.ctx.fiber.dispose())
+    const plugin = b.ctx.plugin({ inject: [...inject], apply })
+    await plugin.await()
+    expect(b.locale.getLocale().locales.map(locale => locale.id)).toContain('pt-BR')
+    const translate = b.locale.bind('workspace')
+    const statuses = [
+      ['status.idle', 'Idle', 'Ociosa'],
+      ['status.waitingApproval', 'Waiting for approval', 'Aguardando aprovação'],
+      ['status.compact.approval', 'Approval', 'Aprovação'],
+    ] as const
+    b.locale.setLocale('en')
+    for (const [key, english] of statuses) expect(translate(key)).toBe(english)
+    b.locale.setLocale('pt-BR')
+    for (const [key, , portuguese] of statuses) expect(translate(key)).toBe(portuguese)
+    expect(translate('notes.button.label')).toBe('Anotações')
+    expect(translate('context.newSession.button')).toBe('Novo Chat')
+    await plugin.dispose()
+    expect(b.locale.getLocale().locales.map(locale => locale.id)).not.toContain('pt-BR')
+    expect(b.locale.getLocale().active).toBe('en')
+  })
+
   it('keeps the host Loader entry inert', () => {
     expect(hostApply).not.toThrow()
   })
@@ -218,9 +256,9 @@ describe('ui-workspace apply', () => {
     await Promise.resolve()
     expect(after.slots.entries('conversation.hero.workspace')[0]!.component).toBe(WorkspacePicker)
     // The row actions follow the browser's own declaration, whenever it lands.
-    expect(after.slots.entries(MENU_ITEM)).toHaveLength(4)
+    expect(after.slots.entries(MENU_ITEM)).toHaveLength(5)
     expect(after.slots.entries(ROW_ACTION)).toHaveLength(2)
-    expect(after.slots.entries('shell.overlay')).toHaveLength(3)
+    expect(after.slots.entries('shell.overlay')).toHaveLength(4)
   })
 
   it('declares the two Session row lists and registers the shipped actions and overlay surfaces into them', async () => {
@@ -239,6 +277,7 @@ describe('ui-workspace apply', () => {
     expect(rows(MENU_ITEM)).toEqual([
       ['pin', 100, PinSessionMenuItem, 'workspace'],
       ['rename', 200, RenameSessionMenuItem, 'workspace'],
+      ['set-status', 250, SetSessionStatusMenuItem, 'workspace'],
       ['fork', 300, ForkSessionMenuItem, 'workspace'],
       ['archive', 400, ArchiveSessionMenuItem, 'workspace'],
     ])
@@ -248,6 +287,7 @@ describe('ui-workspace apply', () => {
     ])
     expect(rows('shell.overlay')).toEqual([
       ['workspace.session-rename', undefined, SessionRenameDialog, 'workspace'],
+      ['workspace.session-set-status', undefined, SessionStatusDialog, 'workspace'],
       ['workspace.session-archive', undefined, SessionArchiveConfirmDialog, 'workspace'],
       ['workspace.row-toast', undefined, RowActionToast, 'workspace'],
     ])
@@ -596,9 +636,9 @@ describe('ui-workspace apply', () => {
     declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace', 'shell.overlay')
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(b.slots.entries(MENU_ITEM)).toHaveLength(4)
+    expect(b.slots.entries(MENU_ITEM)).toHaveLength(5)
     expect(b.slots.entries(ROW_ACTION)).toHaveLength(2)
-    expect(b.slots.entries('shell.overlay')).toHaveLength(3)
+    expect(b.slots.entries('shell.overlay')).toHaveLength(4)
     await fiber.dispose()
     expect(b.slots.entries('sidebar.workspaces')).toHaveLength(0)
     expect(b.slots.entries('conversation.hero.workspace')).toHaveLength(0)

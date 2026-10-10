@@ -55,7 +55,7 @@ import { RowActionToast } from './session-actions/RowActionToast.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
 import { SessionContextActions, type SessionContextActionsInjected } from './header/SessionContextActions.tsx'
 import { SessionNotesPopover } from './header/SessionNotesPopover.tsx'
-import { en, zh, type WorkspaceKey } from './locales.ts'
+import { en, ptBR, zh, type WorkspaceKey } from './locales.ts'
 
 export type { UiWorkspace } from './navigation.ts'
 export type {
@@ -125,6 +125,12 @@ export function apply(ctx: Context): void {
   )
   ctx.slots.provideRoot({ hooks: { workspaces: workspaces.list } })
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workspace: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, 'pt-BR', ptBR), 'ui-workspace: Portuguese dictionary')
+  if (!ctx.locale.getLocale().locales.some(locale => locale.id.toLowerCase() === 'pt-br')) {
+    ctx.effect(() => ctx.locale.addLanguage({
+      id: 'pt-BR', label: 'Português (Brasil)', fallback: 'en',
+    }), 'ui-workspace: Portuguese language')
+  }
   const shortcutControls = createWorkspaceShortcutControls()
 
   const searchSessions: WorkspaceBrowserInjected['searchSessions'] = async (query, signal) => {
@@ -356,7 +362,7 @@ export function apply(ctx: Context): void {
     {
       name: 'conversation.session.header.utilities',
       id: 'workspace-session-notes',
-      order: 10,
+      order: -2,
       locale: NS,
     },
     SessionNotesPopover,

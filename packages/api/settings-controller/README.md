@@ -29,6 +29,8 @@ Mount this package as a Loader entry in a profile that serves browser configurat
 
 `settings.describe()` returns deployment facts and every namespace under `redactSecrets: true`. `settings.update`, `settings.replace`, and `settings.mutate` expose the settings service's three write operations and return the namespace's new redacted view; stale writes use `settings-conflict` and other provider refusals use `settings-rejected`.
 
+`settings.describe(ns)` optionally restricts the read to one profile entry, preserving redaction and other entries' revisions. A missing entry returns no namespace views; an empty key is rejected.
+
 `settings.openSettingsDocument()` prepares the provider-owned document and opens it with the native text editor; it accepts no browser-supplied filesystem target.
 
 -----

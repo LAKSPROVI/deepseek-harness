@@ -1002,6 +1002,17 @@ export class ToolRuntime extends Service {
   }
 
   /**
+   * Count schemas contributed by this registry under the scope's restrictions and presentation.
+   * This read does not run prompt waterfalls or change an Agent's assembled model selection.
+   * @param scope - viewing Agent scope; omission uses the deployment's global presentation.
+   * @returns the effective schema count, including the PTC executor when exposed.
+   * @throws Error when the configured PTC runtime is missing or unsupported.
+   */
+  wireToolCount(scope?: ScopeKey): number {
+    return this.wireSchemas(scope).schemas.length
+  }
+
+  /**
    * Build one scope's wire schemas and names for prompt-order validation.
    * Restrictions do not make known tools invalid, but a mode collapse does.
    */
