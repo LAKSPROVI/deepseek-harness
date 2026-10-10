@@ -3,17 +3,17 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/user/router-live-catalog.md
 /:
-  en: b4df65e88846fd91
-  zh: d446cee24eb06957
+  en: d815592ea7c70065
+  zh: c220f0cad0481ff2
 /automatically-refresh-a-router-catalog:
-  en: 1d22d3f40ea1facd
-  zh: c39fe2972e8e443c
+  en: db6ee6717e2f17e4
+  zh: 1a22281c3ad15ba7
 /automatically-refresh-a-router-catalog/start-synchronization:
   en: fd55d3821da4db64
   zh: 930de3eeb16f43ed
 /automatically-refresh-a-router-catalog/understand-availability:
-  en: 976f7294e6cbd28e
-  zh: 7dcff3dc97f21709
+  en: 360c47e86e104674
+  zh: e8211b8e34c7f1be
 /automatically-refresh-a-router-catalog/recover-synchronization:
-  en: 9ce3da54ddd280cf
-  zh: ecaf9704913a41a8
+  en: 8bef922e83d15fdb
+  zh: 72f615fe003a4341

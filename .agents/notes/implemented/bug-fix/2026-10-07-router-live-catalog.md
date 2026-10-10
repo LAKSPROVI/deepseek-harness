@@ -25,3 +25,6 @@ The watcher polls every 30 seconds by default and handles manual refresh request
 ## Consequences
 
 A temporary catalog failure can leave no selectable models until recovery. Existing session selections remain visible as unavailable rather than being rerouted. Refresh has a bounded polling delay and does not guarantee future provider uptime. A stopped local backend cannot receive changes until it returns. [Usage](../../../../docs/user/router-live-catalog.md) and the CLI transport, live-configuration, and status-reader regressions define the supported flow.
+
+
+Protocol correction: synchronization follows the existing route API (`anthropic-messages` or `openai-completions`) and requires that protocol's proofs. A concurrent protocol edit refetches evidence. One transient network/timeout/5xx retry uses a new response; exhausted failure withdraws choices, preserving expiry and local lease. This permits the OpenAI path that passed the Ghost Opus native blind read while retaining revision checks and per-model options. Deployment and protocol changes still require the installation's operational approval.

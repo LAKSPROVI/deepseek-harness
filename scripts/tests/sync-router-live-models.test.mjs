@@ -57,7 +57,7 @@ test('does not duplicate writes when the proven projection is unchanged', async 
   await syncOnce(args); assert.equal((await syncOnce(args)).changed, false); assert.equal(fixture.mutations.length, 1)
 })
 test('refuses a different protocol or catalog endpoint before changing the provider', async () => {
-  for (const change of [{ api: 'openai-completions' }, { baseURL: 'https://unrelated.example/v1' }]) {
+  for (const change of [{ api: 'openai-responses' }, { baseURL: 'https://unrelated.example/v1' }]) {
     const fixture = host(); Object.assign(fixture.view.value.providers['9router'], change)
     await assert.rejects(syncOnce({ ...options(fixture), fetchCatalog: async () => catalog([]) }), /provider_mismatch/); assert.equal(fixture.mutations.length, 0)
   }
@@ -259,4 +259,114 @@ test('recognizes a legacy generated descriptor refusal of ns without retaining s
   const reader = createSettingsReader(rpc)
   await reader(); await reader(); await reader()
   assert.deepEqual(reads, [{}, { ns: 'llm-pi-ai' }, {}, {}])
+})
+
+
+const openaiModel = id => model(id, {
+  protocols: { openai: 'proved' },
+  capabilities: { text: 'proved', tools: 'proved', openaiTools: 'proved', openaiStream: 'proved' },
+})
+
+test('uses fresh OpenAI tools/stream proof for an OpenAI route and refuses unsupported protocols', () => {
+  const rows = [openaiModel('openai'), model('anthropic'), openaiModel('expired')]
+  rows[2].x_9r.expires_at = new Date(now).toISOString()
+  assert.deepEqual(selectModels(catalog(rows), [], now, 'openai-completions').map(row => row.id), ['openai'])
+  assert.throws(() => selectModels(catalog(rows), [], now, 'openai-responses'), /provider_mismatch/)
+})
+
+test('synchronizes a configured OpenAI route without changing its options', async () => {
+  const fixture = host(); fixture.view.value.providers['9router'].api = 'openai-completions'
+  const before = structuredClone(fixture.view.value.providers['9router']); const calls = []
+  const result = await syncOnce({ ...options(fixture), fetchCatalog: async api => { calls.push(api); return catalog([openaiModel('opus'), model('wrong-protocol')]) } })
+  assert.equal(result.ok, true); assert.deepEqual(result.catalogModelIds, ['opus'])
+  assert.deepEqual(calls, ['openai-completions'])
+  const { models: ignored, ...remaining } = fixture.view.value.providers['9router']
+  const { models: prior, ...expected } = before; assert.deepEqual(remaining, expected)
+})
+
+test('refetches protocol-specific evidence when a concurrent edit changes the route API', async () => {
+  const fixture = host(); const original = fixture.rpc; const calls = []; let conflict = true
+  const rpc = async (method, args) => {
+    if (method === 'settings/mutate' && conflict) {
+      conflict = false; fixture.view.value.providers['9router'].api = 'openai-completions'; fixture.view.revision++
+      throw Object.assign(new Error('fixture'), { code: 'settings/conflict' })
+    }
+    return original(method, args)
+  }
+  const result = await syncOnce({ ...options(fixture), rpc, fetchCatalog: async api => { calls.push(api); return catalog([api === 'openai-completions' ? openaiModel('new') : model('old-protocol')]) } })
+  assert.deepEqual(result.catalogModelIds, ['new']); assert.deepEqual(calls, ['anthropic-messages', 'openai-completions'])
+  assert.deepEqual(fixture.view.value.providers['9router'].models.map(row => row.id), ['new'])
+})
+
+test('queries OpenAI proof fields over the authenticated catalog transport', async t => {
+  const { createTransport } = await import('../sync-router-live-models.mjs'); const calls = []
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push(new URL(url)); assert.equal(options.headers.authorization, 'Bearer fixture')
+    return new Response(JSON.stringify(catalog([openaiModel('opus')])))
+  })
+  const transport = createTransport({ appUrl: 'http://127.0.0.1:3080/', catalogUrl: 'https://router.example/v1', launchLog: 'unused', apiKey: 'fixture' })
+  await transport.fetchCatalog('openai-completions')
+  assert.equal(calls[0].searchParams.get('protocol'), 'openai')
+  assert.equal(calls[0].searchParams.get('capability'), 'text,tools,openaiTools,openaiStream')
+})
+
+test('withdraws OpenAI choices on network failure without changing protocol or widening lease', async () => {
+  const fixture = host(); fixture.view.value.providers['9router'].api = 'openai-completions'
+  const result = await syncOnce({ ...options(fixture), fetchCatalog: async () => { throw new Error('private fixture') } })
+  assert.equal(result.ok, false); assert.deepEqual(fixture.view.value.providers['9router'].models, [])
+  assert.equal(fixture.view.value.providers['9router'].api, 'openai-completions')
+  assert.ok(Date.parse(result.validUntil) - Date.parse(result.synchronizedAt) <= 60000)
+})
+
+
+test('retries one transient catalog timeout using new proof without extending lease', async () => {
+  const fixture = host(); let calls = 0
+  const result = await syncOnce({ ...options(fixture), fetchCatalog: async () => {
+    if (++calls === 1) throw Object.assign(new Error('private fixture'), { name: 'TimeoutError' })
+    return catalog([model('fresh')])
+  } })
+  assert.equal(calls, 2); assert.equal(result.ok, true); assert.equal(result.catalogAttempts, 2)
+  assert.deepEqual(result.catalogModelIds, ['fresh'])
+  assert.ok(Date.parse(result.validUntil) - Date.parse(result.synchronizedAt) <= 60000)
+})
+
+test('withdraws choices after two transient failures and sanitizes diagnostics', async () => {
+  const fixture = host(); let calls = 0
+  const result = await syncOnce({ ...options(fixture), fetchCatalog: async () => {
+    calls++; throw Object.assign(new Error('SECRET private fixture'), { name: 'TimeoutError' })
+  } })
+  assert.equal(calls, 2); assert.equal(result.ok, false); assert.equal(result.catalogAttempts, 2)
+  assert.equal(result.catalogFailureReason, 'catalog_timeout'); assert.deepEqual(result.catalogModelIds, [])
+  assert.equal(JSON.stringify(result).includes('SECRET'), false)
+})
+
+test('does not retry authentication, invalid proof, or generic application errors', async () => {
+  for (const failure of [Object.assign(new Error('SECRET'), { code: 'http_failed', httpStatus: 401 }), new Error('SECRET'), null]) {
+    const fixture = host(); let calls = 0
+    const result = await syncOnce({ ...options(fixture), fetchCatalog: async () => {
+      calls++; if (failure) throw failure; return { data: [model('unsafe')] }
+    } })
+    assert.equal(calls, 1); assert.equal(result.ok, false); assert.deepEqual(result.catalogModelIds, [])
+    assert.equal(JSON.stringify(result).includes('SECRET'), false)
+  }
+})
+
+test('retries catalog HTTP 503 but excludes a proof that expired during the retry', async () => {
+  const fixture = host(); let calls = 0; let tick = now
+  const row = model('expired')
+  const result = await syncOnce({ ...options(fixture), now: () => tick, fetchCatalog: async () => {
+    if (++calls === 1) throw Object.assign(new Error('fixture'), { code: 'http_failed', httpStatus: 503 })
+    tick += 60000; return catalog([row])
+  } })
+  assert.equal(calls, 2); assert.equal(result.ok, true); assert.deepEqual(result.catalogModelIds, [])
+})
+
+test('catalog HTTP failure exposes status without response body or credentials', async t => {
+  const { createTransport } = await import('../sync-router-live-models.mjs')
+  t.mock.method(globalThis, 'fetch', async () => new Response('SECRET upstream body', { status: 503 }))
+  const transport = createTransport({ appUrl: 'http://127.0.0.1:3080/', catalogUrl: 'https://router.example/v1', launchLog: 'unused', apiKey: 'fixture' })
+  await assert.rejects(transport.fetchCatalog(), error => {
+    assert.equal(error.code, 'http_failed'); assert.equal(error.httpStatus, 503)
+    assert.equal(error.message.includes('SECRET'), false); return true
+  })
 })
