@@ -28,3 +28,5 @@ A temporary catalog failure can leave no selectable models until recovery. Exist
 
 
 Protocol correction: synchronization follows the existing route API (`anthropic-messages` or `openai-completions`) and requires that protocol's proofs. A concurrent protocol edit refetches evidence. One transient network/timeout/5xx retry uses a new response; exhausted failure withdraws choices, preserving expiry and local lease. This permits the OpenAI path that passed the Ghost Opus native blind read while retaining revision checks and per-model options. Deployment and protocol changes still require the installation's operational approval.
+
+Scoped reads pass the namespace into ConfigEditor before inherited-layer composition and detached-value cloning. Full reads still enumerate all unique entries; missing ids return no rows. This removes unrelated profile work left behind by filtering only the final Settings descriptors. Real-profile regressions verify matching inheritance, secret redaction, missing ids, and composition counts. This bounds unnecessary work; it does not certify live renewal latency or upstream tool behavior.
