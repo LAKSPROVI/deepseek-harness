@@ -1,6 +1,6 @@
 ---
-description: "Enable experimental speech input from the plugin manager."
-kind: "package-reference"
+description: "Add local SenseVoice speech input as an explicitly installed profile layer."
+kind: "package-bundle"
 ---
 
 # @deepseek-ai/dsh-experimental-voice-input-bundle
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This optional bundle composes a speech Service Definition, local SenseVoice provider, authenticated Remote and browser microphone control. Shipped profiles leave it disabled.
+This optional bundle composes a speech Service Definition, local SenseVoice provider, authenticated Remote and browser microphone control. Shipped profiles do not include it; install it explicitly into a profile without replacing the native voice input.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ This optional bundle composes a speech Service Definition, local SenseVoice prov
 <a id="use-this-package"></a>
 ## Use this package
 
-Open Plugins in the Web sidebar and enable Voice Input, marked by a blue waveform icon. If models need preparation, a dialog offers Go to setup or Later; Go to setup opens the bundle details. Complete caches need no setup prompt. In the details, choose Download and prepare; the collapsed current-step summary expands to the complete step list. Downloads report actual bytes; verification and loading show elapsed time. Once ready, click the microphone between the model selector and Send, then Stop to insert a transcript. Bundle details store the recognizer and language through the Settings service. Disabling the bundle cancels active work; cached assets remain on disk.
+Install this local-recognition bundle explicitly with `dsh plugin --profile web add @deepseek-ai/dsh-experimental-voice-input-bundle`; it is not shipped in the default plugin list. Open Plugins in the Web sidebar and enable Voice Input, marked by a blue waveform icon. If models need preparation, a dialog offers Go to setup or Later; Go to setup opens the bundle details. Complete caches need no setup prompt. In the details, choose Download and prepare; the collapsed current-step summary expands to the complete step list. Downloads report actual bytes; verification and loading show elapsed time. Once ready, click the microphone between the model selector and Send, then Stop to insert a transcript. Bundle details store the recognizer and language through the Settings service. Disabling the bundle cancels active work; cached assets remain on disk.
 
 -----
 
@@ -35,7 +35,7 @@ Open Plugins in the Web sidebar and enable Voice Input, marked by a blue wavefor
 <details>
 <summary>Maintainer details — click to expand</summary>
 
-The static `cordis.patch.yml` adds the four voice rows, selects `sensevoice-local` as the default recognizer and supplies the provider cache directory with `dshHomePath`. Optional-bundle installation makes the package available to management without selecting it in default profiles. The browser contribution owns its generated Remote mount; stable API Remotes do not import experimental code.
+The static `cordis.patch.yml` adds the four voice rows, selects `sensevoice-local` as the default recognizer and supplies the provider cache directory with `dshHomePath`. Its `dsh.bundle.patch` declaration, exported and packaged with the YAML file, makes explicit installations manageable. The `ui-sensevoice-input` row remains distinct from the shipped `ui-voice-input` row for Groq transcription; both keep their own Remote namespaces and composer slots. The browser contribution owns its generated Remote mount; stable API Remotes do not import experimental code.
 
 </details>
 
@@ -62,7 +62,7 @@ No direct effect; ordinary submission owns the message content.
 <a id="known-limitations-and-deferred-work"></a>
 
 - The initial bundle supplies one local recognizer. Additional providers register with the same service under distinct ids; cloud recognition requires an explicit new provider and credential configuration. The bundle does not add a model tool or change the agent loop.
-- Installing dsh also installs `sherpa-onnx-node` and its platform-specific native runtime, including ONNX Runtime, even when this bundle is disabled. Runtime installation adds disk and download costs separate from the models downloaded by Download and prepare; the native package size varies by platform and version.
+- Installing this bundle also installs `sherpa-onnx-node` and its platform-specific native runtime, including ONNX Runtime, even when this bundle is disabled. Runtime installation adds disk and download costs separate from the models downloaded by Download and prepare; the native package size varies by platform and version.
 
 -----
 

@@ -20,6 +20,9 @@ pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps 
 
 显式滚动使用 `support.ts` 的 `scrollIntoView`：旧元素脱离 DOM 时重新解析 locator，并在同一个浏览器任务中检查连接状态、执行原生滚动。各场景保留滚动后的可见性与几何断言。
 
+seeded-history 场景验证有意采用的冷启动八条消息窗口（最多 500 条消息，同时保留两个 turn），随后按每页 50 条加载更早历史。首个窗口断言遵循这一打开契约；分页、历史提示的可见性和工具详情仍分别验证。
+
+ARIA 快照只替换已知的 workspace 根目录及场景显式提供的 home、fixtures 等别名。Windows 原生路径与 JSON 转义路径使用相同的占位符和路径分隔符；其他路径、工具参数和序列化引号的转义保留原始内容。剪贴板相等断言仅将 Windows 原生 CRLF 统一为 LF，仍比较完整的复制文本。
 ## 这些是 Host 面的测试
 
 它们在根 `tsconfig.host.json` 中做类型检查，而不在 Client aggregate 中，因为它们直接读取 Host 服务：`ctx.connection`、Host 侧 `SessionStore` 与 `ctx.sessionProjectionCache`。运行时驱动浏览器并不使一个文件成为 Client 程序的一部分——两个 face 在相同的键上以不同服务合并 Cordis `Context`，因此单个程序无法同时看见两者。把这些文件挪进 Client aggregate 会让每一处 Host 服务访问都无法编译。

@@ -330,8 +330,8 @@ describe('web e2e: resident question composer round trip', () => {
 
     const selectedRow = page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]')
     await expect.poll(() => selectedRow.locator('[data-state="warning"]').count(), { timeout: 10_000 }).toBe(1)
-    await expect.poll(() => selectedRow.getByText('Aguardando resposta', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
-    await expect.poll(() => selectedRow.getByText('Responder', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => selectedRow.getByText('Waiting for answer', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => selectedRow.getByText('Answer', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
     expect(await selectedRow.getByText('now', { exact: true }).count()).toBe(0)
 
     if (MODE !== 'record') {

@@ -1035,9 +1035,10 @@ fileRequestText(ref: FileAttachmentRef): string
  * does not constrain core routing. Catalog-driven entry points may restrict
  * selection and submission to the advertised models.
  * @param provider - registered provider route to inspect.
- * @returns detached model metadata in adapter-preferred order.
+ * @param wireToolCount - schemas visible to this caller; omission reads the global tool presentation.
+ * @returns detached model metadata in adapter-preferred order, excluding incompatible router routes.
  */
-async listModels(provider: string): Promise<LlmModelInfo[]>
+async listModels(provider: string, wireToolCount?: number): Promise<LlmModelInfo[]>
 
 /**
  * Resolve and validate all metadata from the adapter that owns one exact
@@ -1098,12 +1099,12 @@ Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
 
 #### `llm/adapters-updated` — emit
 
-The provider topology changed: an adapter registered or unregistered routes, or the configurable-provider directory gained or lost entries. This payload-free registry notification fires at each commit point (including registration disposal); consumers re-read `listProviders()`, `listModels()`, or `listConfigurableProviders()` for the new state. Observer failures are contained and cannot veto the registry mutation.
+Provider topology or model eligibility changed: adapter routes, configurable-provider entries, or prompt/tool presentation changed. This payload-free registry notification fires at each commit point (including registration disposal); consumers re-read `listProviders()`, `listModels()`, or `listConfigurableProviders()` for the new state. Observer failures are contained and cannot veto the registry mutation.
 
 ```ts cordis-catalog
 /**
- * The provider topology changed: an adapter registered or unregistered
- * routes, or the configurable-provider directory gained or lost entries.
+ * Provider topology or model eligibility changed: adapter routes,
+ * configurable-provider entries, or prompt/tool presentation changed.
  * This payload-free registry notification fires at each commit point
  * (including registration disposal); consumers re-read `listProviders()`,
  * `listModels()`, or `listConfigurableProviders()` for the new state.

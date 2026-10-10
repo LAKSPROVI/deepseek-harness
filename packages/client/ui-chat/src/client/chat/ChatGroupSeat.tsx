@@ -136,6 +136,7 @@ export const ChatGroupSeat = memo(function ChatGroupSeat({ groupKey, useChatGrou
   const { expanded: open, setExpanded: setOpen } = useDisclosure()
   const firstKey = members?.[0]?.key ?? ''
   const presentation = props.useChatNodeProcess(firstKey)
+  const anchorSeq = props.useChatNode(firstKey, node => node?.anchorSeq)
   const turnLocation = props.useChatNode(firstKey, (node) => {
     const location = node?.location
     return location?.kind === 'turn' || location?.kind === 'step' ? location.turn : undefined
@@ -173,6 +174,7 @@ export const ChatGroupSeat = memo(function ChatGroupSeat({ groupKey, useChatGrou
   return (
     <div ref={rootRef} className={css.root} data-chat-group-key={groupKey}
       data-chat-flow-key={groupKey} data-chat-anchor-key={`group:${groupKey}`} data-chat-turn={turn}
+      data-chat-anchor-seq={anchorSeq}
       data-chat-paging-anchor={grouped && !open || undefined}
       data-step-process data-group-expanded-mode={!grouped || undefined}>
       <div hidden={!grouped}>

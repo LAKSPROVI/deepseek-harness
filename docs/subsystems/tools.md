@@ -522,6 +522,15 @@ Tool registry and execution pipeline. Scoped registrations shadow globals; one v
 presentAs(mode: ToolPresentationMode): () => void
 
 /**
+ * Count schemas contributed by this registry under the scope's restrictions and presentation.
+ * This read does not run prompt waterfalls or change an Agent's assembled model selection.
+ * @param scope - viewing Agent scope; omission uses the deployment's global presentation.
+ * @returns the effective schema count, including the PTC executor when exposed.
+ * @throws Error when the configured PTC runtime is missing or unsupported.
+ */
+wireToolCount(scope?: ScopeKey): number
+
+/**
  * Register globally or in the calling agent scope. Scoped tools shadow
  * globals; duplicates within one layer and the reserved `run_code` name fail.
  * @param definition - tool schema, execution, and optional finalization/presentation callbacks.

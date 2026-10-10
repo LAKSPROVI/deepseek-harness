@@ -310,3 +310,38 @@ describe('request-level dynamic profiles', () => {
     expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(before)
   })
 })
+
+it('withdraws and restores a declared gateway catalog without replacing its configuration', async () => {
+  const ctx = await boot(await home(), { providers: { '9router': { api: 'anthropic-messages', baseURL: 'https://router.test/v1', apiKeyEnv: 'PI_DYNAMIC_KEY', models: [{ id: 'A', input: ['text'] }] } } })
+  const settings = configurations.get(ctx)!
+  expect((await ctx.llm.listModels('9router')).map(model => model.id)).toEqual(['A'])
+  await settings.update({ providers: { '9router': { models: [] } } })
+  expect(await ctx.llm.listModels('9router')).toEqual([])
+  expect(settings.entry.options.config).toMatchObject({ providers: { '9router': { api: 'anthropic-messages', baseURL: 'https://router.test/v1', apiKeyEnv: 'PI_DYNAMIC_KEY' } } })
+  await settings.update({ providers: { '9router': { models: [{ id: 'B', input: ['text'] }] } } })
+  expect((await ctx.llm.listModels('9router')).map(model => model.id)).toEqual(['B'])
+})
+
+
+it('switches an existing router model from Anthropic to OpenAI on the actual HTTP path', async () => {
+  const dir = await home()
+  await writeFile(join(dir, '.credentials.yaml'), 'version: 1\nrefs:\n  PI_WIRE_SWITCH_KEY: fixture-key\n', { mode: 0o600 })
+  const server = await mockServer([
+    { status: 400, body: '{"error":{"type":"invalid_request_error","message":"fixture refusal"}}' },
+    { events: textEvents },
+  ])
+  const models = [{ id: 'wire-switch-fixture', input: ['text'] as Array<'text'> }]
+  const ctx = await boot(dir, { providers: { '9router': {
+    api: 'anthropic-messages', apiKeyEnv: 'PI_WIRE_SWITCH_KEY', baseURL: server.url, models,
+  } } })
+  const options = { provider: '9router', model: models[0]!.id, messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'fixture' }] }] }
+  const before = await assemble(ctx, options)
+  expect(before.finish.kind).toBe('error')
+  expect(server.paths).toHaveLength(1)
+  expect(new URL(server.paths[0]!, server.url).pathname).toMatch(/\/messages$/u)
+  await configurations.get(ctx)!.update({ providers: { '9router': { api: 'openai-completions' } } })
+  const after = await assemble(ctx, options)
+  expect(server.paths).toHaveLength(2)
+  expect(new URL(server.paths[1]!, server.url).pathname).toMatch(/\/chat\/completions$/u)
+  expect(after.message.content).toEqual([{ type: 'text', text: 'hello' }])
+})

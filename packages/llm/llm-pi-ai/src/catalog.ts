@@ -881,7 +881,7 @@ export function resolveRouteModels(
   const entries: readonly PiAiModelProfile[] = configured.length > 0
     ? configured
     : [...defaults.values()].map(model => ({ id: model.id, ...overrides[model.id] }))
-  if (entries.length === 0) {
+  if (entries.length === 0 && (request.api === undefined || request.baseURL === undefined)) {
     invalid(provider, 'resolves no models; the installed catalog does not describe this route, so its models'
       + ' must be listed in configuration')
   }

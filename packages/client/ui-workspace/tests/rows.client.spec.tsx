@@ -15,7 +15,7 @@ import {
   ProjectRowItem, SearchResultItem, SessionNodeItem as SessionNodeItemComponent,
 } from '../src/client/rows/Rows.tsx'
 import type { GroupNode, SearchResultNode, SessionNode } from '../src/client/tree.ts'
-import { en, zh } from '../src/client/locales.ts'
+import { en, ptBR, zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 
@@ -802,7 +802,7 @@ describe('workspace browser rows', () => {
       pendingInteraction, running: false, runningSubagentCount: 0, completed: false, updatedAt: 0,
       pinned: false, archived: false, hasActiveSchedule: false,
     }
-    render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()} t={tEn} />)
+    render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()} t={makeTranslate({ ...en, ...ptBR }, commonEn)} />)
     const row = screen.getByRole('treeitem')
     expect(screen.getByText('Needs input').nextElementSibling?.textContent).toBe(compactLabel)
     expect(screen.getByText('Needs input').nextElementSibling?.getAttribute('aria-hidden')).toBe('true')

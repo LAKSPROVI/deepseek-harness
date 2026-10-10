@@ -3,6 +3,9 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { remoteErrorOf, remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 import SettingsController from '../src/index.ts'
+import TypertRegistry, { type TypertContribution } from '../../../typert/registry/src/index.ts'
+import TypertGateway from '../../gateway/src/index.ts'
+import { TYPERT } from '../lib/typert.host.js'
 import { configurationFixture } from '../../../settings/settings/tests/configuration-fixture.ts'
 
 async function boot() {
@@ -103,4 +106,38 @@ it('classifies document preparation failures and cancellation during opening', a
   await expect(controller.openSettingsDocument(abort.signal)).rejects.toMatchObject({ code: 'gateway/cancelled' })
   abort = new AbortController()
   await expect(controller.openSettingsDocument(abort.signal)).rejects.toMatchObject({ code: 'gateway/cancelled' })
+})
+
+it('describes only the requested namespace with redaction and unchanged unrelated revisions', async () => {
+  const { controller } = await boot()
+  const before = controller.describe()
+  const first = before.namespaces.find(row => row.ns === 'first')!
+  const facts = ({ schema: _schema, ...rest }: typeof first) => rest
+  const scoped = controller.describe('first')
+  expect(scoped.writable).toBe(before.writable)
+  expect(scoped.namespaces.map(facts)).toEqual([facts(first)])
+  expect(JSON.stringify(controller.describe('first'))).not.toContain('private')
+  expect(controller.describe('missing').namespaces).toEqual([])
+  expect(() => controller.describe('')).toThrow('nonempty string')
+  expect(controller.describe().namespaces.map(facts)).toEqual(before.namespaces.map(facts))
+})
+
+it('dispatches the built settings descriptor through the real gateway and rejects a stale descriptor', async () => {
+  const { ctx } = await boot()
+  await ctx.plugin(TypertRegistry)
+  await ctx.plugin(TypertGateway)
+  const contribution = TYPERT as TypertContribution
+  const dispose = ctx.typert.register(contribution)
+  const read = (args: Record<string, unknown>) => ctx.typertGateway.invoke({ namespace: 'settings', method: 'describe', args })
+  const scoped = await read({ ns: 'first' }) as { namespaces: { ns: string }[] }
+  expect(scoped.namespaces.map(view => view.ns)).toEqual(['first'])
+  expect(JSON.stringify(scoped)).not.toContain('private')
+  await expect(read({ ns: 'missing' })).resolves.toMatchObject({ namespaces: [] })
+  await expect(read({})).resolves.toMatchObject({ writable: true })
+  await expect(read({ ns: 1 })).rejects.toMatchObject({ code: 'gateway/input-invalid' })
+  await dispose()
+  const legacy = { ...contribution, invocations: contribution.invocations.map(invocation => invocation.namespace === 'settings' && invocation.method === 'describe' ? { ...invocation, parameters: [] } : invocation) }
+  const removeLegacy = ctx.typert.register(legacy)
+  onTestFinished(() => removeLegacy())
+  await expect(read({ ns: 'first' })).rejects.toMatchObject({ code: 'gateway/arguments-invalid' })
 })

@@ -1,10 +1,10 @@
 - banner:
   - navigation "Session hierarchy": Use the ask_user_question tool to
   - text: Standard mode
-  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "New conversation and context options": New Chat
   - button "Automações"
+  - button "Session notes and reminders": Notes
   - button "More actions"
-  - button "Anotações e lembretes da sessão": Anotações
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]
@@ -12,16 +12,26 @@
 - text: Use the ask_user_question tool to ask me exactly one question with id "checkpoint", question "Ready to continue?", header "Checkpoint", and options labeled "Yes" and "No". After I answer, reply with one short sentence acknowledging my answer and stop. {{clock}}
 - button "Copy"
 - button "Think The user wants me to ask them a checkpoint question first, then continue with whatever they interject. Let me do exactly that."
+- text: Running
+- button "Ask question waiting"
 - text: "Interjection: include the word BANANA in your final reply."
 - button "Copy"
 - text: "Interjection: include the word ORANGE in your final reply."
 - button "Copy"
 - status: Deep diving
 - text: Deep diving for {{duration}} ···
-- textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands"
-- 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Hold to talk"
-- status
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
-- button "Stop generating"
+- region "Ready to continue?":
+  - text: Checkpoint
+  - heading "Ready to continue?" [level=2]
+  - button "Collapse the question card" [expanded]
+  - button "Dismiss all questions"
+  - radiogroup:
+    - radio "Yes": 1 Yes
+    - radio "No": 2 No
+    - textbox "Type your answer"
+  - button "Previous question" [disabled]
+  - text: 1 / 1
+  - button "Next question" [disabled]
+  - status
+  - button "Skip"
+  - button "Submit" [disabled]

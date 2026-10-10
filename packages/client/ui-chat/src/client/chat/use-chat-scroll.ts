@@ -62,7 +62,7 @@ export function useChatScroll(input: ChatScrollInput): ChatScrollState {
     if (current.ready && !content.current.opened) {
       content.current.opened = true
       navigation.reset()
-      reading.restore()
+      navigation.restore()
       return
     }
     if (ownInput) {

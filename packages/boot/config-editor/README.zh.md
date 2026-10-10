@@ -32,6 +32,8 @@ kind: "package-reference"
 
 使用 [settings](../../settings/settings/README.zh.md) 提供只编辑即时字段的表单。编辑完整配置的调用方可使用 `ctx.configEditor.edit()`；普通字段保留 Loader 的正常生命周期。
 
+`configuration(ns)` 仅返回该条目的继承值和显式值的独立副本。省略 `ns` 会读取所有条目；未知 id 返回空数组。筛选先于无关条目的继承层计算。
+
 <a id="understand-the-implementation"></a>
 ## 理解实现
 
