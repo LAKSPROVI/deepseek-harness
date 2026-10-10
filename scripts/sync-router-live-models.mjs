@@ -7,17 +7,34 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { isDeepStrictEqual, parseArgs } from 'node:util'
 
-const proofFields = ['text', 'tools', 'anthropicTools', 'anthropicStream']
+function proofForApi(api) {
+  if (api === 'anthropic-messages') return { protocol: 'anthropic', fields: ['text', 'tools', 'anthropicTools', 'anthropicStream'] }
+  if (api === 'openai-completions') return { protocol: 'openai', fields: ['text', 'tools', 'openaiTools', 'openaiStream'] }
+  throw fail('provider_mismatch')
+}
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const fail = code => Object.assign(new Error(code), { code })
 const positive = value => Number.isSafeInteger(value) && value > 0
+function catalogFailure(error) {
+  if (error?.name === 'TimeoutError') return { catalogFailureReason: 'catalog_timeout' }
+  if (error?.code === 'http_failed' && Number.isInteger(error.httpStatus) && error.httpStatus >= 100 && error.httpStatus <= 599) return { catalogFailureReason: 'catalog_http_failed', catalogHttpStatus: error.httpStatus }
+  if (['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'].includes(error?.cause?.code ?? error?.code)) return { catalogFailureReason: 'catalog_network_failed' }
+  if (['catalog_not_strict', 'catalog_invalid', 'body_missing', 'body_too_large', 'catalog_key_missing'].includes(error?.code)) return { catalogFailureReason: error.code }
+  return { catalogFailureReason: 'catalog_failed' }
+}
+function retryableCatalogFailure(detail) {
+  return ['catalog_timeout', 'catalog_network_failed'].includes(detail.catalogFailureReason)
+    || detail.catalogFailureReason === 'catalog_http_failed' && detail.catalogHttpStatus >= 500
+}
+
 const normalize = value => new URL(value).href.replace(/\/$/u, '')
 function timestamp(value) {
   return typeof value === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/u.test(value) ? Date.parse(value) : NaN
 }
 
-/** Project only fresh, concrete Anthropic agent models; retain options by exact ID. */
-export function selectModels(catalog, previous = [], now = Date.now()) {
+/** Project fresh concrete agent models for the configured protocol; retain options by exact ID. */
+export function selectModels(catalog, previous = [], now = Date.now(), api = 'anthropic-messages') {
+  const proof = proofForApi(api)
   if (!record(catalog) || catalog.x_9r_catalog?.availability_mode !== 'strict') throw fail('catalog_not_strict')
   if (!Array.isArray(catalog.data) || catalog.data.length > 20000) throw fail('catalog_invalid')
   const seen = new Set()
@@ -32,8 +49,8 @@ export function selectModels(catalog, previous = [], now = Date.now()) {
     const checked = timestamp(evidence.checked_at); const expires = timestamp(evidence.expires_at)
     return Number.isFinite(checked) && Number.isFinite(expires) && checked <= now + 5000
       && expires > now && expires > checked && expires - checked <= 600000
-      && evidence.protocols?.anthropic === 'proved'
-      && proofFields.every(field => evidence.capabilities?.[field] === 'proved')
+      && evidence.protocols?.[proof.protocol] === 'proved'
+      && proof.fields.every(field => evidence.capabilities?.[field] === 'proved')
   }).map(row => {
     const prior = existing.get(row.id)
     const result = { ...prior, id: row.id, name: prior?.name ?? (typeof row.name === 'string' ? row.name : row.id), input: ['text'] }
@@ -50,7 +67,7 @@ function providerView(document, provider, catalogUrl) {
   const matches = document.namespaces.filter(view => record(view.value?.providers?.[provider]))
   if (matches.length !== 1) throw fail('provider_missing_or_ambiguous')
   const view = matches[0]; const route = view.value.providers[provider]
-  if (route.api !== 'anthropic-messages' || typeof route.baseURL !== 'string' || normalize(route.baseURL) !== normalize(catalogUrl)) throw fail('provider_mismatch')
+  if (!['anthropic-messages', 'openai-completions'].includes(route.api) || typeof route.baseURL !== 'string' || normalize(route.baseURL) !== normalize(catalogUrl)) throw fail('provider_mismatch')
   if (!Array.isArray(route.models)) throw fail('provider_models_invalid')
   return { view, route }
 }
@@ -90,11 +107,24 @@ export async function syncOnce(options) {
   const preferences = new Map((options.modelPreferences ?? []).map(model => [model.id, model]))
   const remember = async () => { for (const model of target.route.models) preferences.set(model.id, model); await options.savePreferences?.([...preferences.values()]) }
   await remember()
-  let catalog; let catalogError
-  try { catalog = await fetchCatalog(); selectModels(catalog, target.route.models, now()) }
-  catch { catalogError = 'catalog_unconfirmed' }
+  let catalog; let catalogError; let catalogApi; let failureDetail; let catalogAttempts = 0
+  const refreshCatalog = async () => {
+    catalog = undefined; catalogError = undefined; failureDetail = undefined; catalogApi = target.route.api
+    for (let attempt = 0; attempt < 2; attempt++) {
+      catalogAttempts++
+      try {
+        catalog = await fetchCatalog(catalogApi); selectModels(catalog, target.route.models, now(), catalogApi)
+        catalogError = undefined; failureDetail = undefined; return
+      } catch (error) {
+        catalog = undefined; catalogError = 'catalog_unconfirmed'; failureDetail = catalogFailure(error)
+        if (attempt === 1 || !retryableCatalogFailure(failureDetail)) return
+      }
+    }
+  }
+  await refreshCatalog()
   for (let attempt = 0; attempt < 3; attempt++) {
-    const models = catalogError ? [] : selectModels(catalog, [...preferences.values()], now())
+    if (catalogApi !== target.route.api) await refreshCatalog()
+    const models = catalogError ? [] : selectModels(catalog, [...preferences.values()], now(), catalogApi)
     const changed = !isDeepStrictEqual(models, target.route.models)
     if (changed) {
       await backup()
@@ -108,13 +138,13 @@ export async function syncOnce(options) {
       }
     }
     const synchronizedAtMs = now()
-    return { ok: !catalogError, ...(catalogError ? { error: catalogError } : {}), synchronizedAt: new Date(synchronizedAtMs).toISOString(), catalogModelIds: models.map(model => model.id), validUntil: new Date(Math.min(synchronizedAtMs + 60000, synchronizedAtMs + (options.intervalMs ?? 30000) * 2, ...models.map(model => timestamp(catalog.data.find(row => row.id === model.id).x_9r.expires_at)))).toISOString(), catalogGeneration: typeof catalog?.x_9r_catalog?.generation === 'string' ? catalog.x_9r_catalog.generation : null, publishedChatModels: models.length, availableRoutes: models.length, totalRoutes: Array.isArray(catalog?.data) ? catalog.data.length : 0, changed }
+    return { ok: !catalogError, ...(catalogError ? { error: catalogError, ...failureDetail } : {}), catalogAttempts, synchronizedAt: new Date(synchronizedAtMs).toISOString(), catalogModelIds: models.map(model => model.id), validUntil: new Date(Math.min(synchronizedAtMs + 60000, synchronizedAtMs + (options.intervalMs ?? 30000) * 2, ...models.map(model => timestamp(catalog.data.find(row => row.id === model.id).x_9r.expires_at)))).toISOString(), catalogGeneration: typeof catalog?.x_9r_catalog?.generation === 'string' ? catalog.x_9r_catalog.generation : null, catalogProtocol: catalogApi, publishedChatModels: models.length, availableRoutes: models.length, totalRoutes: Array.isArray(catalog?.data) ? catalog.data.length : 0, changed }
   }
   throw fail('settings_conflict')
 }
 
 async function boundedJson(response) {
-  if (!response.ok) throw fail('http_failed')
+  if (!response.ok) { await response.body?.cancel(); throw Object.assign(fail('http_failed'), { httpStatus: response.status }) }
   const reader = response.body?.getReader(); if (!reader) throw fail('body_missing')
   let length = 0; const chunks = []
   try {
@@ -145,10 +175,11 @@ export function createTransport({ appUrl, catalogUrl, launchLog, apiKey, timeout
     if (response.status !== 303 || !cookie) throw fail('app_auth_failed')
   }
   return {
-    fetchCatalog: async () => {
+    fetchCatalog: async (api = 'anthropic-messages') => {
+      const proof = proofForApi(api)
       if (!apiKey) throw fail('catalog_key_missing')
       const url = new URL(normalize(catalog.href) + '/models')
-      url.searchParams.set('kind', 'chat'); url.searchParams.set('protocol', 'anthropic'); url.searchParams.set('capability', proofFields.join(','))
+      url.searchParams.set('kind', 'chat'); url.searchParams.set('protocol', proof.protocol); url.searchParams.set('capability', proof.fields.join(','))
       return boundedJson(await fetch(url, { headers: { authorization: `Bearer ${apiKey}` }, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) }))
     },
     rpc: async (method, args) => {
