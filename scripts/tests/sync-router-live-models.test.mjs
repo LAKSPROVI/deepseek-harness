@@ -135,8 +135,17 @@ test('CLI watch authenticates, handles manual refresh, removes and restores choi
   async function waitFor(predicate) { const end = Date.now() + 15000; while (!predicate()) { if (Date.now() > end) throw new Error('fixture deadline'); await new Promise(resolve => setTimeout(resolve, 25)) } }
   await waitFor(() => fixture.view.value.providers['9router'].models.length === 1)
   await waitFor(() => [child, competitor].filter(process => process.exitCode === null).length === 1)
-  rows = []; const empty = await main(defaults, []); assert.equal(empty.publishedChatModels, 0)
-  rows = ['B']; const recovered = await main(defaults, []); assert.equal(recovered.publishedChatModels, 1)
+  async function refresh() {
+    try { return await main(defaults, []) }
+    catch (error) {
+      let terminal; let state
+      try { terminal = JSON.parse(await readFile(join(root, 'sync-9router-models-failure.json'), 'utf8')) } catch {}
+      try { state = JSON.parse(await readFile(join(root, 'sync-9router-models-state.json'), 'utf8')) } catch {}
+      throw new Error(`refresh_failed ${JSON.stringify({ code: error.code, terminalPhase: terminal?.phase, terminalReason: terminal?.reason, stateOk: state?.ok, stateError: state?.error, childExit: child.exitCode, competitorExit: competitor.exitCode })}`)
+    }
+  }
+  rows = []; const empty = await refresh(); assert.equal(empty.publishedChatModels, 0)
+  rows = ['B']; const recovered = await refresh(); assert.equal(recovered.publishedChatModels, 1)
   assert.deepEqual(fixture.view.value.providers['9router'].models.map(row => row.id), ['B'])
   assert.deepEqual(transitions, JSON.parse(await readFile(new URL('./expected/router-live-catalog.json', import.meta.url), 'utf8')))
   assert.ok(requests >= 3); assert.ok((await readdir(join(root, 'backups/router-live-catalog'))).length >= 3)
@@ -425,4 +434,44 @@ test('measures retries and conflicts independently and never copies arbitrary er
   const failed = await api.syncMeasured({ ...options(host()), rpc: async () => { throw Object.assign(new Error('SECRET'), { code: 'SECRET', name: 'SECRET' }) }, fetchCatalog: async () => catalog([]) })
   assert.equal(failed.error, 'app_unavailable'); assert.equal(failed.diagnostics.phases[0].failure, 'operation_failed')
   assert.equal(JSON.stringify(failed).includes('SECRET'), false)
+})
+
+test('records a terminal state-file replacement failure without publishing a fresh lease or private error', async t => {
+  const { main } = await import('../sync-router-live-models.mjs')
+  const { mkdtemp, mkdir, writeFile, readFile, rm, access } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os'); const { join } = await import('node:path')
+  const root = await mkdtemp(join(tmpdir(), 'router-fatal-PRIVATE-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'profiles/web'), { recursive: true })
+  await writeFile(join(root, 'profiles/web/cordis.patch.yml'), 'fixture')
+  await mkdir(join(root, 'sync-9router-models-state.json'))
+  await writeFile(join(root, 'launch.log'), 'http://127.0.0.1:3080/?token=PRIVATE_FIXTURE\n')
+  const fixture = host()
+  t.mock.method(globalThis, 'fetch', async (url, args) => {
+    if (new URL(url).searchParams.has('token')) return new Response(null, { status: 303, headers: { 'set-cookie': 'fixture=PRIVATE_COOKIE' } })
+    const request = JSON.parse(args.body)
+    const value = await fixture.rpc(request.method, request.payload.args)
+    return new Response(JSON.stringify({ type: 'server-response', result: { ok: true, value } }))
+  })
+  await assert.rejects(main({ home: root, 'app-url': 'http://127.0.0.1:3080/', 'catalog-url': 'https://router.example/v1', 'launch-log': join(root, 'launch.log'), 'api-key-env': 'UNSET_ROUTER_FATAL_FIXTURE' }, []))
+  const failure = JSON.parse(await readFile(join(root, 'sync-9router-models-failure.json'), 'utf8'))
+  assert.equal(failure.ok, false); assert.equal(failure.phase, 'state/write')
+  assert.ok(['EISDIR', 'EEXIST', 'EPERM', 'ENOTEMPTY'].includes(failure.reason))
+  assert.equal(failure.validUntil, undefined); assert.equal(failure.catalogModelIds, undefined)
+  assert.equal(JSON.stringify(failure).includes('PRIVATE'), false)
+  await assert.rejects(access(join(root, 'sync-9router-models.lock')))
+})
+
+test('records malformed refresh request as a terminal request failure and releases the process lock', async t => {
+  const { main } = await import('../sync-router-live-models.mjs')
+  const { mkdtemp, writeFile, readFile, rm, access } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os'); const { join } = await import('node:path')
+  const root = await mkdtemp(join(tmpdir(), 'router-fatal-PRIVATE-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await writeFile(join(root, 'sync-9router-models-request.json'), 'PRIVATE_invalid_json')
+  await assert.rejects(main({ home: root, 'app-url': 'http://127.0.0.1:3080/', 'catalog-url': 'https://router.example/v1', 'launch-log': 'unused', 'api-key-env': 'UNSET_ROUTER_FATAL_FIXTURE' }, []), /request_invalid/)
+  const failure = JSON.parse(await readFile(join(root, 'sync-9router-models-failure.json'), 'utf8'))
+  assert.equal(failure.phase, 'request/read'); assert.equal(failure.reason, 'request_invalid')
+  assert.equal(JSON.stringify(failure).includes('PRIVATE'), false)
+  await assert.rejects(access(join(root, 'sync-9router-models.lock')))
 })
