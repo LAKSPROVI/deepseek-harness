@@ -320,24 +320,42 @@ export async function main(defaults = {}, argv = process.argv.slice(2)) {
   let stopped = false
   const stop = () => { stopped = true }
   process.on('SIGINT', stop); process.on('SIGTERM', stop)
+  let loopPhase = 'enabled/write'
+  const recordLoopFailure = async (error, phase) => {
+    const allowed = ['EACCES', 'EPERM', 'EBUSY', 'ENOSPC', 'ENOENT', 'EIO', 'EXDEV', 'EEXIST', 'ENOTEMPTY', 'EISDIR', 'ENOTDIR', 'EMFILE', 'ENFILE', 'request_invalid']
+    const code = allowed.includes(error?.code) ? error.code : 'operation_failed'
+    // A failed publication never renews the lease; keep only the latest bounded diagnostic.
+    await atomicJson(path.join(home, 'sync-9router-models-failure.json'), { ok: false, phase, reason: code, failedAt: new Date().toISOString() }).catch(() => {})
+  }
   try {
     await writeFile(path.join(home, 'router-live-catalog.enabled'), '1\n')
     do {
+      loopPhase = 'request/read'
       let requestId
       try { const request = JSON.parse(await readFile(requestFile, 'utf8')); if (typeof request.requestId === 'string') requestId = request.requestId }
       catch (error) { if (error.code !== 'ENOENT') throw fail('request_invalid') }
+      loopPhase = 'synchronize'
       const state = await syncMeasured({ ...transport, describeSettings, modelPreferences, savePreferences, catalogUrl: settings['catalog-url'], provider: settings.provider ?? '9router', intervalMs: interval, backup: profileBackup(path.join(home, 'profiles/web/cordis.patch.yml'), settings['backup-dir'] ?? path.join(home, 'backups/router-live-catalog')) })
       if (requestId) state.completedRequest = requestId
+      loopPhase = 'state/write'
       await atomicJson(stateFile, state)
       if (!settings.watch) { process.stdout.write(JSON.stringify(state) + '\n'); return state }
       const next = Date.now() + interval
       while (!stopped && Date.now() < next) {
+        loopPhase = 'wait/request'
         try { const request = JSON.parse(await readFile(requestFile, 'utf8')); if (request.requestId !== requestId) break }
         catch (error) { if (error.code !== 'ENOENT') throw fail('request_invalid') }
         await new Promise(resolve => { const wake = () => { clearTimeout(timer); process.off('SIGINT', wake); process.off('SIGTERM', wake); resolve() }; const timer = setTimeout(wake, Math.min(500, next - Date.now())); process.once('SIGINT', wake); process.once('SIGTERM', wake) })
       }
     } while (!stopped)
-  } finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); await unlink(lockFile) }
+  } catch (error) {
+    await recordLoopFailure(error, loopPhase)
+    throw error
+  } finally {
+    process.off('SIGINT', stop); process.off('SIGTERM', stop)
+    try { await unlink(lockFile) }
+    catch (error) { await recordLoopFailure(error, 'lock/release'); throw error }
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
