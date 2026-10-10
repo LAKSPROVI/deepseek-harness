@@ -4093,10 +4093,10 @@ export const EVENT_API: readonly EventApiEntry[] = [
   {
     name: 'app-boot/config-reload',
     mode: 'emit',
-    signature: '\'app-boot/config-reload\'(): void',
+    signature: '\'app-boot/config-reload\'(changedIds?: readonly string[]): void',
     summary: 'Profile patches were reconciled into the running Loader tree: every entry update settled and no new inactive entry was introduced.',
-    description: 'Profile patches were reconciled into the running Loader tree: every entry update settled and no new inactive entry was introduced. Carries no diff; listeners re-read Loader entries.',
-    parameters: [],
+    description: 'Profile patches were reconciled into the running Loader tree: every entry update settled and no new inactive entry was introduced. Carries changed entry ids; omitted ids request a full refresh.',
+    parameters: [{ name: 'changedIds', description: 'Added, removed, or changed entry ids; omitted for a full refresh.' }],
   },
   {
     name: 'approval/request',

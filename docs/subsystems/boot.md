@@ -214,15 +214,16 @@ Source: [`packages/boot/app-boot/src/profile-context.ts`](../../packages/boot/ap
 
 #### `app-boot/config-reload` — emit
 
-Profile patches were reconciled into the running Loader tree: every entry update settled and no new inactive entry was introduced. Carries no diff; listeners re-read Loader entries.
+Profile patches were reconciled into the running Loader tree: every entry update settled and no new inactive entry was introduced. Carries changed entry ids; omitted ids request a full refresh.
 
 ```ts cordis-catalog
 /**
  * Profile patches were reconciled into the running Loader tree: every entry update settled and no new
- * inactive entry was introduced. Carries no diff; listeners re-read Loader entries.
+ * inactive entry was introduced. Carries changed entry ids; omitted ids request a full refresh.
+ * @param changedIds Added, removed, or changed entry ids; omitted for a full refresh.
  * @mode emit
  */
-'app-boot/config-reload'(): void
+'app-boot/config-reload'(changedIds?: readonly string[]): void
 ```
 
 Source: [`packages/boot/app-boot/src/index.ts`](../../packages/boot/app-boot/src/index.ts)
