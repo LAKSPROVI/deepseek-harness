@@ -35,4 +35,6 @@ node scripts/sync-router-live-models.mjs --home /path/to/home --app-url http://1
 
 本地认证和 Settings 请求的超时为 30 秒；外部目录仍使用 8 秒超时。可用 `--app-timeout-ms` 指定不超过 30000 毫秒的正整数。本地应用更慢时仍可能无法确认；此选项不会延长模型证明的有效期或 60 秒的本地租约。
 
+发现提供方条目后，同步器在后续读取中只请求该 namespace。每个周期仍读取当前修订号和模型证据。条目被移除时会重新进行完整发现；拒绝可选筛选的旧运行时使用完整读取。超时仍会撤回确认。
+
 [适配器参考](../../packages/llm/llm-pi-ai/README.zh.md) 描述自定义路由，[决策记录](../../.agents/notes/implemented/bug-fix/2026-10-07-router-live-catalog.zh.md) 解释可用性契约。

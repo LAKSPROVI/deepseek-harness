@@ -33,6 +33,8 @@ export interface SettingsDescriptor {
 /** Wire readers always request secret redaction. */
 export interface SettingsDescribeOptions {
   redactSecrets?: boolean
+  /** Limit projection to one entry without revising unrelated namespaces. */
+  ns?: string
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -302,6 +304,7 @@ export class SettingsForms extends Service {
   describe(options?: SettingsDescribeOptions): SettingsDescriptor[] {
     const active = new Set<string>()
     const descriptors = this.ownerContext.configEditor.configuration().flatMap(({ entry, inherited, override }) => {
+      if (options?.ns !== undefined && entry.options.id !== options.ns) return []
       const schema = this.schema(entry)
       if (schema === undefined || entry.fiber === undefined
         || entry.fiber.runtime === null || entry.fiber.state !== FiberState.ACTIVE) return []
@@ -331,6 +334,7 @@ export class SettingsForms extends Service {
       }]
     })
     for (const [id, previous] of this.revisions) {
+      if (options?.ns !== undefined && previous.ns !== options.ns) continue
       if (active.has(id) || previous.raw === undefined) continue
       const revision = previous.revision + 1
       this.revisions.set(id, { ...previous, raw: undefined, revision })

@@ -354,3 +354,20 @@ it('describes an entry whose required field only the profile supplies, and repor
   const failures = (): unknown[] => restored.logger.buffer.filter(message => message.type === 'error').map((message): unknown => message.args[0])
   await vi.waitFor(() => { expect(failures()).toContainEqual(expect.objectContaining({ message: 'refresh failed' })) })
 })
+
+it('projects one namespace without touching other schemas or their revisions', async () => {
+  const { ctx } = await fixture()
+  const before = ctx.settings.describe({ redactSecrets: true })
+  const first = before.find(row => row.ns === 'first')!
+  const second = before.find(row => row.ns === 'second')!
+  const schema = (ctx.settings as unknown as { schema(entry: unknown): unknown })
+  const spy = vi.spyOn(schema, 'schema')
+  const facts = ({ schema: _schema, ...rest }: typeof first) => rest
+  expect(ctx.settings.describe({ redactSecrets: true, ns: 'first' }).map(facts)).toEqual([facts(first)])
+  expect(spy.mock.calls.every(([entry]) => (entry as { options: { id: string } }).options.id === 'first')).toBe(true)
+  expect(ctx.settings.describe({ redactSecrets: true, ns: 'missing' })).toEqual([])
+  spy.mockRestore()
+  expect(facts(ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'second')!)).toEqual(facts(second))
+  await ctx.settings.update('second', { count: 7 }, second.revision)
+  await expect(ctx.settings.update('second', { count: 8 }, second.revision)).rejects.toThrow('changed since it was read')
+})

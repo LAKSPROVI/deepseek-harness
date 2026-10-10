@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { selectModels, syncOnce, main } from '../sync-router-live-models.mjs'
+import { selectModels, syncOnce, main, createSettingsReader } from '../sync-router-live-models.mjs'
 
 const now = Date.parse('2026-10-07T20:00:00Z')
 const model = (id, changes = {}) => ({ id, name: id, x_9r: { available: true, kind: 'chat', checked_at: new Date(now - 1000).toISOString(), expires_at: new Date(now + 60000).toISOString(), capabilities: { text: 'proved', tools: 'proved', anthropicTools: 'proved', anthropicStream: 'proved' }, protocols: { anthropic: 'proved' }, ...changes } })
@@ -181,4 +181,61 @@ test('keeps the external catalog deadline separate from the local app deadline',
 test('rejects local app deadlines beyond the bounded confirmation budget', async () => {
   const defaults = { home: 'unused', 'app-url': 'http://127.0.0.1:3080/', 'catalog-url': 'https://router.example/v1', 'launch-log': 'unused' }
   for (const value of ['0', '-1', '30001', 'NaN']) await assert.rejects(() => main(defaults, [`--app-timeout-ms=${value}`]), { code: 'app_timeout_invalid' })
+})
+
+test('reads fresh scoped revisions and rediscovers a moved provider namespace', async () => {
+  const fixture = host(); const requests = []
+  const rpc = async (method, args) => {
+    requests.push(args)
+    if (args.ns && args.ns !== fixture.view.ns) return { writable: true, namespaces: [] }
+    return fixture.rpc(method, args)
+  }
+  const describeSettings = createSettingsReader(rpc)
+  assert.equal((await describeSettings()).namespaces[0].revision, 3)
+  fixture.view.revision = 8
+  assert.equal((await describeSettings()).namespaces[0].revision, 8)
+  fixture.view.ns = 'moved-llm'
+  assert.equal((await describeSettings()).namespaces[0].ns, 'moved-llm')
+  assert.deepEqual(requests, [{}, { ns: 'llm-pi-ai' }, { ns: 'llm-pi-ai' }, {}])
+})
+
+test('falls back once for older runtimes but does not hide timeouts or cache evidence', async () => {
+  const fixture = host(); const requests = []; let timeout = false
+  const reader = createSettingsReader(async (method, args) => {
+    requests.push(args)
+    if (timeout) throw Object.assign(new Error('timeout'), { code: 'timeout' })
+    if (args.ns) throw Object.assign(new Error('old runtime'), { code: 'settings_filter_unsupported' })
+    return fixture.rpc(method, args)
+  })
+  await reader(); await reader(); await reader()
+  assert.deepEqual(requests, [{}, { ns: 'llm-pi-ai' }, {}, {}])
+  timeout = true
+  await assert.rejects(reader(), { code: 'timeout' })
+  const describeSettings = createSettingsReader(fixture.rpc)
+  let rows = [model('fresh')]
+  const opts = { ...options(fixture), describeSettings, fetchCatalog: async () => catalog(rows) }
+  assert.equal((await syncOnce(opts)).publishedChatModels, 1)
+  rows = [model('fresh', { expires_at: new Date(now).toISOString() })]
+  assert.equal((await syncOnce(opts)).publishedChatModels, 0)
+})
+
+test('recognizes a legacy HTTP refusal of the optional namespace filter and retries a full live read', async t => {
+  const { createTransport } = await import('../sync-router-live-models.mjs')
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const root = await mkdtemp(join(tmpdir(), 'router-scoped-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const log = join(root, 'launch.log'); await writeFile(log, 'http://127.0.0.1:3080/?token=fixture\n')
+  const fixture = host(); const reads = []
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (new URL(url).searchParams.has('token')) return new Response(null, { status: 303, headers: { 'set-cookie': 'fixture=value' } })
+    const args = JSON.parse(options.body).payload.args; reads.push(args)
+    if (args.ns) return new Response('{}', { status: 400 })
+    return new Response(JSON.stringify({ type: 'server-response', result: { ok: true, value: { writable: true, namespaces: [fixture.view] } } }))
+  })
+  const { rpc } = createTransport({ appUrl: 'http://127.0.0.1:3080/', catalogUrl: 'https://router.example/v1', launchLog: log })
+  const reader = createSettingsReader(rpc)
+  await reader(); await reader(); await reader()
+  assert.deepEqual(reads, [{}, { ns: 'llm-pi-ai' }, {}, {}])
 })
