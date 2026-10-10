@@ -836,9 +836,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'Active entries with unique profile patch ids.',
       },
       {
-        signature: 'configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }>',
+        signature: 'configuration(ns?: string): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }>',
         description: 'Read inherited and explicit profile values for the active entries.',
-        parameters: [],
+        parameters: [{ name: 'ns', description: 'Optional entry id, filtered before inheritance and detached-value projection; missing ids return no rows.' }],
         returns: 'Detached layer values alongside their Loader entries.',
       },
       {

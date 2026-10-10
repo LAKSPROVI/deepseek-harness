@@ -317,7 +317,7 @@ export class SettingsForms extends Service {
    */
   describe(options?: SettingsDescribeOptions): SettingsDescriptor[] {
     const active = new Set<string>()
-    const descriptors = this.ownerContext.configEditor.configuration().flatMap(({ entry, inherited, override }) => {
+    const descriptors = this.ownerContext.configEditor.configuration(options?.ns).flatMap(({ entry, inherited, override }) => {
       if (options?.ns !== undefined && entry.options.id !== options.ns) return []
       const schema = this.schema(entry)
       if (schema === undefined || entry.fiber === undefined
