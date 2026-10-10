@@ -15,7 +15,9 @@ param(
     [Parameter(Mandatory = $true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedRunnerSha256,
     [Parameter(Mandatory = $true)][string]$NodePath,
     [Parameter(Mandatory = $true)][string]$DshHome,
-    [Parameter(Mandatory = $true)][string]$LogDirectory
+    [Parameter(Mandatory = $true)][string]$LogDirectory,
+    [ValidatePattern('^$|^[a-fA-F0-9]{64}$')][string]$ExpectedOverlaySha256 = '',
+    [string]$ExpectedOverlayCut = ''
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -54,6 +56,105 @@ if (Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.Loc
     throw 'Port 3080 already has a listener; no process was stopped.'
 }
 
+$overlay = $null
+if ($ExpectedOverlaySha256) {
+    $overlayPath = Resolve-ExistingLiteralPath (Join-Path $root 'dsh-runtime-overlay.json') $false
+    if ((Get-FileHash -LiteralPath $overlayPath -Algorithm SHA256).Hash -ine $ExpectedOverlaySha256) { throw 'Runtime overlay manifest differs from the reviewed hash.' }
+    $overlay = Get-Content -LiteralPath $overlayPath -Raw | ConvertFrom-Json
+    if ($overlay.schemaVersion -ne 1 -or $overlay.baseCommit -cne $ExpectedCommit -or (-not $ExpectedOverlayCut -or $overlay.cut -cne $ExpectedOverlayCut)) { throw 'Unexpected runtime overlay identity.' }
+    foreach ($file in $overlay.files) {
+        $full = [IO.Path]::GetFullPath((Join-Path $root $file.relativePath))
+        if (-not $full.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Runtime overlay file escaped the reviewed root.' }
+        $literal = Resolve-ExistingLiteralPath $full $false
+        if ((Get-FileHash -LiteralPath $literal -Algorithm SHA256).Hash -ine $file.sha256) { throw 'Runtime overlay bytes differ from the reviewed module.' }
+    }
+}
+
+function Initialize-RuntimeProcessJob {
+    # The wrapper joins before spawning Node. Children inherit this job; there is
+    # no interval in which the backend runs outside its wrapper's lifetime.
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+namespace Lakatoss {
+    public static class RuntimeProcessJob {
+        [StructLayout(LayoutKind.Sequential)] struct BasicLimits {
+            public long PerProcessUserTimeLimit, PerJobUserTimeLimit;
+            public uint LimitFlags;
+            public UIntPtr MinimumWorkingSetSize, MaximumWorkingSetSize;
+            public uint ActiveProcessLimit;
+            public UIntPtr Affinity;
+            public uint PriorityClass, SchedulingClass;
+        }
+        [StructLayout(LayoutKind.Sequential)] struct IoCounters {
+            public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount;
+            public ulong ReadTransferCount, WriteTransferCount, OtherTransferCount;
+        }
+        [StructLayout(LayoutKind.Sequential)] struct ExtendedLimits {
+            public BasicLimits BasicLimitInformation;
+            public IoCounters IoInfo;
+            public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed;
+        }
+        [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+        static extern IntPtr CreateJobObject(IntPtr attributes, string name);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern bool SetInformationJobObject(IntPtr job, int infoClass, IntPtr info, uint length);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+        [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+        [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+        [StructLayout(LayoutKind.Sequential)] struct Accounting {
+            public long TotalUserTime, TotalKernelTime, PeriodUserTime, PeriodKernelTime;
+            public uint TotalPageFaultCount, TotalProcesses, ActiveProcesses, TotalTerminatedProcesses;
+        }
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern bool QueryInformationJobObject(IntPtr job, int infoClass, out Accounting info, uint length, IntPtr returned);
+        // Intentionally retained until this wrapper exits. Windows closes the
+        // non-inherited handle on normal exit and on Task Scheduler termination.
+        static IntPtr ownedJob = IntPtr.Zero;
+        public static void Attach() {
+            if (ownedJob != IntPtr.Zero) throw new InvalidOperationException("runtime_job_already_attached");
+            IntPtr job = CreateJobObject(IntPtr.Zero, null);
+            if (job == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
+            IntPtr data = IntPtr.Zero;
+            try {
+                var limits = new ExtendedLimits();
+                limits.BasicLimitInformation.LimitFlags = 0x2000; // KILL_ON_JOB_CLOSE
+                int size = Marshal.SizeOf(typeof(ExtendedLimits));
+                data = Marshal.AllocHGlobal(size);
+                Marshal.StructureToPtr(limits, data, false);
+                if (!SetInformationJobObject(job, 9, data, (uint)size))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                if (!AssignProcessToJobObject(job, GetCurrentProcess()))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                ownedJob = job;
+            } catch { CloseHandle(job); throw; }
+            finally { if (data != IntPtr.Zero) Marshal.FreeHGlobal(data); }
+        }
+        public static void ReleaseAfterChildrenExit() {
+            Accounting info;
+            if (ownedJob == IntPtr.Zero || !QueryInformationJobObject(ownedJob, 1, out info,
+                (uint)Marshal.SizeOf(typeof(Accounting)), IntPtr.Zero))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            // Only the wrapper may remain. Never release live descendants.
+            if (info.ActiveProcesses != 1) throw new InvalidOperationException("runtime_children_still_running");
+            var limits = new ExtendedLimits();
+            int size = Marshal.SizeOf(typeof(ExtendedLimits));
+            IntPtr data = Marshal.AllocHGlobal(size);
+            try {
+                Marshal.StructureToPtr(limits, data, false);
+                if (!SetInformationJobObject(ownedJob, 9, data, (uint)size))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                CloseHandle(ownedJob); ownedJob = IntPtr.Zero;
+            } finally { Marshal.FreeHGlobal(data); }
+        }
+    }
+}
+'@
+    [Lakatoss.RuntimeProcessJob]::Attach()
+}
+
 $runId = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') + '-' + [Guid]::NewGuid().ToString('N')
 $stdout = Join-Path $logPath 'dsh-current.stdout.log'
 $stderr = Join-Path $logPath 'dsh-current.stderr.log'
@@ -83,6 +184,8 @@ $receipt = [ordered]@{
     startedAt = [DateTime]::UtcNow.ToString('o')
     sourceRoot = $root
     expectedCommit = $ExpectedCommit
+    overlayCut = $(if ($overlay) { $overlay.cut } else { $null })
+    overlayCommit = $(if ($overlay) { $overlay.overlayCommit } else { $null })
     wrapperPid = $PID
     childPid = $null
     childCreatedAt = $null
@@ -106,18 +209,39 @@ foreach ($variable in [Environment]::GetEnvironmentVariables('User').GetEnumerat
 }
 Save-Receipt
 try {
+    Initialize-RuntimeProcessJob
+    $receipt.processJob = 'kill_on_wrapper_exit'
     $child = Start-Process -FilePath $node -ArgumentList @('apps\cli\lib\bin.js', 'web', '--no-open') -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
     $null = $child.Handle
     $receipt.childPid = $child.Id
     $receipt.childCreatedAt = $child.StartTime.ToUniversalTime().ToString('o')
     $receipt.phase = 'running'
     Save-Receipt
-    $child.WaitForExit()
+    $vitalsPath = Join-Path $logPath ('dsh-runtime-vitals-' + $runId + '.jsonl')
+    Assert-LogDestination $vitalsPath
+    function Write-ChildVitals {
+        try {
+            $child.Refresh()
+            $sample = [ordered]@{ at = [DateTime]::UtcNow.ToString('o'); pid = $child.Id; exited = $child.HasExited }
+            if ($child.HasExited) { $sample.exitCode = $child.ExitCode }
+            else {
+                $sample.workingSetBytes = $child.WorkingSet64
+                $sample.privateMemoryBytes = $child.PrivateMemorySize64
+                $sample.cpuSeconds = $child.TotalProcessorTime.TotalSeconds
+            }
+            [IO.File]::AppendAllText($vitalsPath, (($sample | ConvertTo-Json -Compress) + [Environment]::NewLine), (New-Object Text.UTF8Encoding($false)))
+        } catch { }
+    }
+    # Diagnostics must not change child lifetime or trigger any restart.
+    Write-ChildVitals
+    while (-not $child.WaitForExit(60000)) { Write-ChildVitals }
+    Write-ChildVitals
     $child.Refresh()
     $receipt.exitCode = $child.ExitCode
     $receipt.exitedAt = [DateTime]::UtcNow.ToString('o')
     $receipt.phase = 'exited'
     Save-Receipt
+    [Lakatoss.RuntimeProcessJob]::ReleaseAfterChildrenExit()
     exit $child.ExitCode
 }
 catch {
