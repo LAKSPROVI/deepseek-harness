@@ -30,7 +30,7 @@ Mount this plugin with Loader and [config-editor](../../boot/config-editor/READM
   name: '@deepseek-ai/dsh-settings'
 ```
 
-`describe({ ns })` projects only the selected profile entry. Omitting `ns` reads all forms; a missing entry returns an empty list. Scoped reads preserve revisions of other entries.
+`describe({ ns })` projects only the selected profile entry. Omitting `ns` reads all forms; a missing entry returns an empty list. Scoped reads preserve revisions of other entries. Revision checks and post-write projection also inspect only the edited namespace. Successful profile reloads project only changed entries; coalesced reloads merge their ids, while a full refresh still checks every entry. A failed projection is logged for that entry and does not stop later changed entries.
 
 This plugin has no configuration fields. Forms expose only volatile fields from active, uniquely addressed profile entries. Ordinary configuration remains editable through Cordis configuration files.
 

@@ -371,3 +371,65 @@ it('projects one namespace without touching other schemas or their revisions', a
   await ctx.settings.update('second', { count: 7 }, second.revision)
   await expect(ctx.settings.update('second', { count: 8 }, second.revision)).rejects.toThrow('changed since it was read')
 })
+
+it.each(['update', 'replace', 'mutate'] as const)('writes %s without serializing an unrelated namespace', async (mode) => {
+  const otherSchema = z.object({ ordinary: z.string(), count: z.number().default(2).volatile() })
+  const { ctx } = await fixture({ hmr: false, otherSchema })
+  const before = ctx.settings.describe({ ns: 'first' })[0]!
+  const unrelatedExport = vi.spyOn(otherSchema, 'toJSON').mockImplementation(() => { throw new Error('unrelated schema must not be exported') })
+  try {
+    if (mode === 'mutate') await ctx.settings.mutate('first', [{ op: 'set', path: ['count'], value: 9 }], before.revision)
+    else await ctx.settings[mode]('first', { count: 9 }, before.revision)
+    expect(unrelatedExport).not.toHaveBeenCalled()
+  } finally {
+    unrelatedExport.mockRestore()
+  }
+  expect(ctx.settings.describe({ ns: 'first' })[0]!.value).toMatchObject({ count: 9 })
+  expect(ctx.settings.describe({ ns: 'second' })[0]!.value).toEqual({ count: 2 })
+})
+
+it('merges scoped reloads and lets a full reload refresh every namespace', async () => {
+  const { ctx } = await fixture({ hmr: false })
+  await Promise.resolve()
+  const describe = vi.spyOn(ctx.settings, 'describe')
+  ctx.emit('app-boot/config-reload', ['first'])
+  ctx.emit('app-boot/config-reload', ['second', 'first'])
+  await Promise.resolve()
+  expect(describe.mock.calls.map(([options]) => options?.ns)).toEqual(['first', 'second'])
+  describe.mockClear()
+  ctx.emit('app-boot/config-reload', [])
+  await Promise.resolve()
+  expect(describe).not.toHaveBeenCalled()
+  ctx.emit('app-boot/config-reload', ['first'])
+  ctx.emit('app-boot/config-reload')
+  ctx.emit('app-boot/config-reload', ['second'])
+  await Promise.resolve()
+  expect(describe.mock.calls).toEqual([[]])
+})
+
+it('reports removed namespaces and unrelated external edits during a scoped write', async () => {
+  const { ctx, profile } = await fixture({ hmr: false })
+  ctx.settings.describe()
+  const updates: string[] = []
+  ctx.on('settings/document-updated', (ns) => { updates.push(ns) })
+  writeFileSync(profile.patchPath, JSON.stringify([{ id: 'second', config: { ordinary: 'second', count: 7 } }]))
+  await ctx.settings.update('first', { count: 9 })
+  expect(ctx.settings.describe({ ns: 'second' })[0]!.value).toMatchObject({ count: 7 })
+  expect(updates).toContain('second')
+  updates.length = 0
+  writeFileSync(profile.patchPath, JSON.stringify([{ id: 'second', disabled: true }]))
+  await ctx.settings.update('first', { count: 10 })
+  expect(ctx.settings.describe({ ns: 'second' })).toEqual([])
+  expect(updates).toContain('second')
+})
+
+it('refreshes later changed namespaces after one projection fails', async () => {
+  const { ctx } = await fixture({ hmr: false })
+  await Promise.resolve()
+  const describe = vi.spyOn(ctx.settings, 'describe').mockImplementationOnce(() => { throw new Error('first projection failed') })
+  ctx.emit('app-boot/config-reload', ['first', 'second'])
+  await Promise.resolve()
+  expect(describe).toHaveBeenNthCalledWith(2, { ns: 'second' })
+  expect(ctx.logger.buffer.filter(message => message.type === 'error').map(message => message.args[0]))
+    .toContainEqual(expect.objectContaining({ message: 'first projection failed' }))
+})
