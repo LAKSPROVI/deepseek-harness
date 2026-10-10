@@ -160,7 +160,7 @@ export function createTransport({ appUrl, catalogUrl, launchLog, apiKey, timeout
       const envelope = await boundedJson(response)
       if (envelope.type !== 'server-response' || !record(envelope.result)) throw fail('rpc_invalid')
       if (envelope.result.ok !== true) {
-        if (method === 'settings/describe' && args.ns && envelope.result.error?.code === 'gateway/bad-request') throw fail('settings_filter_unsupported')
+        if (method === 'settings/describe' && args.ns && ['gateway/bad-request', 'gateway/arguments-invalid'].includes(envelope.result.error?.code)) throw fail('settings_filter_unsupported')
         throw fail(envelope.result.error?.code === 'settings/conflict' ? 'settings/conflict' : 'settings_refused')
       }
       return envelope.result.value

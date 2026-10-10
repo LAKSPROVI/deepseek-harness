@@ -239,3 +239,24 @@ test('recognizes a legacy HTTP refusal of the optional namespace filter and retr
   await reader(); await reader(); await reader()
   assert.deepEqual(reads, [{}, { ns: 'llm-pi-ai' }, {}, {}])
 })
+
+test('recognizes a legacy generated descriptor refusal of ns without retaining stale models', async t => {
+  const { createTransport } = await import('../sync-router-live-models.mjs')
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const root = await mkdtemp(join(tmpdir(), 'router-scoped-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const log = join(root, 'launch.log'); await writeFile(log, 'http://127.0.0.1:3080/?token=fixture\n')
+  const fixture = host(); const reads = []
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (new URL(url).searchParams.has('token')) return new Response(null, { status: 303, headers: { 'set-cookie': 'fixture=value' } })
+    const args = JSON.parse(options.body).payload.args; reads.push(args)
+    if (args.ns) return new Response(JSON.stringify({ type: 'server-response', result: { ok: false, error: { code: 'gateway/arguments-invalid', message: 'args fields do not match the descriptor: unexpected ns' } } }))
+    return new Response(JSON.stringify({ type: 'server-response', result: { ok: true, value: { writable: true, namespaces: [fixture.view] } } }))
+  })
+  const { rpc } = createTransport({ appUrl: 'http://127.0.0.1:3080/', catalogUrl: 'https://router.example/v1', launchLog: log })
+  const reader = createSettingsReader(rpc)
+  await reader(); await reader(); await reader()
+  assert.deepEqual(reads, [{}, { ns: 'llm-pi-ai' }, {}, {}])
+})

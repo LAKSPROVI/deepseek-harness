@@ -3,6 +3,9 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { remoteErrorOf, remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 import SettingsController from '../src/index.ts'
+import TypertRegistry from '../../../typert/registry/src/index.ts'
+import TypertGateway from '../../gateway/src/index.ts'
+import { TYPERT } from '../lib/typert.host.js'
 import { configurationFixture } from '../../../settings/settings/tests/configuration-fixture.ts'
 
 async function boot() {
@@ -117,4 +120,23 @@ it('describes only the requested namespace with redaction and unchanged unrelate
   expect(controller.describe('missing').namespaces).toEqual([])
   expect(() => controller.describe('')).toThrow('nonempty string')
   expect(controller.describe().namespaces.map(facts)).toEqual(before.namespaces.map(facts))
+})
+
+it('dispatches the built settings descriptor through the real gateway and rejects a stale descriptor', async () => {
+  const { ctx } = await boot()
+  await ctx.plugin(TypertRegistry)
+  await ctx.plugin(TypertGateway)
+  const dispose = ctx.typert.register(TYPERT)
+  const read = (args: Record<string, unknown>) => ctx.typertGateway.invoke({ namespace: 'settings', method: 'describe', args })
+  const scoped = await read({ ns: 'first' }) as { namespaces: { ns: string }[] }
+  expect(scoped.namespaces.map(view => view.ns)).toEqual(['first'])
+  expect(JSON.stringify(scoped)).not.toContain('private')
+  await expect(read({ ns: 'missing' })).resolves.toMatchObject({ namespaces: [] })
+  await expect(read({})).resolves.toMatchObject({ writable: true })
+  await expect(read({ ns: 1 })).rejects.toMatchObject({ code: 'gateway/input-invalid' })
+  await dispose()
+  const legacy = { ...TYPERT, invocations: TYPERT.invocations.map(invocation => invocation.namespace === 'settings' && invocation.method === 'describe' ? { ...invocation, parameters: [] } : invocation) }
+  const removeLegacy = ctx.typert.register(legacy)
+  onTestFinished(() => removeLegacy())
+  await expect(read({ ns: 'first' })).rejects.toMatchObject({ code: 'gateway/arguments-invalid' })
 })
