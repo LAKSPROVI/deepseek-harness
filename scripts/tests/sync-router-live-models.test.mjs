@@ -157,3 +157,28 @@ test('caps a single captured local confirmation at sixty seconds even for a long
   assert.equal(Date.parse(state.validUntil) - Date.parse(state.synchronizedAt), 60000)
   await assert.rejects(() => main({}, ['--provider', 'other']), { code: 'provider_mismatch' })
 })
+
+test('keeps the external catalog deadline separate from the local app deadline', async t => {
+  const { createTransport } = await import('../sync-router-live-models.mjs')
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const root = await mkdtemp(join(tmpdir(), 'router-deadlines-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const log = join(root, 'launch.log'); await writeFile(log, 'http://127.0.0.1:3080/?token=fixture\n')
+  const deadlines = []
+  t.mock.method(AbortSignal, 'timeout', ms => { deadlines.push(ms); return new AbortController().signal })
+  t.mock.method(globalThis, 'fetch', async url => {
+    if (new URL(url).searchParams.has('token')) return new Response(null, { status: 303, headers: { 'set-cookie': 'fixture=value' } })
+    if (new URL(url).pathname.endsWith('/models')) return new Response(JSON.stringify(catalog([])))
+    return new Response(JSON.stringify({ type: 'server-response', result: { ok: true, value: { namespaces: [] } } }))
+  })
+  const transport = createTransport({ appUrl: 'http://127.0.0.1:3080/', catalogUrl: 'https://router.example/v1', launchLog: log, apiKey: 'fixture', timeoutMs: 20, appTimeoutMs: 150 })
+  await transport.rpc('settings/describe', {}); await transport.fetchCatalog()
+  assert.deepEqual(deadlines, [150, 150, 20])
+})
+
+test('rejects local app deadlines beyond the bounded confirmation budget', async () => {
+  const defaults = { home: 'unused', 'app-url': 'http://127.0.0.1:3080/', 'catalog-url': 'https://router.example/v1', 'launch-log': 'unused' }
+  for (const value of ['0', '-1', '30001', 'NaN']) await assert.rejects(() => main(defaults, [`--app-timeout-ms=${value}`]), { code: 'app_timeout_invalid' })
+})

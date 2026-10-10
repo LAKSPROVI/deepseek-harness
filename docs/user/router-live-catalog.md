@@ -33,4 +33,6 @@ The selectable directory also checks the deployment's tool presentation. Router 
 
 The status file reports sanitized error codes. `app_unavailable` means the local Harness cannot accept an update; it is retried by the watcher. A protocol or endpoint mismatch stops writes to that provider. Restore a profile only from its verified backup under `home/backups/router-live-catalog`, using the same Settings workflow. A backend restart requires a new launch token; the synchronizer exchanges it for a local session cookie automatically.
 
+Local authentication and Settings requests have a 30-second deadline; the external catalog keeps its eight-second deadline. Use `--app-timeout-ms` to choose a positive integer of at most 30000 milliseconds. A slower app can still fail confirmation; this setting does not extend model proof expiry or the 60-second local lease.
+
 The [adapter reference](../../packages/llm/llm-pi-ai/README.md) describes custom routes, and the [decision record](../../.agents/notes/implemented/bug-fix/2026-10-07-router-live-catalog.md) explains the availability contract.

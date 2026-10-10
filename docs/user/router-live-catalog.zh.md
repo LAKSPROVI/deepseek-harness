@@ -33,4 +33,6 @@ node scripts/sync-router-live-models.mjs --home /path/to/home --app-url http://1
 
 状态文件报告经过清理的错误码。`app_unavailable` 表示本地 Harness 无法接受更新；监视进程会重试。协议或端点不匹配会阻止写入该提供方。仅使用 `home/backups/router-live-catalog` 中经过验证的备份，通过相同的 Settings 流程恢复配置。后端重启需要新的启动令牌；同步器会自动将它换成本地会话 Cookie。
 
+本地认证和 Settings 请求的超时为 30 秒；外部目录仍使用 8 秒超时。可用 `--app-timeout-ms` 指定不超过 30000 毫秒的正整数。本地应用更慢时仍可能无法确认；此选项不会延长模型证明的有效期或 60 秒的本地租约。
+
 [适配器参考](../../packages/llm/llm-pi-ai/README.zh.md) 描述自定义路由，[决策记录](../../.agents/notes/implemented/bug-fix/2026-10-07-router-live-catalog.zh.md) 解释可用性契约。

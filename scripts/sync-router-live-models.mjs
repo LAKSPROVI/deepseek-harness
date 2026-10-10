@@ -100,7 +100,7 @@ async function boundedJson(response) {
 }
 
 /** Authenticated HTTP transport, using the local launch token only for its cookie exchange. */
-export function createTransport({ appUrl, catalogUrl, launchLog, apiKey, timeoutMs = 8000 }) {
+export function createTransport({ appUrl, catalogUrl, launchLog, apiKey, timeoutMs = 8000, appTimeoutMs = timeoutMs }) {
   const app = new URL(appUrl); const catalog = new URL(catalogUrl)
   if (app.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(app.hostname) || app.username || app.password || app.search || app.hash) throw fail('app_url_invalid')
   if (catalog.protocol !== 'https:' && !(catalog.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(catalog.hostname))) throw fail('catalog_url_invalid')
@@ -111,7 +111,7 @@ export function createTransport({ appUrl, catalogUrl, launchLog, apiKey, timeout
     const urls = log.match(/https?:\/\/[^\s]+/gu) ?? []
     const launch = urls.map(value => { try { return new URL(value) } catch { return null } }).filter(url => url?.origin === app.origin && url.searchParams.has('token')).at(-1)
     if (!launch) throw fail('app_auth_unavailable')
-    const response = await fetch(launch, { redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) })
+    const response = await fetch(launch, { redirect: 'manual', signal: AbortSignal.timeout(appTimeoutMs) })
     cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ')
     await response.body?.cancel()
     if (response.status !== 303 || !cookie) throw fail('app_auth_failed')
@@ -125,7 +125,7 @@ export function createTransport({ appUrl, catalogUrl, launchLog, apiKey, timeout
     },
     rpc: async (method, args) => {
       if (!cookie) await authenticate()
-      const request = () => fetch(new URL(`api/${method}`, app), { method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: app.origin }, body: JSON.stringify({ type: 'client-request', rpcId: randomUUID(), method, payload: { args } }), redirect: 'error', signal: AbortSignal.timeout(timeoutMs) })
+      const request = () => fetch(new URL(`api/${method}`, app), { method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: app.origin }, body: JSON.stringify({ type: 'client-request', rpcId: randomUUID(), method, payload: { args } }), redirect: 'error', signal: AbortSignal.timeout(appTimeoutMs) })
       let response = await request()
       if (response.status === 401) { await response.body?.cancel(); await authenticate(); response = await request() }
       const envelope = await boundedJson(response)
@@ -157,15 +157,17 @@ export function profileBackup(profile, directory) {
 
 /** Run once or poll, keeping one exclusive process lock until completion. */
 export async function main(defaults = {}, argv = process.argv.slice(2)) {
-  const { values } = parseArgs({ args: argv, options: { home: { type: 'string' }, 'app-url': { type: 'string' }, 'catalog-url': { type: 'string' }, 'launch-log': { type: 'string' }, provider: { type: 'string' }, 'api-key-env': { type: 'string' }, 'interval-ms': { type: 'string' }, 'backup-dir': { type: 'string' }, watch: { type: 'boolean' } } })
+  const { values } = parseArgs({ args: argv, options: { home: { type: 'string' }, 'app-url': { type: 'string' }, 'catalog-url': { type: 'string' }, 'launch-log': { type: 'string' }, provider: { type: 'string' }, 'api-key-env': { type: 'string' }, 'interval-ms': { type: 'string' }, 'app-timeout-ms': { type: 'string' }, 'backup-dir': { type: 'string' }, watch: { type: 'boolean' } } })
   const settings = { ...defaults, ...values }
   if (settings.provider !== undefined && settings.provider !== '9router') throw fail('provider_mismatch')
   const home = settings.home ?? process.env.DSH_HOME
   if (!home || !settings['app-url'] || !settings['catalog-url'] || !settings['launch-log']) throw fail('configuration_missing')
   const interval = Number(settings['interval-ms'] ?? 30000)
   if (!Number.isSafeInteger(interval) || interval < 1000) throw fail('interval_invalid')
+  const appTimeoutMs = Number(settings['app-timeout-ms'] ?? 30000)
+  if (!Number.isSafeInteger(appTimeoutMs) || appTimeoutMs <= 0 || appTimeoutMs > 30000) throw fail('app_timeout_invalid')
   const key = process.env[settings['api-key-env'] ?? 'ROUTER_API_KEY']
-  const transport = createTransport({ appUrl: settings['app-url'], catalogUrl: settings['catalog-url'], launchLog: settings['launch-log'], apiKey: key })
+  const transport = createTransport({ appUrl: settings['app-url'], catalogUrl: settings['catalog-url'], launchLog: settings['launch-log'], apiKey: key, appTimeoutMs })
   const preferencesFile = path.join(home, 'router-live-model-preferences.json')
   let modelPreferences = []
   try { modelPreferences = JSON.parse(await readFile(preferencesFile, 'utf8')); if (!Array.isArray(modelPreferences)) throw fail('preferences_invalid') }
