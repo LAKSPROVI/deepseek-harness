@@ -83,7 +83,7 @@ test('never mutates when the verified backup fails', async () => {
   assert.equal(fixture.mutations.length, 0)
 })
 
-test('CLI watch authenticates, handles manual refresh, removes and restores choices, and writes verified backups', async t => {
+test('CLI watch authenticates and publishes runtime snapshots without modifying configuration', async t => {
   const { createServer } = await import('node:http')
   const { once } = await import('node:events')
   const { mkdtemp, mkdir, readFile, writeFile, readdir, rm } = await import('node:fs/promises')
@@ -133,7 +133,7 @@ test('CLI watch authenticates, handles manual refresh, removes and restores choi
   const competitor = spawn(process.execPath, [new URL('../sync-router-live-models.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/u, '$1'), ...Object.entries(defaults).flatMap(([key, value]) => [`--${key}`, value]), '--watch'], { env: { ...process.env, ROUTER_API_KEY: 'fixture-key' }, stdio: 'ignore' })
   t.after(async () => { for (const process of [child, competitor]) if (process.exitCode === null) { const ended = once(process, 'exit'); process.kill(); await ended } })
   async function waitFor(predicate) { const end = Date.now() + 15000; while (!predicate()) { if (Date.now() > end) throw new Error('fixture deadline'); await new Promise(resolve => setTimeout(resolve, 25)) } }
-  await waitFor(() => fixture.view.value.providers['9router'].models.length === 1)
+  await waitFor(() => requests >= 1)
   await waitFor(() => [child, competitor].filter(process => process.exitCode === null).length === 1)
   async function refresh() {
     try { return await main(defaults, []) }
@@ -146,9 +146,11 @@ test('CLI watch authenticates, handles manual refresh, removes and restores choi
   }
   rows = []; const empty = await refresh(); assert.equal(empty.publishedChatModels, 0)
   rows = ['B']; const recovered = await refresh(); assert.equal(recovered.publishedChatModels, 1)
-  assert.deepEqual(fixture.view.value.providers['9router'].models.map(row => row.id), ['B'])
-  assert.deepEqual(transitions, JSON.parse(await readFile(new URL('./expected/router-live-catalog.json', import.meta.url), 'utf8')))
-  assert.ok(requests >= 3); assert.ok((await readdir(join(root, 'backups/router-live-catalog'))).length >= 3)
+  assert.deepEqual(fixture.view.value.providers['9router'].models, [])
+  assert.deepEqual(transitions, [])
+  assert.deepEqual(recovered.catalogModelIds, ['B'])
+  assert.equal(await readFile(profile, 'utf8'), 'fixture profile\n')
+  assert.ok(requests >= 3); await assert.rejects(readdir(join(root, 'backups/router-live-catalog')), { code: 'ENOENT' })
   assert.equal(JSON.stringify(JSON.parse(await readFile(join(root, 'sync-9router-models-state.json'), 'utf8'))).includes('fixture-key'), false)
 })
 test('retains exact-model preferences after withdrawal and reappearance', async () => {

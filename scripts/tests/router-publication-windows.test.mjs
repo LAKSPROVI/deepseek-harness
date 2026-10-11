@@ -15,7 +15,7 @@ async function fixture(t, lifetime = 60000) {
   const stateFile = join(home, 'sync-9router-models-state.json')
   const previous = { ok: false, marker: 'original fixture' }
   await writeFile(stateFile, JSON.stringify(previous))
-  const route = { api: 'openai-completions', baseURL: '', models: [] }
+  const route = { api: 'openai-completions', apiKeyEnv: 'DSH_PUBLICATION_FIXTURE_KEY', baseURL: '', models: [] }
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, route.baseURL)
     if (url.pathname === '/' && url.searchParams.get('token') === 'fixture') {
