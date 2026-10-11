@@ -39,9 +39,10 @@ Persist complete raw configs and apply them through the normal Loader path.
 entries(): Entry[]
 
 /** Read inherited and explicit profile values for the active entries.
+ * @param ns Optional entry id, filtered before inheritance and detached-value projection; missing ids return no rows.
  * @returns Detached layer values alongside their Loader entries.
  */
-configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }>
+configuration(ns?: string): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }>
 
 /** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules.
  * @param entry Current Loader entry, also used to detect replacement during the write.
@@ -213,15 +214,16 @@ Source: [`packages/boot/app-boot/src/profile-context.ts`](../../packages/boot/ap
 
 #### `app-boot/config-reload` — emit
 
-Profile patches were reconciled into the running Loader tree: every entry update settled and no new inactive entry was introduced. Carries no diff; listeners re-read Loader entries.
+Profile patches were reconciled into the running Loader tree: every entry update settled and no new inactive entry was introduced. Carries changed entry ids; omitted ids request a full refresh.
 
 ```ts cordis-catalog
 /**
  * Profile patches were reconciled into the running Loader tree: every entry update settled and no new
- * inactive entry was introduced. Carries no diff; listeners re-read Loader entries.
+ * inactive entry was introduced. Carries changed entry ids; omitted ids request a full refresh.
+ * @param changedIds Added, removed, or changed entry ids; omitted for a full refresh.
  * @mode emit
  */
-'app-boot/config-reload'(): void
+'app-boot/config-reload'(changedIds?: readonly string[]): void
 ```
 
 Source: [`packages/boot/app-boot/src/index.ts`](../../packages/boot/app-boot/src/index.ts)

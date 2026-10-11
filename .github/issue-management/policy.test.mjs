@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -285,11 +285,11 @@ test('removes reserved labels from Issues before validation', async (t) => {
   assert.deepEqual(validateIssue(repaired), [])
   assert.deepEqual(requests, [
     {
-      url: 'https://api.github.com/repos/deepseek-harness/deepseek-harness/issues/42/labels/kind%2Fbug-fix',
+      url: 'https://api.github.com/repos/LAKSPROVI/deepseek-harness/issues/42/labels/kind%2Fbug-fix',
       method: 'DELETE',
     },
     {
-      url: 'https://api.github.com/repos/deepseek-harness/deepseek-harness/issues/42/labels/bug-fix',
+      url: 'https://api.github.com/repos/LAKSPROVI/deepseek-harness/issues/42/labels/bug-fix',
       method: 'DELETE',
     },
   ])
@@ -333,18 +333,18 @@ test('deletes a stale audit comment after repairing its only violation', async (
   assert.deepEqual(
     requests.map(({ url, method }) => ({ path: new URL(url).pathname + new URL(url).search, method })),
     [
-      { path: '/repos/deepseek-harness/deepseek-harness/issues/42', method: 'GET' },
+      { path: '/repos/LAKSPROVI/deepseek-harness/issues/42', method: 'GET' },
       { path: '/graphql', method: 'POST' },
       {
-        path: '/repos/deepseek-harness/deepseek-harness/issues/42/labels/kind%2Fbug-fix',
+        path: '/repos/LAKSPROVI/deepseek-harness/issues/42/labels/kind%2Fbug-fix',
         method: 'DELETE',
       },
       {
-        path: '/repos/deepseek-harness/deepseek-harness/issues/42/comments?per_page=100',
+        path: '/repos/LAKSPROVI/deepseek-harness/issues/42/comments?per_page=100',
         method: 'GET',
       },
       {
-        path: '/repos/deepseek-harness/deepseek-harness/issues/comments/99',
+        path: '/repos/LAKSPROVI/deepseek-harness/issues/comments/99',
         method: 'DELETE',
       },
     ],
@@ -446,7 +446,7 @@ test('reads Priority and Status from Project custom fields', async (t) => {
   assert.equal(issue.priority, 'P1')
   assert.equal(issue.status, 'Inbox')
   assert.deepEqual(urls, [
-    'https://api.github.com/repos/deepseek-harness/deepseek-harness/issues/42',
+    'https://api.github.com/repos/LAKSPROVI/deepseek-harness/issues/42',
     'https://api.github.com/graphql',
   ])
 })
@@ -1024,7 +1024,7 @@ test('reads policy snapshots in reference order and only resolving Project prior
     references: { all: [2, 4], resolving: [2], related: [4] },
     issues: new Map([[2, { priority: 'P1' }], [4, { priority: null }]]),
   })
-  const repo = '/repos/deepseek-harness/deepseek-harness'
+  const repo = '/repos/LAKSPROVI/deepseek-harness'
   assert.deepEqual(fixture.requests, [
     repo + '/pulls/10',
     repo + '/pulls/10/requested_reviewers',
@@ -1048,7 +1048,7 @@ test('reads lifecycle references for draft Bot PRs without review or Project req
     issues: new Map([[2, { priority: null }], [4, { priority: null }]]),
     createdAt: '2026-08-27T16:00:00Z',
   })
-  const repo = '/repos/deepseek-harness/deepseek-harness'
+  const repo = '/repos/LAKSPROVI/deepseek-harness'
   assert.deepEqual(fixture.requests, [repo + '/pulls/10', repo + '/issues/2', repo + '/issues/4'])
   assert.deepEqual(fixture.output, [])
 })
@@ -1074,4 +1074,84 @@ test('allows missing Priority only when resolving Issues are also unprioritized'
       '有 Priority 的解决型 PR 要求每个被解决 Issue 都设置 Priority',
     ),
   )
+})
+
+test('mints lifecycle tokens only after trusted live Issue preflight', () => {
+  const source = readFileSync(new URL('../workflows/issue-lifecycle.yml', import.meta.url), 'utf8')
+  const steps = source.split('      - name: ').slice(1)
+  assert.equal(steps.length, 4)
+  assert.ok(steps[0].includes('ref: ${{ github.event.repository.default_branch }}'))
+  assert.ok(steps[1].includes('id: preflight'))
+  assert.ok(steps[1].includes('GITHUB_TOKEN: ${{ github.token }}'))
+  assert.doesNotMatch(steps[1], /secrets\.|PROJECT_TOKEN|pull_request\.head/)
+  assert.ok(steps[2].includes("if: ${{ steps.preflight.outputs.needs-project == 'true' }}"))
+  assert.ok(steps[2].includes('owner: ${{ github.repository_owner }}'))
+  assert.ok(steps[2].includes('repositories: ${{ github.event.repository.name }}'))
+  assert.ok(steps[3].includes("if: ${{ steps.preflight.outputs.needs-project == 'true' }}"))
+  assert.ok(source.includes('  issues: read'))
+  assert.ok(source.includes('  pull-requests: read'))
+})
+
+test('executes lifecycle preflight for empty, linked, informational, and failed live reads', (t) => {
+  const source = readFileSync(new URL('../workflows/issue-lifecycle.yml', import.meta.url), 'utf8')
+  const match = source.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n          NODE/)
+  assert.ok(match, 'workflow must run its trusted inline lifecycle selection')
+  const script = match[1].split('\n').map(line => line.slice(10)).join('\n')
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-lifecycle-preflight-'))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const cases = [
+    { name: 'Issue event', eventName: 'issues', action: 'opened', needs: true, reads: 0 },
+    { name: 'empty current PR', eventName: 'pull_request', action: 'opened', needs: false, reads: 1 },
+    { name: 'opening informational Issue', eventName: 'pull_request', action: 'opened', all: [2], needs: true, reads: 1 },
+    { name: 'reopening informational Issue', eventName: 'pull_request', action: 'reopened', all: [2], needs: false, reads: 1 },
+    { name: 'reopening resolving Issue', eventName: 'pull_request', action: 'reopened', all: [2], resolving: [2], needs: true, reads: 1 },
+    { name: 'body edit resolving Issue', eventName: 'pull_request', action: 'edited', changes: { body: { from: '' } }, all: [2], resolving: [2], needs: true, reads: 1 },
+    { name: 'title-only edit', eventName: 'pull_request', action: 'edited', changes: { title: { from: '' } }, all: [2], resolving: [2], needs: false, reads: 0 },
+    { name: 'requested changes', eventName: 'pull_request_review', action: 'submitted', state: 'changes_requested', all: [2], resolving: [2], needs: true, reads: 1 },
+    { name: 'approval only', eventName: 'pull_request_review', action: 'submitted', state: 'approved', all: [2], resolving: [2], needs: false, reads: 0 },
+    { name: 'failed trusted read', eventName: 'pull_request', action: 'opened', failure: true, needs: false, reads: 1 },
+  ]
+  for (const [index, fixture] of cases.entries()) {
+    const cwd = join(directory, String(index))
+    const policyDirectory = join(cwd, '.github', 'issue-management')
+    mkdirSync(policyDirectory, { recursive: true })
+    for (const name of ['rules.mjs', 'config.json']) {
+      copyFileSync(new URL(name, import.meta.url), join(policyDirectory, name))
+    }
+    const eventPath = join(cwd, 'event.json')
+    const outputPath = join(cwd, 'output')
+    const readPath = join(cwd, 'reads')
+    writeFileSync(eventPath, JSON.stringify({ action: fixture.action, pull_request: { number: 10 },
+      changes: fixture.changes, review: { state: fixture.state } }))
+    writeFileSync(outputPath, '')
+    writeFileSync(readPath, '')
+    writeFileSync(join(policyDirectory, 'pull-request.mjs'), `
+import fs from 'node:fs'
+export async function lifecyclePullRequestSnapshot(number) {
+  if (number !== 10) throw Error('wrong PR')
+  fs.appendFileSync(${JSON.stringify(readPath)}, 'read\\n')
+  if (${Boolean(fixture.failure)}) throw Error('live read failed')
+  return { references: ${JSON.stringify({ all: fixture.all ?? [], resolving: fixture.resolving ?? [] })} }
+}
+`)
+    const result = spawnSync(process.execPath, ['--input-type=module'], {
+      cwd, input: script, encoding: 'utf8', timeout: 30_000,
+      env: { ...process.env, GITHUB_EVENT_NAME: fixture.eventName, GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: outputPath },
+    })
+    assert.equal(result.error, undefined, fixture.name)
+    assert.equal(result.signal, null, fixture.name)
+    assert.equal(result.status, fixture.failure ? 1 : 0, fixture.name + ': ' + result.stderr)
+    assert.equal(readFileSync(outputPath, 'utf8'), fixture.failure ? '' : `needs-project=${fixture.needs}\n`, fixture.name)
+    assert.equal(readFileSync(readPath, 'utf8'), 'read\n'.repeat(fixture.reads), fixture.name)
+  }
+})
+
+
+test('allocates all primary fork CI jobs on public hosted runners by default', () => {
+  const source = readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8')
+  assert.ok((source.match(/\|\| 'ubuntu-latest'/g) ?? []).length >= 3)
+  assert.equal((source.match(/\|\| 'windows-latest'/g) ?? []).length, 3)
+  assert.doesNotMatch(source, /\|\| 'dsh-(?:ubuntu|windows)-/)
+  assert.ok(source.includes("vars.DSH_CI_FAILOVER_LINUX == 'selfhosted'"))
+  assert.ok(source.includes("vars.DSH_CI_FAILOVER_WINDOWS == 'selfhosted'"))
 })

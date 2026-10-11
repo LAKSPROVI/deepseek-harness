@@ -46,10 +46,11 @@ declare module '@deepseek-ai/cordis' {
   interface Events {
     /**
      * Profile patches were reconciled into the running Loader tree: every entry update settled and no new
-     * inactive entry was introduced. Carries no diff; listeners re-read Loader entries.
+     * inactive entry was introduced. Carries changed entry ids; omitted ids request a full refresh.
+     * @param changedIds Added, removed, or changed entry ids; omitted for a full refresh.
      * @mode emit
      */
-    'app-boot/config-reload'(): void
+    'app-boot/config-reload'(changedIds?: readonly string[]): void
   }
 }
 
@@ -275,6 +276,9 @@ export async function reconcileProfilePatches(
 ): Promise<string[]> {
   const entry = bootstrapIncludes.get(ctx)
   if (entry === undefined) throw new Error(`${binName}: profile reload requires the root Include entry`)
+  const previousEntries = new Map([...ctx.loader.entries()].map(row => [row.id, {
+    ns: row.options.id, raw: JSON.stringify(row.options), fiber: row.fiber, state: row.fiber?.state,
+  }]))
   const previousFailures = (await inactiveEntries(ctx)).map(failure => ({
     ...failure, diagnostic: inactiveDiagnostic(failure), fiber: failure.entry.fiber, options: JSON.stringify(failure.entry.options),
   }))
@@ -297,7 +301,15 @@ export async function reconcileProfilePatches(
   for (const [index, result] of results.entries()) {
     if (result.status === 'rejected' && !previousFibers[index]?.failed) throw result.reason
   }
-  ctx.emit('app-boot/config-reload')
+  const changedIds = new Set<string>()
+  for (const row of ctx.loader.entries()) {
+    const previous = previousEntries.get(row.id)
+    if (previous === undefined || previous.raw !== JSON.stringify(row.options)
+      || previous.fiber !== row.fiber || previous.state !== row.fiber?.state) changedIds.add(row.options.id)
+    previousEntries.delete(row.id)
+  }
+  for (const previous of previousEntries.values()) changedIds.add(previous.ns)
+  ctx.emit('app-boot/config-reload', [...changedIds])
   return failures.map(inactiveDiagnostic)
 }
 

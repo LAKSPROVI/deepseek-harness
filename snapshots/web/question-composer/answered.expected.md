@@ -1,6 +1,10 @@
 - banner:
   - navigation "Session hierarchy": Use the ask_user_question tool to
+  - button "Agent Team"
   - text: Standard mode
+  - button "New conversation and context options": New Chat
+  - button "Automações"
+  - button "Session notes and reminders": Notes
   - button "More actions"
   - button "Open right sidebar"
   - tablist:
@@ -19,6 +23,8 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Hold to talk"
+- status
 - button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
 - button "Send message" [disabled]
 - button "1 turns 2 steps · {{throughput}} tok/s": 1 turns 2 steps{{throughput}} tok/s

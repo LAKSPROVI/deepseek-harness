@@ -25,9 +25,11 @@ Use `@deepseek-ai/dsh-llm` to stream model calls through configured provider ada
 <a id="use-this-package"></a>
 ## Use this package
 
-`listModels` describes models offered by catalog-driven interfaces. Core resolution and streaming can still accept unlisted ids. The GUI requires catalog membership for selection and submission; adapters intended for GUI use must implement `listModels` and advertise their available models. The base implementation returns an empty list and therefore offers no GUI models.
+`listModels` describes models offered by catalog-driven interfaces. Core resolution and streaming can still accept unlisted ids. The GUI requires catalog membership for selection and submission; adapters intended for GUI use must implement `listModels` and advertise their available models. The base implementation returns an empty list and therefore offers no GUI models. A home enrolled by the [live-router synchronizer](../../../docs/user/router-live-catalog.md) also requires a current positive lease for `9router` listing, resolution, preparation, and dispatch. State changes and expiration invalidate the native model directory; an already running stream keeps its original dispatch.
 
 Any composition that calls a model provider — an agent loop, a session-title generator, a compaction summarizer — streams its requests through this service. Mount it together with at least one provider adapter; the service itself has no configuration and no provider wire code.
+
+For `9router` routes named `gh/gpt*`, catalog choices must also fit the current tool presentation: OpenAI Chat Completions accepts at most 128 tool schemas. `listModels(provider, wireToolCount)` accepts a caller's scoped count; omission reads the global tool registry when mounted. Tool or prompt changes invalidate the directory. Dispatch checks the complete projected tool set after asynchronous preparation and rejects excess schemas with `ROUTER_MODEL_TOOL_LIMIT` before adapter stream dispatch. It never truncates tools or changes presentation. Explicit scoped PTC can remain compatible because it exposes one `run_code` schema; native scopes keep every registered tool. Synchronization RPC status counts usable default-context models and reports confirmed routes excluded by this tool limit separately from upstream availability.
 
 ### When to choose it
 

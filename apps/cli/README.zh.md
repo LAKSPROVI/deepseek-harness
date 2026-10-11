@@ -17,7 +17,7 @@
 | `dsh web` | 启动 Web profile。 |
 | `dsh plugin --profile <name> <pnpm args>` | 通过在 profile 目录中转发给 pnpm 来管理该 profile 的插件。 |
 
-运行命令时所在的目录将作为默认 workspace 根目录。`web`、`headless`、`sdk`、`sdk-minimal` 和 `acp` profile 在首次使用时会从随附模板自动初始化。使用 `--from-default-profile` 可以基于这些模板之一，在尚未使用的非内置名称处创建其他 profile；通过 `dsh plugin` 则可以初始化一个以 base 为基础的 profile。`desktop` 名称保留给 Electron 持有的 profile，因此 CLI（命令行界面）会拒绝针对它的启动、配置 dump 和插件管理请求。
+运行命令时所在的目录将作为默认 workspace 根目录。`web`、`headless`、`sdk`、`sdk-minimal` 和 `acp` profile 在首次使用时会从随附模板自动初始化。使用 `--from-default-profile` 可以基于这些模板之一，在尚未使用的非内置名称处创建其他 profile；通过 `dsh plugin` 则可以初始化一个以 base 为基础的 profile。`desktop` 名称保留给 Electron 持有的 profile，因此 CLI（命令行界面）会拒绝针对它的启动和配置 dump 请求。npm CLI 也会拒绝其插件管理请求；[Desktop 内置命令](../desktop/README.zh.md#bundled-command-runtime)可以使用该安装的运行时管理已初始化的 Desktop profile。
 
 ## 应用参数
 
@@ -49,6 +49,14 @@ profile 目录包含一个 `package.json`，其中记录树外插件依赖，以
 
 层的确切优先级、flag、关闭行为、部署默认值和源码执行方式，以 [CLI 行为参考](reference/README.zh.md)为准。[启动与重载失败表](../../packages/boot/app-boot/README.zh.md#startup-and-reload-failures)对比 optional、required 插件启动失败与配置 HMR 的行为。
 
+## 手动 Windows Web 运行时
+
+可选的[任务定义辅助脚本](../../scripts/new-lakatoss-web-runtime-task.ps1)返回 Windows Task Scheduler 定义，不注册或启动任务。它使用当前操作员显式提供的 UserId 和 Interactive 登录方式、隐藏的 PowerShell 操作、无触发器、无自动重启、无执行期限及 IgnoreNew。操作员验证冻结产物，固定源码提交与 CLI/runner 的 SHA-256 后，再注册并手动启动 `LakatossWebRuntime`。停止任务不会安排另一次启动。
+
+[Runner](../../scripts/run-lakatoss-web-runtime.ps1)从固定源码目录启动 `node apps/cli/lib/bin.js web --no-open`，并等待子进程退出。它拒绝含链接的路径、已变化的固定字节以及已有的 3080 端口监听器。它导入名称匹配 `ROUTER|TYPESAFE|GROQ` 的 User 环境变量，不打印变量值；保留原有 stdout/stderr 日志，并在显式日志目录下的 `dsh-web-runtime-receipt.json` 中原子记录源码身份、进程身份、时间戳、阶段和退出码。Receipt 的 running 阶段只确认进程已创建；操作员还需单独验证监听器、认证 HTTP 和会话历史，才能判断应用已就绪。
+
+运行[合成验证](../../scripts/verify-lakatoss-web-runtime.ps1)时，将 `-PowerShellPath` 和 `-NodePath` 设置为可执行文件的绝对路径。它检查解析、固定产物拒绝、手动任务设置、受支持的 CLI 参数、合成子进程退出码 7、receipt 完结及日志保留，不注册任务或启动真实 profile。
+
 ## 可选覆盖层
 
 `config/examples/` 交付 GitHub 评审 webhook、记忆 MCP 服务器与运行时 Cordis 工具的可选覆盖层。它们绝不属于默认 profile；设置与安全说明由[用户指南](../../docs/user/guide/index.zh.md)和[开发实战指南](../../docs/user/develop/practice/index.zh.md)负责。
@@ -58,5 +66,7 @@ profile 目录包含一个 `package.json`，其中记录树外插件依赖，以
 生产运行需要已构建的包与前端产物。请在仓库根目录单独运行 `pnpm run build`，然后使用 `pnpm dsh <args...>` 运行 TypeScript 入口并转发所有参数；模块解析约定以[源码执行参考](reference/README.zh.md#source-execution)为准。
 
 `@deepseek-ai/dsh/profile-boot` 导出向 Desktop Host 提供共享 profile 生命周期。已解析的应用 profile 为运行时包解析指定自己的安装锚点，同时沿用 Harness home patch、代理环境、遥测开关、patch 热重载和有界关闭。
+
+打包安装通过同一个 `runCli()` 入口传入包管理器可执行文件。Desktop 载体还会启用其已初始化 profile 的插件操作；npm 启动不传入这些选项。安装包提供的包管理环境仅用于插件包操作；调用目录、普通 profile 选择与 agent shell 的 PATH 保留 CLI 语义。
 
 [Web 失败矩阵](tests/profiles/web/tests/web-failure-matrix.expected.e2e.ts)在 `test:expected` 中通过构建后的 CLI 验证启动失败与启用 `awaitWriteFinish` 的原生配置 HMR。它不调用模型 API，而是检查经过认证的 HTTP 响应、诊断、恢复、进程退出与 dispose；[启动验收测试](tests/profiles/web/tests/web-best-effort-startup.expected.e2e.ts)还覆盖随附 Web 的必需依赖与端口冲突。

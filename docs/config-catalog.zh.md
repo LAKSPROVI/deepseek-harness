@@ -3578,6 +3578,29 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-goal -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-jev -->
+<a id="deepseek-aidsh-tool-jev"></a>
+
+## `@deepseek-ai/dsh-tool-jev`
+
+- `inject`: `tools`
+- `source`: [`packages/web/tool-jev/src/index.ts:28`](../packages/web/tool-jev/src/index.ts)
+
+```ts config-catalog
+/** Plugin config: endpoint, model, and per-call budget. */
+export interface Config {
+  /** Register the tool. Defaults to true. */
+  enabled?: boolean
+  /** TypeSafe AI System One endpoint. Defaults to the public API. */
+  apiUrl?: string
+  /** System One model id. Defaults to jev-latest. */
+  model?: string
+  /** Cooperative timeout budget (ms) for one jev_decide call. Defaults to 15000. */
+  timeoutMs?: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-jev -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-jobs -->
 <a id="deepseek-aidsh-tool-jobs"></a>
 

@@ -33,6 +33,8 @@ export interface SettingsDescriptor {
 /** Wire readers always request secret redaction. */
 export interface SettingsDescribeOptions {
   redactSecrets?: boolean
+  /** Limit projection to one entry without revising unrelated namespaces. */
+  ns?: string
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -225,13 +227,14 @@ export class SettingsForms extends Service {
   private revisions = new Map<string, { raw: string | undefined; revision: number; ns: SettingsNamespace; autoGenerate: boolean }>()
   private closed = false
   private scheduled = false
+  private pendingNamespaces: Set<string> | undefined
   private readonly presentations = new Map<Fiber, { auto?: boolean }>()
 
   constructor(private readonly ownerContext: Context) {
     super(ownerContext, 'settings')
     const ctx = ownerContext
     ctx.effect(() => () => { this.closed = true })
-    ctx.on('app-boot/config-reload', () => { this.invalidate() })
+    ctx.on('app-boot/config-reload', (ids) => { this.invalidate(ids) })
     void ctx.root.loader.await().then(() => this.importLegacyDocument()).catch((error: unknown) => { ctx.logger.error(error) })
   }
 
@@ -276,13 +279,26 @@ export class SettingsForms extends Service {
     }
   }
 
-  private invalidate(): void {
-    if (this.scheduled || this.closed) return
+  private invalidate(namespaces?: readonly string[]): void {
+    if (this.closed || namespaces?.length === 0) return
+    if (this.scheduled) {
+      if (namespaces === undefined) this.pendingNamespaces = undefined
+      else if (this.pendingNamespaces !== undefined) for (const ns of namespaces) this.pendingNamespaces.add(ns)
+      return
+    }
+    this.pendingNamespaces = namespaces === undefined ? undefined : new Set(namespaces)
     this.scheduled = true
     queueMicrotask(() => {
+      const pending = this.pendingNamespaces
+      this.pendingNamespaces = undefined
       this.scheduled = false
       if (this.closed || this.ownerContext.fiber.state !== FiberState.ACTIVE) return
-      try { this.describe() } catch (error) { this.ownerContext.logger.error(error) }
+      for (const ns of pending ?? [undefined]) {
+        try {
+          if (ns === undefined) this.describe()
+          else this.describe({ ns })
+        } catch (error) { this.ownerContext.logger.error(error) }
+      }
     })
   }
 
@@ -301,7 +317,8 @@ export class SettingsForms extends Service {
    */
   describe(options?: SettingsDescribeOptions): SettingsDescriptor[] {
     const active = new Set<string>()
-    const descriptors = this.ownerContext.configEditor.configuration().flatMap(({ entry, inherited, override }) => {
+    const descriptors = this.ownerContext.configEditor.configuration(options?.ns).flatMap(({ entry, inherited, override }) => {
+      if (options?.ns !== undefined && entry.options.id !== options.ns) return []
       const schema = this.schema(entry)
       if (schema === undefined || entry.fiber === undefined
         || entry.fiber.runtime === null || entry.fiber.state !== FiberState.ACTIVE) return []
@@ -331,6 +348,7 @@ export class SettingsForms extends Service {
       }]
     })
     for (const [id, previous] of this.revisions) {
+      if (options?.ns !== undefined && previous.ns !== options.ns) continue
       if (active.has(id) || previous.raw === undefined) continue
       const revision = previous.revision + 1
       this.revisions.set(id, { ...previous, raw: undefined, revision })
@@ -388,7 +406,7 @@ export class SettingsForms extends Service {
       if (path.length && !isVolatilePath(schema, path)) throw new Error(`Config field "${path.join('.')}" is not volatile`)
     }
     await this.ownerContext.configEditor.edit(entry, (raw, inherited) => {
-      const descriptor = this.describe().find(row => row.ns === ns)
+      const descriptor = this.describe({ ns }).find(row => row.ns === ns)
       if (descriptor === undefined) throw new Error(`Plugin entry "${ns}" is no longer configurable`)
       if (expected !== undefined && descriptor.revision !== expected) {
         throw new SettingsConflictError(ns as SettingsNamespace, expected, descriptor.revision)
@@ -419,7 +437,7 @@ export class SettingsForms extends Service {
       }
       return mergeLayers(strip(raw, form), next) as Record<string, unknown>
     })
-    this.describe()
+    this.describe({ ns })
   }
 
   private schema(entry: Entry): z | undefined {

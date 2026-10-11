@@ -28,7 +28,7 @@ import type {
   ToolSchema,
   ToolUpdate,
 } from './types.ts'
-import { executeRouterSync, readRouterSyncStatus } from './router-sync.ts'
+import { executeRouterSync, readRouterSyncStatus, readRouterCatalogLease, watchRouterCatalog, confirmRouterModel } from './router-sync.ts'
 import { freezeMessage } from './message.ts'
 import { resolveRetryPolicy } from './retry-policy.ts'
 import type { ResolvedRetryPolicy } from './retry-policy.ts'
@@ -342,6 +342,7 @@ export interface DirectoryRegistrationHandle {
  * API, interceptable via the `llm/stream` waterfall.
  */
 export class LlmRuntime extends TypertRemoteService {
+  private readonly routerHome = process.env.DSH_HOME
   private adapters = new Map<string, AdapterRegistration>()
   private directory = new Map<string, LlmConfigurableProvider>()
   private discoveries = new Map<
@@ -351,6 +352,13 @@ export class LlmRuntime extends TypertRemoteService {
 
   constructor(ctx: Context) {
     super(ctx, 'llm')
+    ctx.effect(() => watchRouterCatalog(this.routerHome, () =>{  this.emitAdaptersUpdated() }), 'llm: router catalog lease')
+    // These optional registries depend on LLM; their existing emit events need no reverse dependency.
+    const onChange = ctx.on.bind(ctx) as (
+      name: 'system-prompt/change' | 'tools/change', listener: () => void,
+    ) => () => void
+    onChange('system-prompt/change', () => { this.emitAdaptersUpdated() })
+    onChange('tools/change', () => { this.emitAdaptersUpdated() })
   }
 
   /** Notify topology observers without letting one broken listener veto the commit. */
@@ -663,7 +671,7 @@ export class LlmRuntime extends TypertRemoteService {
    */
   @Remote
   async routerSyncStatus(): Promise<RouterSyncStatus> {
-    return await readRouterSyncStatus()
+    return this.routerStatusForCatalog(await readRouterSyncStatus(this.routerHome))
   }
 
   /**
@@ -672,7 +680,26 @@ export class LlmRuntime extends TypertRemoteService {
    */
   @Remote
   async triggerRouterSync(): Promise<RouterSyncStatus> {
-    return await executeRouterSync()
+    return this.routerStatusForCatalog(await executeRouterSync(this.routerHome))
+  }
+
+  /** Expose the default-context usable count beside upstream availability facts. */
+  private async routerStatusForCatalog(status: RouterSyncStatus): Promise<RouterSyncStatus> {
+    if (!this.adapters.has('9router')) return status
+    const lease = await readRouterCatalogLease(this.routerHome)
+    if (lease.ids === undefined) return status
+    const healthy = await this.listModels('9router', 0)
+    const toolCount = this.routerToolCount()
+    const models = healthy.filter(model => this.routerToolsCompatible('9router', model.id, toolCount))
+    const excluded = healthy.length - models.length
+    const diagnostic = excluded > 0
+      ? `${excluded} confirmed router models are incompatible with the current tool set`
+      : undefined
+    return {
+      ...status,
+      publishedChatModels: models.length,
+      ...diagnostic === undefined ? {} : { error: [status.error, diagnostic].filter(Boolean).join('; ') },
+    }
   }
 
   /**
@@ -717,13 +744,17 @@ export class LlmRuntime extends TypertRemoteService {
    * does not constrain core routing. Catalog-driven entry points may restrict
    * selection and submission to the advertised models.
    * @param provider - registered provider route to inspect.
-   * @returns detached model metadata in adapter-preferred order.
+   * @param wireToolCount - schemas visible to this caller; omission reads the global tool presentation.
+   * @returns detached model metadata in adapter-preferred order, excluding incompatible router routes.
    */
-  async listModels(provider: string): Promise<LlmModelInfo[]> {
+  async listModels(provider: string, wireToolCount?: number): Promise<LlmModelInfo[]> {
     const adapter = this.registration(provider).adapter
     const models = await adapter.listModels(provider)
     const seen = new Set<string>()
-    return models.map((model) => {
+    const lease = await readRouterCatalogLease(provider === '9router' ? this.routerHome : undefined)
+    const toolCount = provider === '9router' ? wireToolCount ?? this.routerToolCount() : 0
+    return models.filter(model => (lease.ids === undefined || lease.ids.has(model.id))
+      && this.routerToolsCompatible(provider, model.id, toolCount)).map((model) => {
       if (
         typeof model.provider !== 'string'
         || model.provider !== provider
@@ -765,11 +796,41 @@ export class LlmRuntime extends TypertRemoteService {
     return this.resolveModelInfoFor(this.registration(provider), model, signal)
   }
 
+  /** Read the optional tool registry without importing its LLM-dependent implementation. */
+  private routerToolCount(): number {
+    const tools = this.ctx.get('tools') as { wireToolCount(): number } | undefined
+    return tools?.wireToolCount() ?? 0
+  }
+
+  /** OpenAI Chat Completions admits at most 128 tool declarations on these router routes. */
+  private routerToolsCompatible(provider: string, model: string, count: number): boolean {
+    return provider !== '9router' || !model.startsWith('gh/gpt') || count <= 128
+  }
+
+  /** Reject incompatible complete requests without dropping any configured tools. */
+  private assertRouterTools(options: GenerateOptions): void {
+    const count = options.tools?.length ?? 0
+    if (!this.routerToolsCompatible(options.provider, options.model, count)) {
+      throw new LlmError(
+        `Router model "${options.model}" accepts at most 128 tools; this request contains ${count}. Select a compatible model or explicitly use PTC.`,
+        'ROUTER_MODEL_TOOL_LIMIT',
+      )
+    }
+  }
+
+  /** Managed routes require a current positive lease before resolution or dispatch. */
+  private async assertRouterModel(provider: string, model: string, signal?: AbortSignal, expectedScope?: string): Promise<void> {
+    if (provider !== '9router') return
+    if (!await confirmRouterModel(this.routerHome, model, signal, expectedScope)) {
+      throw new LlmError('Router model has no current availability confirmation', 'ROUTER_MODEL_UNAVAILABLE')
+    }
+  }
   private async resolveModelInfoFor(
     registration: AdapterRegistration,
     model: string,
     signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
+    await this.assertRouterModel(registration.provider.id, model, signal)
     const resolved = await registration.adapter.resolveModel(registration.provider.id, model, signal)
     return this.normalizeModelInfo(registration, model, resolved)
   }
@@ -954,6 +1015,8 @@ export class LlmRuntime extends TypertRemoteService {
    * @returns a prepared config and its registration-bound stream entry point.
    */
   async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall> {
+    const routerScope = config.provider === '9router' ? (await readRouterCatalogLease(this.routerHome)).scope : undefined
+    await this.assertRouterModel(config.provider, config.model, signal, routerScope)
     const registration = this.registration(config.provider)
     const adapterCall = await registration.adapter.prepareCall(config.provider, config.model, signal)
     const modelInfo = this.normalizeModelInfo(registration, config.model, adapterCall.model)
@@ -994,6 +1057,7 @@ export class LlmRuntime extends TypertRemoteService {
         dispatched = true
         return this.streamWithRegistration(options, {
           registration,
+          ...(routerScope === undefined ? {} : { routerScope }),
           config: resolvedConfig,
           modelInfo,
           dispatch: options => adapterCall.stream(options),
@@ -1056,6 +1120,8 @@ export class LlmRuntime extends TypertRemoteService {
   ): AsyncGenerator<StreamChunk> {
     let iterator: AsyncIterator<StreamChunk>
     try {
+      const routerScope = prepared?.routerScope ?? (options.provider === '9router' ? (await readRouterCatalogLease(this.routerHome)).scope : undefined)
+      await this.assertRouterModel(options.provider, options.model, options.signal, routerScope)
       const registration = prepared?.registration ?? this.registration(options.provider)
       const adapter = registration.adapter
       let modelInfo: LlmResolvedModelInfo
@@ -1104,6 +1170,8 @@ export class LlmRuntime extends TypertRemoteService {
         }
         if (Object.isFrozen(resolvedOptions)) deepFreeze(projectedOptions)
       }
+      await this.assertRouterModel(options.provider, options.model, options.signal, routerScope)
+      this.assertRouterTools(projectedOptions)
       const stream = dispatch(this.forAdapter(projectedOptions, adapter))
       iterator = stream[Symbol.asyncIterator]()
     } catch (error: unknown) {
@@ -1187,6 +1255,7 @@ interface AdapterRegistration {
 }
 
 interface PreparedDispatch {
+  routerScope?: string
   readonly registration: AdapterRegistration
   readonly config: LlmCallConfig
   readonly modelInfo: LlmResolvedModelInfo
@@ -1194,3 +1263,5 @@ interface PreparedDispatch {
 }
 
 export default LlmRuntime
+
+export { readRouterRuntimeModels, routerCredentialMatches } from './router-sync.ts'

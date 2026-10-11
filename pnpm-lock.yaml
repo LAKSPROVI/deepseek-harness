@@ -14464,6 +14464,9 @@ importers:
       '@deepseek-ai/dsh-tool-goal':
         specifier: workspace:*
         version: link:../../packages/goal/tool-goal
+      '@deepseek-ai/dsh-tool-jev':
+        specifier: workspace:*
+        version: link:../../packages/web/tool-jev
       '@deepseek-ai/dsh-tool-jobs':
         specifier: workspace:*
         version: link:../../packages/jobs/tool-jobs

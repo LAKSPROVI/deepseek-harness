@@ -44,12 +44,15 @@ export class ConfigEditor extends Service {
   }
 
   /** Read inherited and explicit profile values for the active entries.
+   * @param ns Optional entry id, filtered before inheritance and detached-value projection; missing ids return no rows.
    * @returns Detached layer values alongside their Loader entries.
    */
-  configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }> {
+  configuration(ns?: string): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }> {
+    const entries = this.entries().filter(entry => ns === undefined || entry.options.id === ns)
+    if (entries.length === 0) return []
     const profile = this.ownerContext.profileContext
     const loaded = loadProfileDirectory('dsh', profile.dir, profile.installAnchor)
-    return this.entries().map(entry => ({
+    return entries.map(entry => ({
       entry, inherited: this.inherited(entry, loaded),
       override: structuredClone((loaded.patches.findLast(
         row => row.id === entry.options.id && row.config !== undefined,

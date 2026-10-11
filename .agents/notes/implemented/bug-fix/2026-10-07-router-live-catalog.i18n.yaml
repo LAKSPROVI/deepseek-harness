@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-07-router-live-catalog.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-07-router-live-catalog.md
+/agent-note-scoped-configuration-supports-router-availability:
+  en: b53dd1f4fd54e09a
+  zh: 8daeabfe43ecb3e1
+/agent-note-scoped-configuration-supports-router-availability/problem:
+  en: 22b8d7362b730129
+  zh: 40b6e9bba1b74d71
+/agent-note-scoped-configuration-supports-router-availability/decision:
+  en: ac75ef6d9bea59e6
+  zh: 956a8c68fd85d095
+/agent-note-scoped-configuration-supports-router-availability/alternatives-considered:
+  en: 996fa5a692341529
+  zh: 295132d3a27f4501
+/agent-note-scoped-configuration-supports-router-availability/consequences:
+  en: aae952b1e2b7f4fb
+  zh: 8d558f8e4c54fad6

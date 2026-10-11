@@ -878,8 +878,9 @@ export function WorkspaceBrowser({
   const searchShortcut = shortcuts.find(row => row.id === 'session.search')
   const addShortcut = shortcuts.find(row => row.id === 'workspace.add')
   const shortcutState = useWorkspaceShortcuts(state => state)
-  // Ordering remains live while the rail or search replaces the list body.
+  // Ordering and Session status stay live while rail or search replaces the list.
   const list = useSessions(state => state)
+  const statuses = useSessionStatus(state => state)
   const storedWorkspaces = useWorkspaces(state => state.items)
   // The resolved name, not `t`, is the memo dependency: the bound seat keeps
   // its identity across a language switch.
@@ -1358,7 +1359,7 @@ export function WorkspaceBrowser({
             list={list}
             workspaces={workspaces}
             rowState={rowState}
-            statuses={useSessionStatus(s => s)}
+            statuses={statuses}
             customStatuses={customSessionStatuses}
             currentId={mainSessionId}
             t={t}
