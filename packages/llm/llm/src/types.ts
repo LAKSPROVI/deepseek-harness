@@ -12,8 +12,8 @@ import type { Message, UserMessage } from './message.ts'
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /**
-     * The provider topology changed: an adapter registered or unregistered
-     * routes, or the configurable-provider directory gained or lost entries.
+     * Provider topology or model eligibility changed: adapter routes,
+     * configurable-provider entries, or prompt/tool presentation changed.
      * This payload-free registry notification fires at each commit point
      * (including registration disposal); consumers re-read `listProviders()`,
      * `listModels()`, or `listConfigurableProviders()` for the new state.
@@ -562,7 +562,7 @@ export interface RouterSyncStatus {
   totalRoutes: number
   /** Number of active and available model routes in upstream monitor data. */
   availableRoutes: number
-  /** Number of chat models published to DSH settings.yaml. */
+  /** Number of selectable chat models usable with the global tool presentation in RPC status; raw state reports published models. */
   publishedChatModels: number
   /** Number of published models supporting visual input modalities. */
   visionModels?: number

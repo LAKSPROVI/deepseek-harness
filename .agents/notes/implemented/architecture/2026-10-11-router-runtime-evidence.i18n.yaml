@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-11-router-runtime-evidence.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-11-router-runtime-evidence.md
+/agent-note-router-runtime-evidence-owns-availability:
+  en: 8c97b2cb94f7675a
+  zh: ab6691cbd6fff411
+/agent-note-router-runtime-evidence-owns-availability/problem:
+  en: 35067416be4f776b
+  zh: b63a40d60bc5bd3e
+/agent-note-router-runtime-evidence-owns-availability/decision:
+  en: adad7ad900b15413
+  zh: 5b58eab662f7cd20
+/agent-note-router-runtime-evidence-owns-availability/alternatives-considered:
+  en: 5e188695cedf0358
+  zh: fde3be17ee1ba7dd
+/agent-note-router-runtime-evidence-owns-availability/consequences:
+  en: de9fea4c76cc37ee
+  zh: 1baf31f6568a4e54

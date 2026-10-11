@@ -1,9 +1,9 @@
 - banner:
   - navigation "Session hierarchy": Inline code links
-  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "New conversation and context options": New Chat
   - button "Automações"
+  - button "Session notes and reminders": Notes
   - button "More actions"
-  - button "Anotações e lembretes da sessão": Anotações
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"

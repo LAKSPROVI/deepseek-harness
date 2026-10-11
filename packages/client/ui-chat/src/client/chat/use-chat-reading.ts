@@ -84,12 +84,16 @@ export class ChatReading {
     this.commit(landing, true, this.viewport.latestTurn)
   }
 
-  /** Restore the Session's semantic position, or follow the tail when none is saved. */
-  restore(): void {
+  /**
+   * Restore the Session's semantic position, or report an anchor requiring history.
+   * @param fallback - allow the old raw scroll top when history cannot recover its anchor.
+   * @returns the saved position while its semantic anchor is still unavailable.
+   */
+  restore(fallback = false): ChatScrollPosition | null {
     const saved = this.store.read()
-    if (saved === null) { this.followTail(); return }
-    const landing = this.viewport.restore(saved)
-    if (landing === null) return
+    if (saved === null) { this.followTail(); return null }
+    const landing = this.viewport.restore(saved, fallback || saved.anchorSeq === undefined)
+    if (landing === null) return saved
     this.cancelPending()
     const following = this.follow.nearBottom(landing.metrics)
     this.commit(landing, following, following ? this.viewport.latestTurn : this.state.activeTurn, following)
@@ -98,6 +102,7 @@ export class ChatReading {
       if (position !== null) this.store.save(position)
     }
     this.refreshActiveTurn()
+    return null
   }
 
   /**

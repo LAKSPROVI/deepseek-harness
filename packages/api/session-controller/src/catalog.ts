@@ -75,12 +75,13 @@ export async function buildModelCatalog(
  * Check a GUI selection against the current available provider catalog.
  * @param ctx - Host LLM registry.
  * @param selection - stored or explicitly requested selection.
+ * @param wireToolCount - optional session-scoped schema count; omission uses the global tool presentation.
  * @returns whether the exact model is currently advertised as available.
  */
-export async function modelAvailable(ctx: Context, selection: ModelSelection): Promise<boolean> {
+export async function modelAvailable(ctx: Context, selection: ModelSelection, wireToolCount?: number): Promise<boolean> {
   if (!ctx.llm.listProviders().some(provider => provider.id === selection.provider)) return false
   let models: readonly LlmModelInfo[]
-  try { models = await ctx.llm.listModels(selection.provider) }
+  try { models = await ctx.llm.listModels(selection.provider, wireToolCount) }
   catch (error) {
     throw new RemoteError('session/model-unavailable',
       error instanceof Error ? error.message : String(error),

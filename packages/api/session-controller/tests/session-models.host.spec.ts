@@ -22,6 +22,7 @@ import type { SessionPromptRequest, SessionRequestId } from '../src/types.ts'
 import { ApiSessionAgentController } from '../src/agent.ts'
 import { buildModelCatalog, hasProviderApiKey } from '../src/catalog.ts'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { createSessionTestController, createSessionTestRemote } from './test-remote.ts'
 
@@ -484,6 +485,29 @@ describe('Web session model selection', () => {
       id: 'string-failure', name: 'String Failure', message: 'string catalog failure',
     })
     await ctx.fiber.dispose()
+  })
+
+  it('preserves the assembled router model across two later manual selections', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    onTestFinished(() => ctx.fiber.dispose())
+    await ctx.plugin(ToolRuntime)
+    const models = ['nv/a', 'nv/b', 'nv/c']
+    ctx.llm.registerAdapter(['9router'], new CatalogAdapter('Router',
+      models.map(id => ({ provider: '9router', id, name: id }))))
+    const remote = createSessionTestRemote(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+    expectValue(await remote.selectModel({ sessionId, provider: '9router', model: models[0]! }))
+    expect((await ctx.systemPrompt.assemble()).variables).toMatchObject({ provider: '9router', model: models[0] })
+    expectValue(await remote.selectModel({ sessionId, provider: '9router', model: models[1]! }))
+    expectValue(await remote.selectModel({ sessionId, provider: '9router', model: models[2]! }))
+    const selected = await agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal: new AbortController().signal },
+      () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+    )
+    expect(selected).toMatchObject({ provider: '9router', model: models[0] })
+    expect(currentSelection(ctx, sessionId)).toMatchObject({ provider: '9router', model: models[2] })
   })
 
   it('rejects unlisted models and switches available models only after the next assembly', async () => {

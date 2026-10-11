@@ -3948,6 +3948,66 @@ describe('ChatView', () => {
     }
   })
 
+  it('reloads an unloaded saved reading anchor without clamping its old scroll top to the new tail', async () => {
+    const host = document.createElement('div')
+    host.setAttribute('data-conversation-scroll', '')
+    Object.defineProperty(host, 'scrollHeight', { value: 2_000, writable: true, configurable: true })
+    Object.defineProperty(host, 'clientHeight', { value: 500, writable: true, configurable: true })
+    let top = 0
+    Object.defineProperty(host, 'scrollTop', {
+      configurable: true, get: () => top, set: (value: number) => { top = Math.min(value, 1_500) },
+    })
+    document.body.appendChild(host)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.dataset.chatAnchorKey === 'fixture:user:1') return new DOMRect(0, 660 - host.scrollTop, 800, 40)
+      return new DOMRect(0, 0, 800, 500)
+    })
+    try {
+      const h = makeHarness({ nodes: [user(20, 'tail'), assistant(21, 'tail answer')] }, { hasMore: true })
+      const saved = { anchorKey: 'fixture:user:1', anchorTop: 80, scrollTop: 10_000, anchorSeq: SessionSeq(1) }
+      h.chatScroll.save(saved)
+      let release: (() => void) | undefined
+      h.loadThrough.mockImplementation(() => new Promise<void>((resolve) => { release = resolve }))
+      const view = render(<h.ChatView {...h.props} />, { container: host })
+      expect(h.loadThrough).toHaveBeenCalledWith(1)
+      expect(h.chatScroll.read()).toEqual(saved)
+      expect(host.scrollTop).toBe(0)
+      expect(view.getByLabelText('回到底部')).toBeTruthy()
+      act(() => { h.setChat({ nodes: [user(1, 'saved'), assistant(2, 'answer'), user(20, 'tail'), assistant(21, 'tail answer')] }) })
+      await act(async () => { release?.() })
+      await waitFor(() => { expect(host.scrollTop).toBe(580) })
+      expect(h.chatScroll.read()).toMatchObject({ anchorKey: 'fixture:user:1', anchorSeq: 1, anchorTop: 80 })
+      expect(view.getByLabelText('回到底部')).toBeTruthy()
+    } finally { host.remove() }
+  })
+
+  it('does not revive a saved-anchor restore after the reader returns to the bottom', async () => {
+    const host = document.createElement('div')
+    host.setAttribute('data-conversation-scroll', '')
+    Object.defineProperty(host, 'scrollHeight', { value: 2_000, writable: true, configurable: true })
+    Object.defineProperty(host, 'clientHeight', { value: 500, writable: true, configurable: true })
+    Object.defineProperty(host, 'scrollTop', { value: 0, writable: true, configurable: true })
+    document.body.appendChild(host)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.dataset.chatAnchorKey === 'fixture:user:1') return new DOMRect(0, 660 - host.scrollTop, 800, 40)
+      return new DOMRect(0, 0, 800, 500)
+    })
+    try {
+      const h = makeHarness({ nodes: [user(20, 'tail'), assistant(21, 'tail answer')] }, { hasMore: true })
+      h.chatScroll.save({ anchorKey: 'fixture:user:1', anchorTop: 80, scrollTop: 10_000, anchorSeq: SessionSeq(1) })
+      let release: (() => void) | undefined
+      h.loadThrough.mockImplementation(() => new Promise<void>((resolve) => { release = resolve }))
+      const view = render(<h.ChatView {...h.props} />, { container: host })
+      expect(h.loadThrough).toHaveBeenCalledWith(1)
+      fireEvent.click(view.getByLabelText('回到底部'))
+      act(() => { h.setChat({ nodes: [user(1, 'saved'), assistant(2, 'answer'), user(20, 'tail'), assistant(21, 'tail answer')] }) })
+      await act(async () => { release?.() })
+      expect(host.scrollTop).toBe(1_500)
+      expect(h.chatScroll.read()).toBeNull()
+      expect(view.queryByLabelText('回到底部')).toBeNull()
+    } finally { host.remove() }
+  })
+
   it('normalizes a semantic restore clamped to the bottom before an immediate remount', () => {
     const host = document.createElement('div')
     host.setAttribute('data-conversation-scroll', '')

@@ -121,13 +121,14 @@ export function apply(ctx: Context, config: Config): void {
     throw new Error('tool-jev: timeoutMs must be a positive integer')
   }
   const apiUrl = config.apiUrl ?? DEFAULT_JEV_API_URL
+  const defaultModel = config.model?.trim() || DEFAULT_JEV_MODEL
 
   ctx.tools.register(defineTool({
     name: 'jev_decide',
     description: 'Evaluate typed questions (choice / score / noul) about a state through the TypeSafe (Jev) System One API and return structured answers with probabilities and calibrated confidence. Each question must be one well-scoped judgment; list several questions in one call to have them evaluated in parallel.',
     parameters: {
       state: { type: 'string', required: true, description: 'The text or JSON state that every question is evaluated against.' },
-      model: { type: 'string', description: `System One model id. Defaults to ${DEFAULT_JEV_MODEL}.` },
+      model: { type: 'string', description: `System One model id. Defaults to ${defaultModel}.` },
       questions: {
         type: 'array',
         required: true,
@@ -161,13 +162,15 @@ export function apply(ctx: Context, config: Config): void {
     // API reads do not mutate parent-agent state.
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const request = parseJevArgs(args)
+      const model = typeof args.model === 'string' && args.model.trim().length > 0 ? args.model : defaultModel
+      const request = parseJevArgs({ ...args, model })
       const apiKey = process.env.TYPESAFE_API_KEY
       if (apiKey === undefined || apiKey.length === 0) {
         throw new Error('jev_decide: TYPESAFE_API_KEY is not set in the harness environment')
       }
       const response = await fetch(apiUrl, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',

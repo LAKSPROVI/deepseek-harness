@@ -32,7 +32,7 @@ import { RenameSessionMenuItem, SessionRenameDialog } from '../src/client/sessio
 import { RowActionToast } from '../src/client/session-actions/RowActionToast.tsx'
 import { SetSessionStatusMenuItem, SessionStatusDialog } from '../src/client/session-actions/SetSessionStatus.tsx'
 import { createWorkspaceViewStore, type CustomSessionStatus } from '../src/client/stores.ts'
-import { en, zh } from '../src/client/locales.ts'
+import { en, ptBR, zh } from '../src/client/locales.ts'
 import { ShortcutRegistry } from '../../shortcuts/src/client/registry.ts'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 
@@ -658,16 +658,16 @@ it('shows effective Session shortcuts while menu clicks keep the row target', ()
 })
 
 describe('SetSessionStatus action', () => {
-  /** Locale seats in the fork English dictionary, whose labels the assertions read. */
-  const menuRowEn = (menu: MenuOpenState): MenuRowProps => ({
-    ...ROW, useMenuOpenState: () => menu, useShortcuts: hook([]), t: tEn, ...standard,
+  /** Portuguese locale seats retain the fork labels with English fallback. */
+  const menuRowPtBR = (menu: MenuOpenState): MenuRowProps => ({
+    ...ROW, useMenuOpenState: () => menu, useShortcuts: hook([]), t: makeTranslate({ ...en, ...ptBR }, commonEn), ...standard,
   })
-  const overlayEn: OverlayProps = { t: tEn, ...standard }
+  const overlayPtBR: OverlayProps = { t: makeTranslate({ ...en, ...ptBR }, commonEn), ...standard }
 
   it('menu row closes the menu, then asks for the status picker', () => {
     const { state, setMenuOpen } = openMenu()
     const requestSessionStatus = vi.fn()
-    render(<SetSessionStatusMenuItem {...menuRowEn(state)} requestSessionStatus={requestSessionStatus} />)
+    render(<SetSessionStatusMenuItem {...menuRowPtBR(state)} requestSessionStatus={requestSessionStatus} />)
     fireEvent.click(screen.getByRole('menuitem', { name: 'Definir status...' }))
     expect(requestSessionStatus).toHaveBeenCalledWith(ROW.sessionId)
     expect(setMenuOpen).toHaveBeenCalledWith(false)
@@ -679,7 +679,7 @@ describe('SetSessionStatus action', () => {
     const settleSessionStatus = vi.fn(() => { request.set(null) })
     render(
       <SessionStatusDialog
-        {...overlayEn}
+        {...overlayPtBR}
         useStatusRequest={bindSnapshotSelector(request)}
         settleSessionStatus={settleSessionStatus}
         setSessionStatus={setSessionStatus}

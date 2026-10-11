@@ -1,10 +1,10 @@
 - banner:
   - navigation "Session hierarchy": Reply with a one-sentence description
   - text: Standard mode
-  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "New conversation and context options": New Chat
   - button "Automações"
+  - button "Session notes and reminders": Notes
   - button "More actions"
-  - button "Anotações e lembretes da sessão": Anotações
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]

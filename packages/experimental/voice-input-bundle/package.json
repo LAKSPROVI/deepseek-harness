@@ -21,15 +21,22 @@
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json"
+    "./locale/*.json": "./locale/*.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
   },
   "files": [
     "icon.svg",
     "locale/*.json",
     "lib/index.js",
+    "cordis.patch.yml",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "dependencies": {
     "@deepseek-ai/dsh-experimental-speech-to-text": "workspace:*",
     "@deepseek-ai/dsh-experimental-speech-to-text-sensevoice": "workspace:*",

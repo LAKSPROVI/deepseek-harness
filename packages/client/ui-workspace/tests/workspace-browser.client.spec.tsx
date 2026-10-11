@@ -151,6 +151,31 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it.each(['search', 'rail'] as const)('keeps the live Session status subscription stable through %s transitions', (mode) => {
+    const b = mount({
+      useSessions: hook(sessionState([summary('needle', 1)])),
+      useSessionStatus: bindSnapshotSelector({
+        getSnapshot: () => noPendingInteraction,
+        subscribe: () => () => {},
+      }),
+    })
+    act(() => { b.store.actions.setSessionStatus('needle', 'later') })
+    expect(screen.getByRole('region', { name: t('section.recentAndInProgress') })).toBeTruthy()
+    if (mode === 'search') {
+      const input = screen.getByPlaceholderText('搜索会话名称')
+      fireEvent.change(input, { target: { value: 'needle' } })
+      expect(screen.queryByRole('region', { name: t('section.recentAndInProgress') })).toBeNull()
+      expect(screen.getByText('needle')).toBeTruthy()
+      fireEvent.change(input, { target: { value: '' } })
+    } else {
+      rerender(b, { wide: false })
+      expect(screen.queryByRole('region', { name: t('section.recentAndInProgress') })).toBeNull()
+      rerender(b, { wide: true })
+    }
+    expect(screen.getByRole('region', { name: t('section.recentAndInProgress') })).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: t('section.recentAndInProgress') })).getByText('needle')).toBeTruthy()
+  })
+
   it.each([{ messages: en, common: commonEn }, { messages: zh, common: commonZh }])('shows localized fork failures and dismisses them', ({ messages, common }) => {
     const b = mount({ t: makeTranslate(messages, common) })
     act(() => { b.controls.forkFailed('unavailable') })

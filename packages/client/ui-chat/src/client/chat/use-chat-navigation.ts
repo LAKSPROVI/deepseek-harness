@@ -2,7 +2,7 @@
 import { useLayoutEffect, useState } from 'react'
 import type { SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { ChatNode } from '../contract/chat-nodes.ts'
-import type { ChatViewSlotProps } from '../contract/slots.ts'
+import type { ChatScrollPosition, ChatViewSlotProps } from '../contract/slots.ts'
 import type { TurnRailItem } from './turn-rail-items.ts'
 import type { ChatReading, ReadingSample } from './use-chat-reading.ts'
 import type { ChatViewport } from './use-chat-viewport.ts'
@@ -15,7 +15,8 @@ export interface ChatNavigationInput extends Pick<ChatViewSlotProps, 'loadOlder'
 }
 
 interface TurnJump {
-  readonly turn: number
+  readonly turn: number | null
+  readonly position?: ChatScrollPosition
   readonly seq: SessionSeq
   phase: 'loading' | 'settled'
   landing: 'pending' | 'landed' | 'interrupted'
@@ -43,6 +44,25 @@ export class ChatNavigation {
   /** Cancel navigation when opening a Chat view. */
   reset(): void {
     this.cancel()
+  }
+
+  /** Restore a saved reader anchor, loading its history before attempting a raw fallback. */
+  restore(): void {
+    this.cancel()
+    const position = this.reading.restore()
+    if (position === null) return
+    const seq = position.anchorSeq
+    if (seq === undefined || !this.input.hasMore
+      || (this.input.firstSeq !== null && this.input.firstSeq <= seq)) {
+      this.reading.restore(true)
+      return
+    }
+    this.reading.pauseFollowing()
+    const jump: TurnJump = {
+      turn: null, position, seq, phase: 'loading', landing: 'pending', repageHead: null,
+    }
+    this.jump = jump
+    this.request(jump)
   }
 
   /** Cancel local callbacks; late history completions cannot revive a task. */
@@ -103,6 +123,7 @@ export class ChatNavigation {
    * @param sample - settled reader movement that can update or interrupt an anchor.
    */
   readerSampled(sample: ReadingSample): void {
+    if (sample.movedByReader && this.jump?.position !== undefined) this.cancel()
     if (sample.movedByReader && this.jump?.landing === 'landed') this.jump.landing = 'interrupted'
     if (sample.followingTail || sample.movedByReader) this.viewport.stopPreserving()
   }
@@ -144,7 +165,8 @@ export class ChatNavigation {
       this.request(jump)
       return
     }
-    const fallback = this.viewport.scrollToTurnAtOrAfter(jump.turn)
+    const fallback = jump.position !== undefined ? this.viewport.restore(jump.position, true)
+      : jump.turn === null ? null : this.viewport.scrollToTurnAtOrAfter(jump.turn)
     this.cancel()
     if (fallback !== null) this.reading.acceptNavigation(fallback)
   }
@@ -156,7 +178,8 @@ export class ChatNavigation {
       if (settle) { this.cancel(); return true }
       return false
     }
-    const landing = this.viewport.scrollToTurn(jump.turn)
+    const landing = jump.position !== undefined ? this.viewport.restore(jump.position, false)
+      : jump.turn === null ? null : this.viewport.scrollToTurn(jump.turn)
     if (landing === null) return false
     this.reading.acceptNavigation(landing)
     if (settle) this.cancel()

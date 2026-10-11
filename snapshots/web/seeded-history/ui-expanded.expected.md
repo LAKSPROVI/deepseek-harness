@@ -1,9 +1,9 @@
 - banner:
   - navigation "Session hierarchy": Use the read tool twice
-  - button "Opções de nova conversa e contexto": Novo Chat
+  - button "New conversation and context options": New Chat
   - button "Automações"
+  - button "Session notes and reminders": Notes
   - button "More actions"
-  - button "Anotações e lembretes da sessão": Anotações
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]
@@ -11,10 +11,18 @@
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
-- button "Load earlier"
+- text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. {{clock}}"
+- button "Copy"
 - status: Completed
-- button "Completed" [expanded]
-- button "Analysis completed" [expanded]
+- button "Completed in {{duration}}" [expanded]
+- button "Read files" [expanded]
+- button "Think The user wants me to read a.txt and b.txt, then reply with \"DONE\". Let me do both reads in parallel."
+- button "Read a.txt":
+  - text: Read
+  - button "a.txt"
+- button "Read b.txt":
+  - text: Read
+  - button "b.txt"
 - button "Think Both files have been read. a.txt contains \"alpha\" and b.txt contains \"beta\". I'll now reply with DONE as instructed."
 - paragraph: DONE
 - button "Copy"

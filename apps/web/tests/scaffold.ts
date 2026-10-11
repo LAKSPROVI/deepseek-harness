@@ -771,11 +771,14 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       const manifest = readProfileManifest('dsh', profileDir)
       manifest.dependencies = dependencies
       await writeFile(join(profileDir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n')
+      const loadedProfile = loadProfileDirectory('dsh', profileDir, INSTALL_ANCHOR)
+      profile.layers.push(...loadedProfile.layers.filter(layer => !extraLayers.some(extra => extra.packageName === layer.packageName)))
+      profile.skippedBundles.push(...loadedProfile.skippedBundles)
       profileContext = {
         name: 'scaffold', dir: profileDir, patchPath: profile.patchPath, installAnchor: INSTALL_ANCHOR,
         ...options.profile?.packageManager === undefined ? {} : { packageManager: options.profile.packageManager },
         cwd: workspaceCwd, home: harnessHome,
-        startedBundles: loadProfileDirectory('dsh', profileDir, INSTALL_ANCHOR).layers.map(layer => layer.packageName),
+        startedBundles: loadedProfile.layers.map(layer => layer.packageName),
         overlays: processOverlays, telemetryDisabledEnv: undefined,
       }
       // HMR gates file-driven reloads on application readiness, which the
@@ -1068,7 +1071,7 @@ function normalizeClientTimeZones(value: unknown): unknown {
   return value
 }
 
-const WEB_PATH_TEXT_BOUNDARY_RE = /[\s<>'"`()\[\]{},;:!?=]/
+const WEB_PATH_TEXT_BOUNDARY_RE = /[\s<>'"`()\[\]{},;:：!?=]/
 const WEB_FILE_URI_PATH_PREFIX_RE = /(?:^|[^a-z0-9+.-])file:\/\/\/?$/i
 
 function isWebCwdMatch(value: string, start: number, length: number): boolean {
@@ -1086,7 +1089,7 @@ function isWebCwdMatch(value: string, start: number, length: number): boolean {
   return startsAtBoundary && endsAtBoundary
 }
 
-function replaceWebCwd(value: string, cwd: string): string {
+function replaceWebCwd(value: string, cwd: string, token = '{{cwd}}'): string {
   let cursor = 0
   let normalized = ''
   while (cursor < value.length) {
@@ -1094,7 +1097,7 @@ function replaceWebCwd(value: string, cwd: string): string {
     if (match < 0) return normalized + value.slice(cursor)
     const end = match + cwd.length
     if (isWebCwdMatch(value, match, cwd.length)) {
-      normalized += value.slice(cursor, match) + '{{cwd}}'
+      normalized += value.slice(cursor, match) + token
       cursor = end
     } else {
       normalized += value.slice(cursor, end)
@@ -1537,12 +1540,42 @@ export async function readPersistedEvents(scaffold: WebScaffold, id: SessionId):
 const ARIA_AGE =
   /(?:now|\d+min|\d+h|\d+d|\d+mo|\d+y|刚刚|\d+分钟|\d+小时|\d+天|\d+个月|\d+年)(?=")/g
 
-function normalizeAria(snapshot: string, workspaceCwd: string, age: boolean): string {
-  // The session heading renders the workspace's basename, not the full
-  // path, so both spellings must collapse to the token.
-  const base = workspaceCwd.split('/').pop()!
-  return (age ? snapshot.replace(ARIA_AGE, '{{age}}') : snapshot)
-    .split(workspaceCwd).join('{{cwd}}')
+export function normalizeAria(
+  snapshot: string,
+  workspaceCwd: string,
+  age: boolean,
+  replacements: readonly (readonly [string, string])[] = [],
+): string {
+  // The heading renders the workspace basename rather than the full path.
+  const base = workspaceCwd.split(/[\\/]/).pop()!
+  let normalized = age ? snapshot.replace(ARIA_AGE, '{{age}}') : snapshot
+  const nativeTokens = new Set<string>()
+  const replaceRoot = (root: string, token: string): void => {
+    if (/^[a-z]:[\\/]/i.test(root)) nativeTokens.add(token)
+    // ARIA serializes JSON tool results with escaped backslashes. Match only
+    // this explicit root, preserving unrelated paths and tool text.
+    const spellings = [...new Set([
+      root, root.replaceAll('\\', '\\\\'), root.replaceAll('\\', '/'),
+    ])].sort((left, right) => right.length - left.length)
+    for (const spelling of spellings) normalized = replaceWebCwd(normalized, spelling, token)
+  }
+  // Explicit aliases such as home live beneath cwd and must win first.
+  for (const [value, token] of replacements) {
+    if (/^(?:[a-z]:[\\/]|\/)/i.test(value)) replaceRoot(value, token)
+    else normalized = normalized.split(value).join(token)
+  }
+  replaceRoot(workspaceCwd, '{{cwd}}')
+  return normalized
+    .replace(/(\{\{(?:cwd|home|fixtures)\}\})([\\/][^\s<>'"()\[\]{},;:!?=]*)/g,
+      (path, token: string, suffix: string, offset: number, source: string) => {
+        if (!nativeTokens.has(token)) return path
+        // A trailing backslash before a serialized quote escapes that quote;
+        // it belongs to the surrounding JSON/YAML rather than the file path.
+        const quoteEscape = /["']/.test(source[offset + path.length] ?? '')
+          ? suffix.match(/\\+$/)?.[0] ?? '' : ''
+        const pathSuffix = quoteEscape ? suffix.slice(0, -quoteEscape.length) : suffix
+        return token + pathSuffix.replace(/\\+/g, '/') + quoteEscape
+      })
     .split(base).join('{{workspace}}')
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '{{uuid}}')
     // The optional space in `\d+m ?\d+s` covers both minute spellings: the
@@ -1602,12 +1635,8 @@ export async function captureStableAria(
   }
   const region = page.locator(selector).first()
   const age = options.normalizeAge === true
-  const normalize = (snapshot: string): string => {
-    for (const [value, token] of options.replacements ?? []) {
-      snapshot = snapshot.split(value).join(token)
-    }
-    return normalizeAria(snapshot, workspaceCwd, age)
-  }
+  const normalize = (snapshot: string): string =>
+    normalizeAria(snapshot, workspaceCwd, age, options.replacements)
   let previous = normalize(await region.ariaSnapshot())
   await expect.poll(async () => {
     const current = normalize(await region.ariaSnapshot())

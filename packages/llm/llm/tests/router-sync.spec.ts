@@ -82,3 +82,21 @@ describe('readRouterSyncStatus', () => {
     expect(status.error).toBe('Network timeout')
   })
 })
+
+it.each([
+  { ok: false, validUntil: new Date(Date.now() + 60000).toISOString(), stale: true, error: true },
+  { ok: true, validUntil: new Date(Date.now() - 60000).toISOString(), stale: true, error: false },
+  { ok: true, validUntil: new Date(Date.now() + 60000).toISOString(), stale: false, error: false },
+  { ok: true, validUntil: undefined, stale: true, error: false },
+])('uses the catalog deadline and sanitized current failure instead of a historical log: $ok/$stale', async (fixture) => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { onTestFinished } = await import('vitest')
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-router-deadline-'))
+  onTestFinished(() => rm(dir, { recursive: true, force: true }))
+  await mkdir(join(dir, 'logs'))
+  await writeFile(join(dir, 'logs/sync-9router-models.log'), 'failed: old secret error\n')
+  await writeFile(join(dir, 'sync-9router-models-state.json'), JSON.stringify({ synchronizedAt: new Date().toISOString(), ok: fixture.ok, validUntil: fixture.validUntil, error: 'unsafe wire detail' }))
+  const result = await readRouterSyncStatus(dir)
+  expect(result.isStale).toBe(fixture.stale)
+  expect(result.error).toBe(fixture.error ? 'Router catalog is unconfirmed' : undefined)
+})

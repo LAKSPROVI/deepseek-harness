@@ -44,12 +44,14 @@ export class ConfigEditor extends Service {
   }
 
   /** Read inherited and explicit profile values for the active entries.
+   * @param ns Optional entry id, filtered before inheritance and detached-value projection; missing ids return no rows.
    * @returns Detached layer values alongside their Loader entries.
    */
-  configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }> {
+  configuration(ns?: string): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }> {
+    const entries = this.entries().filter(entry => ns === undefined || entry.options.id === ns)
+    if (entries.length === 0) return []
     const profile = this.ownerContext.profileContext
     const loaded = loadProfileDirectory('dsh', profile.dir, profile.installAnchor)
-    const entries = this.entries()
     // An own config key can replace inherited config even when its value is undefined.
     const overridden = new Set(loaded.patches.filter(patch => patch.insert === undefined && Object.hasOwn(patch, 'config')).map(patch => patch.id))
     const composed = new Map<string, EntryOptions>()

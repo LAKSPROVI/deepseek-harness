@@ -49,6 +49,14 @@ Use `--dump-default-config` and `--dump-config` to inspect the composed tree wit
 
 The [CLI behavior reference](reference/README.md) owns exact layer precedence, flags, shutdown behavior, deployment defaults, and source execution. The [startup and reload failure table](../../packages/boot/app-boot/README.md#startup-and-reload-failures) compares optional and required plugin failures with configuration HMR.
 
+## Manual Windows Web runtime
+
+The optional [task-definition helper](../../scripts/new-lakatoss-web-runtime-task.ps1) returns a Windows Task Scheduler definition without registering or starting it. It uses the current operator's explicit UserId with Interactive logon, a hidden PowerShell action, no triggers, no automatic restart, no execution deadline, and IgnoreNew. The operator validates frozen artifacts, pins the source commit and CLI/runner SHA-256 values, then registers and manually starts `LakatossWebRuntime`. Stopping the task does not schedule another start.
+
+The [runner](../../scripts/run-lakatoss-web-runtime.ps1) launches `node apps/cli/lib/bin.js web --no-open` from the pinned source directory and waits for that child to exit. It refuses linked paths, changed pinned bytes, and an existing port-3080 listener. It imports User environment variables whose names match `ROUTER|TYPESAFE|GROQ` without printing their values, preserves prior stdout/stderr logs, and atomically records source identity, process identities, timestamps, phase, and exit code in `dsh-web-runtime-receipt.json` under the explicit log directory. The receipt's running phase proves process creation; the operator separately verifies the listener, authenticated HTTP, and session history before treating the app as ready.
+
+Run [synthetic verification](../../scripts/verify-lakatoss-web-runtime.ps1) with `-PowerShellPath` and `-NodePath` set to absolute executable paths. It checks parsing, pinned-artifact rejection, manual task settings, supported CLI arguments, a synthetic child's exit code 7, receipt settlement, and log preservation without registering a task or booting the real profile.
+
 ## Optional overlays
 
 `config/examples/` ships opt-in overlays for GitHub review webhooks, memory MCP servers, and runtime Cordis tools. They are never part of a default profile; the [user guides](../../docs/user/guide/index.md) and [developer practice guides](../../docs/user/develop/practice/index.md) own setup and safety instructions.

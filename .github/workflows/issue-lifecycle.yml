@@ -25,6 +25,8 @@ on:
 
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
 
 concurrency:
   group: issue-lifecycle-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
@@ -43,15 +45,41 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+      - name: Determine lifecycle Project access
+        id: preflight
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          import { lifecyclePullRequestSnapshot } from './.github/issue-management/pull-request.mjs'
+          import { resolvingIssueStatusCommand } from './.github/issue-management/rules.mjs'
+          const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
+          const eventName = process.env.GITHUB_EVENT_NAME
+          let needsProject = eventName === 'issues'
+          const command = resolvingIssueStatusCommand(eventName, event)
+          if (command) {
+            const pull = await lifecyclePullRequestSnapshot(event.pull_request.number)
+            const references = eventName === 'pull_request' && event.action === 'opened'
+              ? pull.references.all
+              : pull.references.resolving
+            needsProject = references.length > 0
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `needs-project=${needsProject}\n`)
+          console.log(needsProject ? 'Lifecycle Project updates are required.' : 'No Issue requires a lifecycle update.')
+          NODE
       - name: Create project token
         id: app-token
+        if: ${{ steps.preflight.outputs.needs-project == 'true' }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         with:
           client-id: ${{ vars.DSH_ISSUE_APP_CLIENT_ID }}
           private-key: ${{ secrets.DSH_ISSUE_APP_PRIVATE_KEY }}
-          owner: deepseek-harness
-          repositories: deepseek-harness
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
       - name: Handle repository event
+        if: ${{ steps.preflight.outputs.needs-project == 'true' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: node .github/issue-management/policy.mjs lifecycle

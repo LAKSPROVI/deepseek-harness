@@ -179,6 +179,43 @@ function viewInstance(slots: SlotRegistry) {
 const settled = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
 
 describe('ui-workspace apply', () => {
+  it('retains an existing Portuguese language when the Workspace contribution unloads', async () => {
+    const b = await bench()
+    onTestFinished(() => b.ctx.fiber.dispose())
+    const removeLanguage = b.locale.addLanguage({ id: 'pt-BR', label: 'Português (Brasil)', fallback: 'en' })
+    const plugin = b.ctx.plugin({ inject: [...inject], apply })
+    await plugin.await()
+    expect(b.locale.getLocale().locales.filter(locale => locale.id === 'pt-BR')).toHaveLength(1)
+    b.locale.setLocale('pt-BR')
+    expect(b.locale.bind('workspace')('status.idle')).toBe('Ociosa')
+    await plugin.dispose()
+    expect(b.locale.getLocale().locales.map(locale => locale.id)).toContain('pt-BR')
+    expect(b.locale.bind('workspace')('status.idle')).toBe('status.idle')
+    removeLanguage()
+  })
+  it('keeps English Session statuses and preserves Portuguese as a disposable language contribution', async () => {
+    const b = await bench()
+    onTestFinished(() => b.ctx.fiber.dispose())
+    const plugin = b.ctx.plugin({ inject: [...inject], apply })
+    await plugin.await()
+    expect(b.locale.getLocale().locales.map(locale => locale.id)).toContain('pt-BR')
+    const translate = b.locale.bind('workspace')
+    const statuses = [
+      ['status.idle', 'Idle', 'Ociosa'],
+      ['status.waitingApproval', 'Waiting for approval', 'Aguardando aprovação'],
+      ['status.compact.approval', 'Approval', 'Aprovação'],
+    ] as const
+    b.locale.setLocale('en')
+    for (const [key, english] of statuses) expect(translate(key)).toBe(english)
+    b.locale.setLocale('pt-BR')
+    for (const [key, , portuguese] of statuses) expect(translate(key)).toBe(portuguese)
+    expect(translate('notes.button.label')).toBe('Anotações')
+    expect(translate('context.newSession.button')).toBe('Novo Chat')
+    await plugin.dispose()
+    expect(b.locale.getLocale().locales.map(locale => locale.id)).not.toContain('pt-BR')
+    expect(b.locale.getLocale().active).toBe('en')
+  })
+
   it('keeps the host Loader entry inert', () => {
     expect(hostApply).not.toThrow()
   })

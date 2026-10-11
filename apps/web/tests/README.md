@@ -20,6 +20,9 @@ State-sensitive cases use Workspace, admission, attachment, and model-stream bar
 
 Explicit scrolling uses `scrollIntoView` from `support.ts`: it resolves the locator again when its old element detaches and checks connection in the same browser task as native scrolling. Scenarios retain their visibility and geometry assertions after scrolling.
 
+The seeded-history scenario checks the intentional eight-message cold-open window (capped at 500 messages with two turns retained), then loads earlier history in 50-message pages. Its first-window assertion follows that opening contract; paging, historical prompt visibility, and tool disclosure remain separate checks.
+
+ARIA snapshots replace only the known workspace root and explicit scenario aliases such as home and fixtures. Windows native and JSON-escaped root spellings share the same placeholders and path separators; unrelated paths, tool arguments, and serialized quote escapes retain their original content. Clipboard equality checks canonicalize native Windows CRLF to LF while comparing the complete copied text.
 ## These are Host-face tests
 
 They type-check in the root `tsconfig.host.json`, not in the Client aggregate, because they read Host services directly: `ctx.connection`, the Host `SessionStore`, and `ctx.sessionProjectionCache`. Driving a browser at runtime does not make a file part of the Client program — the two faces merge Cordis `Context` under the same keys with different services, so one program cannot see both. Moving these files into the Client aggregate makes every Host-service access fail to compile.

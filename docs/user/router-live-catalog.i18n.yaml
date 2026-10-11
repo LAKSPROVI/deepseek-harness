@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for router-live-catalog.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/user/router-live-catalog.md
+/:
+  en: d815592ea7c70065
+  zh: c220f0cad0481ff2
+/automatically-refresh-a-router-catalog:
+  en: db6ee6717e2f17e4
+  zh: 1a22281c3ad15ba7
+/automatically-refresh-a-router-catalog/start-synchronization:
+  en: 6d6ef06b3308a7f1
+  zh: 9535d29f247b3ac4
+/automatically-refresh-a-router-catalog/use-the-selector:
+  en: 8cedda1d52d5c3cf
+  zh: 582a1ecda23922df
+/automatically-refresh-a-router-catalog/understand-availability:
+  en: f4afa8269d0b6606
+  zh: da79592dd4c1a351
+/automatically-refresh-a-router-catalog/recover-synchronization:
+  en: 1be37b3035eda467
+  zh: 2e37aaff899323fb

@@ -49,6 +49,14 @@ profile 目录包含一个 `package.json`，其中记录树外插件依赖，以
 
 层的确切优先级、flag、关闭行为、部署默认值和源码执行方式，以 [CLI 行为参考](reference/README.zh.md)为准。[启动与重载失败表](../../packages/boot/app-boot/README.zh.md#startup-and-reload-failures)对比 optional、required 插件启动失败与配置 HMR 的行为。
 
+## 手动 Windows Web 运行时
+
+可选的[任务定义辅助脚本](../../scripts/new-lakatoss-web-runtime-task.ps1)返回 Windows Task Scheduler 定义，不注册或启动任务。它使用当前操作员显式提供的 UserId 和 Interactive 登录方式、隐藏的 PowerShell 操作、无触发器、无自动重启、无执行期限及 IgnoreNew。操作员验证冻结产物，固定源码提交与 CLI/runner 的 SHA-256 后，再注册并手动启动 `LakatossWebRuntime`。停止任务不会安排另一次启动。
+
+[Runner](../../scripts/run-lakatoss-web-runtime.ps1)从固定源码目录启动 `node apps/cli/lib/bin.js web --no-open`，并等待子进程退出。它拒绝含链接的路径、已变化的固定字节以及已有的 3080 端口监听器。它导入名称匹配 `ROUTER|TYPESAFE|GROQ` 的 User 环境变量，不打印变量值；保留原有 stdout/stderr 日志，并在显式日志目录下的 `dsh-web-runtime-receipt.json` 中原子记录源码身份、进程身份、时间戳、阶段和退出码。Receipt 的 running 阶段只确认进程已创建；操作员还需单独验证监听器、认证 HTTP 和会话历史，才能判断应用已就绪。
+
+运行[合成验证](../../scripts/verify-lakatoss-web-runtime.ps1)时，将 `-PowerShellPath` 和 `-NodePath` 设置为可执行文件的绝对路径。它检查解析、固定产物拒绝、手动任务设置、受支持的 CLI 参数、合成子进程退出码 7、receipt 完结及日志保留，不注册任务或启动真实 profile。
+
 ## 可选覆盖层
 
 `config/examples/` 交付 GitHub 评审 webhook、记忆 MCP 服务器与运行时 Cordis 工具的可选覆盖层。它们绝不属于默认 profile；设置与安全说明由[用户指南](../../docs/user/guide/index.zh.md)和[开发实战指南](../../docs/user/develop/practice/index.zh.md)负责。

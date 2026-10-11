@@ -1,18 +1,18 @@
 /** An explicit file-card request exercises SVG delivery without naming the present tool. */
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type {} from '@deepseek-ai/dsh-tool-present/types'
-import { deriveReplayScript, parseSessionLog } from '@deepseek-ai/dsh-llm-replay'
 import {
   assertFinalWorkspaceSnapshot, captureExpandedTurnProcessAria, compareOrRefreshGolden,
-  fixtureUserPrompts, launchWebScaffold, recordFixture, watchConsole,
+  fixtureUserPrompts, launchWebScaffold, recordFixture, selectedSessionFixture, watchConsole,
   webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { connectFreshWorkspaceZh, ZH_BROWSER_LOCALE } from './support.ts'
+import { presentSvgReplay } from './present-svg-fixture.ts'
 
 const DIR = fileURLToPath(new URL('../../../snapshots/web/present-svg', import.meta.url))
 const FIXTURE = join(DIR, 'session.v3.jsonl')
@@ -27,22 +27,22 @@ describe('web e2e: requested SVG is explicitly delivered', () => {
   let tripwire: ReturnType<typeof watchConsole>
   let cwd: string
   let replayRoot: string | undefined
+  let selectedFixture: string
   const connectionDiagnostics: string[] = []
 
   beforeAll(async () => {
+    selectedFixture = await selectedSessionFixture(FIXTURE)
     let replayOverride: string | undefined
     if (MODE !== 'record') {
-      replayRoot = await mkdtemp(join(tmpdir(), 'dsh-present-svg-replay-'))
+      replayRoot = await realpath(await mkdtemp(join(tmpdir(), 'dsh-present-svg-replay-')))
       replayOverride = join(replayRoot, 'replay.override.json')
-      const script = deriveReplayScript(parseSessionLog(await readFile(FIXTURE, 'utf8')))
-      // Recorded absolute paths must follow each isolated Session's working directory.
-      const cwdToken = '{{fromRequest:Your working directory is ([^\\n]+)\\.}}'
-      await writeFile(replayOverride, JSON.stringify(script).replaceAll('{{cwd}}', JSON.stringify(cwdToken).slice(1, -1)))
+      const script = presentSvgReplay(await readFile(selectedFixture, 'utf8'), join(replayRoot, 'workspace'))
+      await writeFile(replayOverride, JSON.stringify(script))
     }
     scaffold = await launchWebScaffold({
       compareReplaySession: true,
       extraOverlayPath: fileURLToPath(new URL('./present-svg.overlay.yml', import.meta.url)),
-      ...(replayOverride === undefined ? {} : { replayFixture: FIXTURE, replayOverride }),
+      ...(replayOverride === undefined ? {} : { replayFixture: selectedFixture, replayOverride }),
     })
     browser = await chromium.launch()
     page = await browser.newPage({
@@ -63,7 +63,7 @@ describe('web e2e: requested SVG is explicitly delivered', () => {
     })
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]')
-    await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
+    await connectFreshWorkspaceZh(page, replayRoot ?? scaffold.workspaceCwd)
   })
 
   afterAll(async () => {
@@ -79,7 +79,7 @@ describe('web e2e: requested SVG is explicitly delivered', () => {
   })
 
   it('writes valid SVG and provides the requested file card before the final reply', async () => {
-    const prompts = MODE === 'record' ? [RECORD_PROMPT] : fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))
+    const prompts = MODE === 'record' ? [RECORD_PROMPT] : fixtureUserPrompts(await readFile(selectedFixture, 'utf8'))
     expect(prompts).toHaveLength(1)
     const settled = scaffold.whenTurnSettled()
     const input = page.locator('[data-composer-input]').first()
@@ -89,7 +89,7 @@ describe('web e2e: requested SVG is explicitly delivered', () => {
     const session = scaffold.ctx.agents.get(sessionId)?.session
     if (session?.header.cwd === undefined) throw new Error('SVG Session has no workspace')
     cwd = session.header.cwd
-    if (MODE === 'record') await recordFixture(scaffold, sessionId, FIXTURE)
+    if (MODE === 'record') await recordFixture(scaffold, sessionId, selectedFixture)
 
     const svg = await readFile(join(cwd, FILE), 'utf8')
     const parsedSvg = await page.evaluate((source) => {
@@ -161,7 +161,7 @@ describe('web e2e: requested SVG is explicitly delivered', () => {
     await assertFinalWorkspaceSnapshot(DIR, cwd)
     expect(await page.locator('[data-presented-file] [data-open-target]').count()).toBe(0)
     // Delivery owns the transcript; navigation and composer chrome have separate scenarios.
-    const aria = await captureExpandedTurnProcessAria(page, '[data-chat-flow]', scaffold.workspaceCwd)
+    const aria = await captureExpandedTurnProcessAria(page, '[data-chat-flow]', replayRoot ?? scaffold.workspaceCwd)
     await compareOrRefreshGolden(join(DIR, 'ui.expected.md'), aria, MODE)
   })
 

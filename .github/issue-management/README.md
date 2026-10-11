@@ -47,6 +47,8 @@ Approval-only and comment-only reviews do not allocate a lifecycle runner. PR pu
 
 PR opening initializes an empty Project `Start Date` for every referenced Issue, including informational references, using the PR creation date in the configured time zone. This lifecycle operation can add Project membership and needs Project write access; the informational-reference read exemption applies only to PR validation. Existing Start Date values are preserved.
 
+Lifecycle preflight reads current PR references with the repository token before minting a Project App token. Opening a PR needs Project access for every referenced Issue; other PR events need it only for resolving Issues. Events without applicable Issues finish without minting a token or mutating GitHub. Failed live reads still fail the job. App tokens target the current repository owner and repository name.
+
 -----
 
 <a id="configuration-and-limitations"></a>

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-DeepSeek Harness is an all-plugin Cordis agent harness. Read [docs/architecture.md](docs/architecture.md) before changing `packages/`; follow [docs/AGENTS.md](docs/AGENTS.md) for documentation.
+DeepSeek Harness uses Cordis plugins. Follow [architecture](docs/architecture.md), [documentation rules](docs/AGENTS.md), and the [router runtime contract](.agents/notes/implemented/architecture/2026-10-11-router-runtime-evidence.md) before edits.
 
 ## Pre-stable APIs and released Session data
 
@@ -175,7 +175,7 @@ Docs accompany every code change: update affected README and JSDoc contracts tog
 
 ## Editing these instructions
 
-`CLAUDE.md` symlinks `AGENTS.md` at root and `packages/`; edit the real file. Keep each rule self-contained while linking high-level docs. Condense when clarity survives; raise a `verify-doc-budgets` ceiling when the required content genuinely needs more space.
+The root `CLAUDE.md` points to `AGENTS.md`; edit the owning instruction file. Keep each rule self-contained while linking high-level docs. Condense when clarity survives; raise a `verify-doc-budgets` ceiling when the required content genuinely needs more space.
 
 ## Vendoring policy
 

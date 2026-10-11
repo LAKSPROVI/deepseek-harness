@@ -14,6 +14,9 @@
 /deepseek-ai-dsh/profiles:
   en: 79cad979b0f7895c
   zh: b0f922a4b43accf8
+/deepseek-ai-dsh/manual-windows-web-runtime:
+  en: d8340cf010c0a764
+  zh: 366d9a10499f6efb
 /deepseek-ai-dsh/optional-overlays:
   en: 3a40ddc44e55f79c
   zh: 8d3949132e1ef93c

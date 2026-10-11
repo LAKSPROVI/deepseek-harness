@@ -148,6 +148,40 @@ describe.skipIf(!isWin32 || !pwshAvailable())('diagnose-windows-sandbox-acl scri
     icacls(path, `/${type}`, `*${sid}:(RX)`)
   }
 
+  function withMissingWriteOwner(path: string): void {
+    // CREATOR OWNER can materialize explicit FullControl with different inheritance
+    // flags; /inheritance:r and /grant:r do not replace the whole DACL. Pin the
+    // user owner too: an elevated administrator otherwise owns through a group.
+    pwsh(`
+$path = ${quote(path)}
+$sid = [System.Security.Principal.SecurityIdentifier]::new(${quote(meSid)})
+$acl = Get-Acl -LiteralPath $path
+$acl.SetOwner($sid)
+Set-Acl -LiteralPath $path -AclObject $acl
+$acl = Get-Acl -LiteralPath $path
+$acl.SetAccessRuleProtection($true, $false)
+foreach ($entry in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($entry) }
+$acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($sid, 'Modify', 'Allow'))
+Set-Acl -LiteralPath $path -AclObject $acl
+Add-Type -Namespace Fixture -Name Access -MemberDefinition @"
+[DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+private static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string p, uint a, uint s, IntPtr sa, uint d, uint f, IntPtr t);
+public static bool CanOpen(string p, uint a) {
+  using (var h = CreateFileW(p, a, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
+    if (!h.IsInvalid) return true;
+    int error = Marshal.GetLastWin32Error();
+    if (error == 5) return false;
+    throw new System.ComponentModel.Win32Exception(error);
+  }
+}
+"@ | Out-Null
+if (-not [Fixture.Access]::CanOpen($path, 0x40000) -or [Fixture.Access]::CanOpen($path, 0x80000)) {
+  throw 'ACL fixture requires effective WRITE_DAC and no WRITE_OWNER'
+}
+`)
+    expect(ownerOf(path)).toBe(meSid)
+  }
+
   function dispose(root: string): void {
     // Restore the rights a grant case withheld before deleting the scratch tree.
     pwsh(
@@ -241,14 +275,14 @@ describe.skipIf(!isWin32 || !pwshAvailable())('diagnose-windows-sandbox-acl scri
     }
   }, timeout)
 
-  it('grants full control to a directory that lacks WRITE_DAC and WRITE_OWNER, preserving owner and label', () => {
+  it('grants full control to a directory that lacks WRITE_OWNER, preserving owner and label', () => {
     const scratch = newScratch()
     try {
       const target = makeDir(scratch, 'missing-write-owner')
       icacls(target, '/setintegritylevel', 'L')
       const labelsBefore = integrityLines(target)
       expect(labelsBefore.length).toBeGreaterThan(0)
-      icacls(target, '/inheritance:r', '/grant:r', `*${meSid}:(M)`)
+      withMissingWriteOwner(target)
       const ownerBefore = ownerOf(target)
 
       const run = runScript(['-Path', target, '-AllowRoot', scratch, '-Out', join(scratch, 'out')])
@@ -272,7 +306,7 @@ describe.skipIf(!isWin32 || !pwshAvailable())('diagnose-windows-sandbox-acl scri
     const scratch = newScratch()
     try {
       const target = makeDir(scratch, 'both')
-      icacls(target, '/inheritance:r', '/grant:r', `*${meSid}:(M)`)
+      withMissingWriteOwner(target)
       stamp(target, PACKAGE_SID)
       const ownerBefore = ownerOf(target)
 
@@ -341,11 +375,11 @@ describe.skipIf(!isWin32 || !pwshAvailable())('diagnose-windows-sandbox-acl scri
       // The sandbox reports its provisioning failure on the workspace root while the
       // conflicting entry sits deeper, so one approved call must clear both.
       const root = makeDir(scratch, 'workspace')
-      icacls(root, '/inheritance:r', '/grant:r', '*S-1-5-11:(M)')
+      withMissingWriteOwner(root)
       const deep = makeDir(root, 'deep')
       const leaf = makeDir(deep, 'leaf')
-      icacls(deep, '/inheritance:r', '/grant:r', `*${PACKAGE_SID}:(OI)(CI)(RX)`)
-      icacls(leaf, '/inheritance:r', '/grant:r', `*${OTHER_PACKAGE_SID}:(OI)(CI)(RX)`)
+      stamp(deep, PACKAGE_SID)
+      stamp(leaf, OTHER_PACKAGE_SID)
 
       const run = runScript(['-Path', root, '-AllowRoot', root, '-Out', join(scratch, 'out')])
       expect(run.code, run.output).toBe(0)
@@ -378,16 +412,16 @@ describe.skipIf(!isWin32 || !pwshAvailable())('diagnose-windows-sandbox-acl scri
     const scratch = newScratch()
     try {
       const target = makeDir(scratch, 'inherit-only')
-      icacls(target, '/inheritance:r', '/grant:r', '*S-1-5-11:(M)')
+      withMissingWriteOwner(target)
       icacls(target, '/grant', '*S-1-5-32-545:(OI)(CI)(IO)(F)')
-      const inheritOnlyBefore = aclLines(target).filter(line => line.includes('(IO)'))
+      const inheritOnlyBefore = normalized(target, aclLines(target)).filter(line => line.includes('(IO)'))
       expect(inheritOnlyBefore).toHaveLength(1)
 
       const run = runScript(['-Path', target, '-AllowRoot', scratch, '-Out', join(scratch, 'out')])
       expect(run.code, run.output).toBe(0)
       expect(run.output).toContain(`GRANTED ${target} SID=${meSid}`)
       expect(reports(run)).toContainEqual(containingObject({ kind: 'verification', operation: 'grant', path: target, status: 'verified' }))
-      expect(aclLines(target).filter(line => line.includes('(IO)'))).toEqual(inheritOnlyBefore)
+      expect(normalized(target, aclLines(target)).filter(line => line.includes('(IO)'))).toEqual(inheritOnlyBefore)
       expect(aclLines(target).join('\n')).toMatch(/\(F\)/u)
     } finally {
       dispose(scratch)
@@ -566,7 +600,7 @@ describe.skipIf(!isWin32 || !pwshAvailable())('diagnose-windows-sandbox-acl scri
     try {
       const out = join(scratch, 'out')
       const first = makeDir(scratch, 'multi-first')
-      icacls(first, '/inheritance:r', '/grant:r', `*${meSid}:(M)`)
+      withMissingWriteOwner(first)
       const second = makeDir(scratch, 'multi-second')
       stamp(second, PACKAGE_SID)
       icacls(second, '/deny', `*${meSid}:(WO)`)
@@ -588,7 +622,7 @@ describe.skipIf(!isWin32 || !pwshAvailable())('diagnose-windows-sandbox-acl scri
     try {
       const out = join(scratch, 'out')
       const first = makeDir(scratch, 'pending-first')
-      icacls(first, '/inheritance:r', '/grant:r', `*${meSid}:(M)`)
+      withMissingWriteOwner(first)
       const second = makeDir(scratch, 'pending-second')
       stamp(second, PACKAGE_SID)
       icacls(second, '/deny', `*${meSid}:(WO)`)
@@ -714,7 +748,7 @@ exit $LASTEXITCODE
     const scratch = newScratch()
     try {
       const target = makeDir(scratch, 'backup-failure')
-      icacls(target, '/inheritance:r', '/grant:r', `*${meSid}:(M)`)
+      withMissingWriteOwner(target)
       const outputFile = join(scratch, 'not-a-directory')
       writeFileSync(outputFile, 'Existing contents')
       const before = sddlOf(target)
@@ -806,7 +840,7 @@ function icacls { throw [System.IO.IOException]::new('icacls unavailable') }
     try {
       const out = join(scratch, 'out')
       const grantRoot = makeDir(scratch, 'self-grant')
-      icacls(grantRoot, '/inheritance:r', '/grant:r', `*${meSid}:(M)`)
+      withMissingWriteOwner(grantRoot)
       const grantRun = runScript(['-Path', grantRoot, '-AllowRoot', grantRoot, '-Out', out])
       expect(grantRun.code, grantRun.output).toBe(0)
       expect(grantRun.output).toContain(`GRANTED ${grantRoot} SID=${meSid}`)
@@ -827,7 +861,7 @@ function icacls { throw [System.IO.IOException]::new('icacls unavailable') }
     const scratch = newScratch()
     try {
       const target = makeDir(scratch, 'idempotent')
-      icacls(target, '/inheritance:r', '/grant:r', `*${meSid}:(M)`)
+      withMissingWriteOwner(target)
       stamp(target, PACKAGE_SID)
       const out = join(scratch, 'out')
 

@@ -91,16 +91,20 @@ export class SettingsController extends TypertRemoteService {
   /**
    * Describe every registered namespace for a configuration page: redacted
    * layered values plus the serialized schema the page renders its form from.
-   * @returns provider writability, local-document presence, and one view per namespace.
+   * @param ns - optional entry key; omitted reads all namespaces, missing keys return no views.
+   * @returns provider writability, local-document presence, and the selected redacted views.
    * @throws RemoteError when no settings provider is mounted.
    */
   @Remote
-  describe(): SettingsDescribeValue {
+  describe(ns?: string): SettingsDescribeValue {
+    if (ns !== undefined && !settingsNamespaceRequestSchema.safeParse({ ns }).success) {
+      throw new RemoteError('gateway/bad-request', 'settings namespace must be a nonempty string', {})
+    }
     const settings = this.provider()
     return {
       writable: settings.writable,
       hasDocument: true,
-      namespaces: settings.describe({ redactSecrets: true }).map(namespaceView),
+      namespaces: settings.describe({ redactSecrets: true, ...(ns === undefined ? {} : { ns }) }).map(namespaceView),
     }
   }
 
@@ -203,7 +207,7 @@ export class SettingsController extends TypertRemoteService {
     } catch (error: unknown) {
       throw rejected(ns, error)
     }
-    const descriptor = settings.describe({ redactSecrets: true }).find(candidate => candidate.ns === namespace)
+    const descriptor = settings.describe({ redactSecrets: true, ns: namespace }).find(candidate => candidate.ns === namespace)
     if (descriptor === undefined) {
       // The write committed but the namespace vanished before this read: only a
       // concurrent registrant disposal can produce it.

@@ -32,6 +32,8 @@ Mount this service in a profile application with Loader and `profileContext`. It
 
 Use [settings](../../settings/settings/README.md) for forms restricted to live fields. Callers that edit complete configuration can use `ctx.configEditor.edit()`; ordinary fields retain Loader’s normal lifecycle.
 
+`configuration(ns)` returns detached inherited and explicit values only for that entry. Omit `ns` to read all entries; unknown ids return no rows. Filtering happens before computing unrelated inherited layers.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 

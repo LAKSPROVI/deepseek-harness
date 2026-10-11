@@ -8,7 +8,7 @@
 // URL Chat resolved — one sessions.attachment read per session attachment.
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
-import { installAssembledBootEnv, mountAssembledApp, pageInHistoryUntil } from './assembled-boot.ts'
+import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
 
 installAssembledBootEnv()
 
@@ -90,11 +90,9 @@ it('renders durable record images in the Trajectory details panel from the share
   await waitFor(() => {
     if (document.querySelectorAll('tr[data-trajectory-row-key]').length === 0) throw new Error('trajectory rows not mounted')
   }, { timeout: 10_000 })
-  // The image record sits in an earlier turn than the opening tail reaches.
-  await pageInHistoryUntil(
-    () => document.querySelector('[data-history-load] button') === null,
-    'the complete trajectory history',
-  )
+  // The captured opening is deliberately partial (seq 365..552, hasMore true),
+  // and already contains the durable image in turn 73. Exercise its virtual
+  // row and shared cache without requesting uncaptured earlier history.
   const userRow = await scrollRowIntoWindow('历史用户图片')
   fireEvent.click(userRow)
 

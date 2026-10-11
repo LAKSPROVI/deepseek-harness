@@ -48,6 +48,11 @@ export const coverageExemptHeavySuites: readonly CoverageExemptSuite[] = [
   { filter: 'scripts/install-lefthook.spec.ts', exclude: 'scripts/install-lefthook.spec.ts' },
   { filter: 'scripts/oxlint-contract.spec.ts', exclude: 'scripts/oxlint-contract.spec.ts' },
   { filter: 'scripts/change-scope.spec.ts', exclude: 'scripts/change-scope.spec.ts' },
+  // Whole-repository TypeScript extraction runs over scripts, outside coverage.include.
+  // Its only in-process package call is assertV4RowAdmission, already covered by
+  // session-format-v3-to-v4/tests/retired-content.spec.ts. Keep every assertion
+  // in the plain gate while avoiding the measured compiler instrumentation cost.
+  { filter: 'scripts/persistence-epoch-header.spec.ts', exclude: 'scripts/persistence-epoch-header.spec.ts' },
   // Built-artifact proof. Packer/runtime src is threshold-excluded, and the
   // suite self-skips on unbuilt checkouts; the serial-windows complete
   // reference still starts this uninstrumented gate after its build gate, so

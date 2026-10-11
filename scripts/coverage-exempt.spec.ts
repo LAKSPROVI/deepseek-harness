@@ -32,6 +32,13 @@ function filterMatches(filter: string): string[] {
 }
 
 describe('coverage-exempt roster', () => {
+  it('runs the repository request-header compiler proof in the uninstrumented gate', () => {
+    expect(coverageExemptHeavySuites).toContainEqual({
+      filter: 'scripts/persistence-epoch-header.spec.ts',
+      exclude: 'scripts/persistence-epoch-header.spec.ts',
+    })
+  })
+
   it('selects every Typert suite for the uninstrumented gate', () => {
     const typertSpecs = filterMatches('packages/typert/')
     const exemptSpecs = coverageExemptHeavySuites.flatMap(suite => excludeMatches(suite.exclude))
