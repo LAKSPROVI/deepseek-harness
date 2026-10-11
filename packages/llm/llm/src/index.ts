@@ -28,7 +28,7 @@ import type {
   ToolSchema,
   ToolUpdate,
 } from './types.ts'
-import { executeRouterSync, readRouterSyncStatus, readRouterCatalogLease, watchRouterCatalog } from './router-sync.ts'
+import { executeRouterSync, readRouterSyncStatus, readRouterCatalogLease, watchRouterCatalog, confirmRouterModel } from './router-sync.ts'
 import { freezeMessage } from './message.ts'
 import { resolveRetryPolicy } from './retry-policy.ts'
 import type { ResolvedRetryPolicy } from './retry-policy.ts'
@@ -812,10 +812,9 @@ export class LlmRuntime extends TypertRemoteService {
   }
 
   /** Managed routes require a current positive lease before resolution or dispatch. */
-  private async assertRouterModel(provider: string, model: string): Promise<void> {
+  private async assertRouterModel(provider: string, model: string, signal?: AbortSignal, expectedScope?: string): Promise<void> {
     if (provider !== '9router') return
-    const lease = await readRouterCatalogLease(this.routerHome)
-    if (lease.ids !== undefined && !lease.ids.has(model)) {
+    if (!await confirmRouterModel(this.routerHome, model, signal, expectedScope)) {
       throw new LlmError('Router model has no current availability confirmation', 'ROUTER_MODEL_UNAVAILABLE')
     }
   }
@@ -824,7 +823,7 @@ export class LlmRuntime extends TypertRemoteService {
     model: string,
     signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
-    await this.assertRouterModel(registration.provider.id, model)
+    await this.assertRouterModel(registration.provider.id, model, signal)
     const resolved = await registration.adapter.resolveModel(registration.provider.id, model, signal)
     return this.normalizeModelInfo(registration, model, resolved)
   }
@@ -1009,7 +1008,8 @@ export class LlmRuntime extends TypertRemoteService {
    * @returns a prepared config and its registration-bound stream entry point.
    */
   async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall> {
-    await this.assertRouterModel(config.provider, config.model)
+    const routerScope = config.provider === '9router' ? (await readRouterCatalogLease(this.routerHome)).scope : undefined
+    await this.assertRouterModel(config.provider, config.model, signal, routerScope)
     const registration = this.registration(config.provider)
     const adapterCall = await registration.adapter.prepareCall(config.provider, config.model, signal)
     const modelInfo = this.normalizeModelInfo(registration, config.model, adapterCall.model)
@@ -1050,6 +1050,7 @@ export class LlmRuntime extends TypertRemoteService {
         dispatched = true
         return this.streamWithRegistration(options, {
           registration,
+          ...(routerScope === undefined ? {} : { routerScope }),
           config: resolvedConfig,
           modelInfo,
           dispatch: options => adapterCall.stream(options),
@@ -1112,7 +1113,8 @@ export class LlmRuntime extends TypertRemoteService {
   ): AsyncGenerator<StreamChunk> {
     let iterator: AsyncIterator<StreamChunk>
     try {
-      await this.assertRouterModel(options.provider, options.model)
+      const routerScope = prepared?.routerScope ?? (options.provider === '9router' ? (await readRouterCatalogLease(this.routerHome)).scope : undefined)
+      await this.assertRouterModel(options.provider, options.model, options.signal, routerScope)
       const registration = prepared?.registration ?? this.registration(options.provider)
       const adapter = registration.adapter
       let modelInfo: LlmResolvedModelInfo
@@ -1161,7 +1163,7 @@ export class LlmRuntime extends TypertRemoteService {
         }
         if (Object.isFrozen(resolvedOptions)) deepFreeze(projectedOptions)
       }
-      await this.assertRouterModel(options.provider, options.model)
+      await this.assertRouterModel(options.provider, options.model, options.signal, routerScope)
       this.assertRouterTools(projectedOptions)
       const stream = dispatch(this.forAdapter(projectedOptions, adapter))
       iterator = stream[Symbol.asyncIterator]()
@@ -1246,6 +1248,7 @@ interface AdapterRegistration {
 }
 
 interface PreparedDispatch {
+  routerScope?: string
   readonly registration: AdapterRegistration
   readonly config: LlmCallConfig
   readonly modelInfo: LlmResolvedModelInfo
@@ -1253,3 +1256,5 @@ interface PreparedDispatch {
 }
 
 export default LlmRuntime
+
+export { readRouterRuntimeModels, routerCredentialMatches } from './router-sync.ts'

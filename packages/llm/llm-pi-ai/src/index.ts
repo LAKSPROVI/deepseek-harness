@@ -60,7 +60,7 @@ import type {} from '@deepseek-ai/cordis-plugin-loader'
 
 import type { Context } from '@deepseek-ai/cordis'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
-import { assertUsableApiKey, LlmError, resolveImageAttachmentAccess } from '@deepseek-ai/dsh-llm'
+import { assertUsableApiKey, LlmError, resolveImageAttachmentAccess, readRouterRuntimeModels, routerCredentialMatches } from '@deepseek-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-fs'
 import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
@@ -150,6 +150,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
   const settingsNs = ctx.fiber.entry?.options.id ?? NS
   let lastRaw: ReturnType<Config['providers']['get']> | undefined
+  let lastRuntimeModels: string | undefined
   let memoized: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
   /**
    * The resolved profiles for the current configuration, memoized by the raw
@@ -162,8 +163,13 @@ export function apply(ctx: Context, config: Config): void {
    */
   const profiles = (): ReadonlyMap<string, ResolvedPiAiProviderProfile> => {
     const raw = config.providers.get()
-    if (raw === lastRaw && memoized !== undefined) return memoized
-    const next = resolveProfiles(structuredClone(raw) as import('./config.ts').Options['providers'], 'deferred')
+    const runtimeModels = raw['9router'] === undefined ? undefined : readRouterRuntimeModels(process.env.DSH_HOME, raw['9router'])
+    const runtimeKey = JSON.stringify(runtimeModels)
+    if (raw === lastRaw && runtimeKey === lastRuntimeModels && memoized !== undefined) return memoized
+    const effective = structuredClone(raw) as import('./config.ts').Options['providers']
+    if (runtimeModels !== undefined && effective?.['9router'] !== undefined) effective['9router'].models = runtimeModels as NonNullable<typeof effective['9router']['models']>
+    const next = resolveProfiles(effective, 'deferred')
+    lastRuntimeModels = runtimeKey
     lastRaw = raw
     memoized = next
     return next
@@ -196,7 +202,12 @@ export function apply(ctx: Context, config: Config): void {
       ? (await credentials.resolve(ref))?.value
       // Without the seam the environment is the whole credential plane.
       : launchEnvironmentOf(ctx).get(ref)?.value
-    if (hit !== undefined && hit.length > 0) return assertUsableApiKey(hit, 'llm-pi-ai', ref)
+    if (hit !== undefined && hit.length > 0) {
+      if (provider === '9router' && !routerCredentialMatches(process.env.DSH_HOME, hit)) {
+        throw new LlmError('Router credential requires fresh availability confirmation', 'ROUTER_MODEL_UNAVAILABLE')
+      }
+      return assertUsableApiKey(hit, 'llm-pi-ai', ref)
+    }
     throw new LlmError(
       `llm-pi-ai: no credential for provider route "${provider}"; its profile resolves ${ref}, which is not`
       + ` set — store ${ref} through the credentials service (the web Models page writes it) or export it,`

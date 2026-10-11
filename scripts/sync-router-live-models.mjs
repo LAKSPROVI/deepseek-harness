@@ -144,6 +144,71 @@ export async function syncOnce(options) {
 }
 
 
+/** Publish per-model evidence without changing persistent provider configuration. */
+export async function syncRuntimeSnapshot(options) {
+  const now = options.now ?? Date.now
+  const provider = options.provider ?? '9router'
+  let route
+  try { ({ route } = providerView(await options.describeSettings(), provider, options.catalogUrl)) }
+  catch (error) {
+    const previous = options.previousState
+    if (!retryableCatalogFailure(catalogFailure(error)) || previous?.schema !== 2 || !record(previous.scope)) throw error
+    route = { api: previous.scope.api, baseURL: previous.scope.url, apiKeyEnv: previous.scope.credentialRef, models: [] }
+  }
+  if (options.credentialRef !== undefined && route.apiKeyEnv !== options.credentialRef) throw fail('provider_mismatch')
+  const scope = { url: normalize(options.catalogUrl), api: route.api, credentialRef: route.apiKeyEnv ?? null, credentialDigest: options.credentialDigest ?? null }
+  const previous = options.previousState
+  const compatible = previous?.schema === 2 && isDeepStrictEqual(previous.scope, scope)
+  const checkedAtById = Object.fromEntries(Object.entries(compatible ? previous.checkedAtById ?? {} : {})
+    .filter(([, at]) => Number.isFinite(at) && at > now() - 600000 && at <= now() + 5000))
+  if (compatible && Array.isArray(previous.models)) {
+    for (const row of previous.models) checkedAtById[row.model.id] = Math.max(checkedAtById[row.model.id] ?? 0, timestamp(row.evidence.checked_at))
+  }
+  const priorOptions = compatible && Array.isArray(previous.models) ? previous.models.map(row => row.model).filter(record) : []
+  const preferences = new Map([...priorOptions, ...(options.modelPreferences ?? [])].map(model => [model.id, model]))
+  for (const model of route.models) preferences.set(model.id, model)
+  await options.savePreferences?.([...preferences.values()])
+  let catalog; let detail; let attempts = 0
+  for (; attempts < 2;) {
+    attempts++
+    try {
+      catalog = await options.fetchCatalog(route.api)
+      selectModels(catalog, [], now(), route.api)
+      if (catalog.data.some(row => checkedAtById[row.id] !== undefined && timestamp(row.x_9r?.checked_at) < checkedAtById[row.id])) throw fail('catalog_regressed')
+      for (const row of catalog.data) {
+        const checked = timestamp(row.x_9r?.checked_at)
+        if (Number.isFinite(checked) && checked <= now() + 5000) checkedAtById[row.id] = Math.max(checkedAtById[row.id] ?? 0, checked)
+      }
+      break
+    } catch (error) {
+      catalog = undefined; detail = catalogFailure(error)
+      if (!retryableCatalogFailure(detail)) break
+    }
+  }
+  const degraded = !catalog && compatible && Array.isArray(previous.models) && retryableCatalogFailure(detail)
+  if (degraded) catalog = { data: previous.models.map(row => ({ ...row.model, capabilities: { contextWindow: row.model.contextWindow, maxOutput: row.model.maxTokens }, x_9r: row.evidence })), x_9r_catalog: { availability_mode: 'strict', generation: previous.catalogGeneration } }
+  const revokedAtById = Object.fromEntries(Object.entries(compatible ? previous.revokedAtById ?? {} : {})
+    .filter(([, at]) => Number.isFinite(at) && at > now() - 600000))
+  if (catalog && !degraded && compatible && Array.isArray(previous.models)) {
+    const present = new Set(selectModels(catalog, [], now(), route.api).map(row => row.id))
+    for (const row of previous.models) if (!present.has(row.model.id)) revokedAtById[row.model.id] = now()
+  }
+  const models = (catalog ? selectModels(catalog, [...preferences.values()], now(), route.api) : []).filter(model => {
+    const cutoff = revokedAtById[model.id]
+    return cutoff === undefined || timestamp(catalog.data.find(row => row.id === model.id).x_9r.checked_at) > cutoff
+  })
+  const entries = models.map(model => ({ model, evidence: structuredClone(catalog.data.find(row => row.id === model.id).x_9r) }))
+  const at = new Date(now()).toISOString()
+  return { schema: 2, scope, ok: Boolean(catalog), transport: degraded ? 'degraded' : catalog ? 'confirmed' : 'unconfirmed',
+    ...(detail ? { ...detail } : {}), catalogAttempts: attempts, attemptedAt: at,
+    synchronizedAt: degraded ? previous.synchronizedAt : at,
+    validUntil: new Date(entries.length ? Math.max(...entries.map(row => timestamp(row.evidence.expires_at))) : now() + 60000).toISOString(),
+    models: entries, revokedAtById, checkedAtById, catalogModelIds: models.map(row => row.id), catalogProtocol: route.api,
+    expiredModelIds: degraded ? [...new Set([...(previous.expiredModelIds ?? []), ...previous.models.filter(row => timestamp(row.evidence.expires_at) <= now()).map(row => row.model.id)])] : [],
+    catalogGeneration: catalog?.x_9r_catalog?.generation ?? null,
+    publishedChatModels: models.length, availableRoutes: models.length, totalRoutes: catalog?.data.length ?? 0, changed: !isDeepStrictEqual(entries, previous?.models) }
+}
+
 const publicSyncFailures = ['provider_mismatch', 'settings_read_only', 'provider_missing_or_ambiguous', 'settings_conflict', 'backup_failed', 'app_auth_unavailable', 'app_auth_failed']
 function operationFailure(error) {
   if (error?.name === 'TimeoutError') return 'timeout'
@@ -167,7 +232,7 @@ export async function syncMeasured(options) {
   const rpc = (method, args) => measure(method === 'settings/mutate' ? 'settings/mutate' : 'settings/describe', options.rpc)(method, args)
   let result
   try {
-    result = await syncOnce({ ...options, rpc,
+    result = await (options.runtimeSnapshot ? syncRuntimeSnapshot : syncOnce)({ ...options, rpc,
       describeSettings: measure('settings/describe', options.describeSettings ?? (() => options.rpc('settings/describe', {}))),
       fetchCatalog: measure('fetchCatalog', options.fetchCatalog),
       backup: measure('profileBackup', options.backup),
@@ -175,6 +240,12 @@ export async function syncMeasured(options) {
     })
   } catch (error) {
     result = { ok: false, error: publicSyncFailures.includes(error?.code) ? error.code : 'app_unavailable', synchronizedAt: new Date((options.now ?? Date.now)()).toISOString() }
+    if (options.runtimeSnapshot && options.previousState?.schema === 2) {
+      const previous = options.previousState
+      result = { ...result, schema: 2, scope: previous.scope, transport: 'unconfirmed', models: [], catalogModelIds: [],
+        checkedAtById: previous.checkedAtById ?? {}, revokedAtById: previous.revokedAtById ?? {},
+        publishedChatModels: 0, availableRoutes: 0, totalRoutes: 0 }
+    }
   }
   return { ...result, diagnostics: { elapsedMs: Date.now() - started, phases } }
 }
@@ -329,6 +400,9 @@ export async function main(defaults = {}, argv = process.argv.slice(2)) {
       await unlink(lockFile); await acquire()
     } finally { await new Promise(resolve => { mutex.close(() => { resolve() }) }) }
   }
+  let previousState
+  try { previousState = JSON.parse(await readFile(stateFile, 'utf8')) }
+  catch { previousState = undefined }
   let stopped = false
   const stop = () => { stopped = true }
   process.on('SIGINT', stop); process.on('SIGTERM', stop)
@@ -342,17 +416,19 @@ export async function main(defaults = {}, argv = process.argv.slice(2)) {
   try {
     await writeFile(path.join(home, 'router-live-catalog.enabled'), '1\n')
     do {
+      const cycleStartedAt = Date.now()
       loopPhase = 'request/read'
       let requestId
       try { const request = JSON.parse(await readFile(requestFile, 'utf8')); if (typeof request.requestId === 'string') requestId = request.requestId }
       catch (error) { if (error.code !== 'ENOENT') throw fail('request_invalid') }
       loopPhase = 'synchronize'
-      const state = await syncMeasured({ ...transport, describeSettings, modelPreferences, savePreferences, catalogUrl: settings['catalog-url'], provider: settings.provider ?? '9router', intervalMs: interval, backup: profileBackup(path.join(home, 'profiles/web/cordis.patch.yml'), settings['backup-dir'] ?? path.join(home, 'backups/router-live-catalog')) })
+      const state = await syncMeasured({ ...transport, runtimeSnapshot: true, previousState, credentialDigest: key ? createHash('sha256').update(key).digest('hex') : null, credentialRef: settings['api-key-env'] ?? 'ROUTER_API_KEY', describeSettings, modelPreferences, savePreferences, catalogUrl: settings['catalog-url'], provider: settings.provider ?? '9router', intervalMs: interval, backup: profileBackup(path.join(home, 'profiles/web/cordis.patch.yml'), settings['backup-dir'] ?? path.join(home, 'backups/router-live-catalog')) })
       if (requestId) state.completedRequest = requestId
       loopPhase = 'state/write'
       await atomicJson(stateFile, state)
+      previousState = state
       if (!settings.watch) { process.stdout.write(JSON.stringify(state) + '\n'); return state }
-      const next = Date.now() + interval
+      const next = cycleStartedAt + interval
       while (!stopped && Date.now() < next) {
         loopPhase = 'wait/request'
         try { const request = JSON.parse(await readFile(requestFile, 'utf8')); if (request.requestId !== requestId) break }
