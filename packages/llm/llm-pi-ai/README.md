@@ -100,6 +100,8 @@ A profile's `models` list replaces the route's installed catalog rather than ext
 
 A hand-declared route with an explicit protocol and endpoint accepts an empty model list, publishing no selectable models until the list is repopulated. Installed catalog routes retain their catalog defaults for an absent or empty list. See the [automatic router catalog guide](../../../docs/user/router-live-catalog.md).
 
+An enrolled `9router` route uses the separate runtime snapshot as its availability authority. Directory merging preserves exact-ID options and capacity limits; every dispatch verifies the current proof and actual projected tools. The [runtime evidence decision](../../../.agents/notes/implemented/architecture/2026-10-11-router-runtime-evidence.md) owns expiry, revocation, credential binding, and bounded renewal.
+
 ### Run with reasoning and wire compatibility
 
 `reasoningEfforts` declares a model's selectable thinking levels: each key is a level selectors offer, its value the spelling dispatch sends on the wire, so `max: ultra` renames a level for a gateway with its own vocabulary. Omitting the field keeps the installed catalog entry's capability; `false` declares a non-reasoning model. `compat` switches reshape the request for endpoints pi-ai cannot recognize — which role carries the system prompt, which field caps output, how a thinking level travels — configurable per route and per model. A model neither the entry nor the installed catalog sizes takes the route's `defaultContextWindow` and `defaultMaxTokens` fallbacks.

@@ -100,6 +100,8 @@ profile 的 `models` 列表会替换而非扩展路由的已安装目录；每�
 
 明确声明协议和端点的自定义路由接受空模型列表，并在列表重新填充前不发布可选模型。内置目录路由在列表缺省或为空时保留其目录默认值。请参阅[自动路由器目录指南](../../../docs/user/router-live-catalog.zh.md)。
 
+启用实时目录的 `9router` 路由以独立运行时快照作为可用性依据。目录合并保留准确 ID 的选项及容量上限；每次调用检查当前证据和实际投影工具。[运行时证据决策](../../../.agents/notes/implemented/architecture/2026-10-11-router-runtime-evidence.zh.md)定义过期、撤回、凭据绑定和有限续期。
+
 ### 带推理（reasoning）与协议兼容运行
 
 `reasoningEfforts` 声明模型可选择的 thinking 等级：每个键都是选择器提供的等级，其值是分派时在协议中发送的拼写，因此 `max: ultra` 可以为拥有自有词汇的网关重命名等级。省略该字段时保留已安装目录条目的能力；`false` 声明非推理模型。对于 pi-ai 无法识别的端点，`compat` 开关重塑请求——哪个角色携带系统提示词、哪个字段限制输出、thinking 等级如何传递——可逐路由、逐模型配置。条目与已安装目录都没有尺寸的模型，会采用路由的 `defaultContextWindow` 与 `defaultMaxTokens` 回退值。

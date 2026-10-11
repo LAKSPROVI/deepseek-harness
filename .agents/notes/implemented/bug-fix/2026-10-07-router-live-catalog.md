@@ -1,4 +1,4 @@
-# Agent Note: Router availability controls selectable models
+# Agent Note: Scoped configuration supports router availability
 
 Status: implemented
 
@@ -6,27 +6,20 @@ English | [中文](2026-10-07-router-live-catalog.zh.md)
 
 ## Problem
 
-An operational router synchronizer can retain unusable choices when it reads a delayed monitor, writes an already imported legacy settings file, or refuses an empty listing. The pi-ai adapter also rejects a custom route with zero models, preventing withdrawal during a complete outage.
+Filtering Settings descriptors after inherited configuration composition still processes unrelated components. A custom route that rejects zero models cannot represent complete withdrawal.
 
 ## Decision
 
-The optional [synchronizer](../../../../scripts/sync-router-live-models.mjs) reads the authenticated strict catalog and requires fresh semantic Anthropic text, tools, and streaming proofs. It updates only the existing provider's model list through revision-checked Settings RPC, backing up the active patch and retaining per-model options by exact ID. An empty or unconfirmed catalog withdraws all selectable choices. A hand-declared route with an explicit protocol and endpoint can have zero models; installed catalog providers retain their existing defaults.
+Scoped reads pass the namespace into ConfigEditor before inherited-layer composition and detached-value cloning. Full reads still enumerate all unique entries; missing IDs return no rows. A hand-declared route with an explicit protocol and endpoint can have zero models; installed catalog providers retain their defaults.
 
-The watcher polls every 30 seconds by default and handles manual refresh requests through the same owner. The status reader uses the current cycle's validity deadline and sanitized failure, so a historical log cannot override a recovered state. The enrolled runtime also filters its native catalog and refuses unconfirmed model resolution or dispatch. State-file changes and an expiration timer notify the existing native model directory even when the watcher stops, without modifying session selections or an in-flight stream.
+The [runtime evidence decision](../architecture/2026-10-11-router-runtime-evidence.md) supersedes this note's earlier Settings-publication and cycle-wide lease policy. Availability now uses a separate snapshot, with individual expiry and bounded retention of valid evidence during transient failures. The synchronizer follows the existing route protocol; configuration edits retain revision checks.
 
 ## Alternatives considered
 
-**Keep the previous list on failure.** This presents unconfirmed models as available throughout an outage and defeats the requested availability contract.
+**Filter only the final descriptors.** This leaves unrelated inheritance and cloning work in the read path.
 
-**Write the legacy settings document.** The current Settings service imports that document into a profile patch; subsequent writes need not reach the active consumer. RPC supplies revision checks and native change events.
-
-**Copy an OpenAI client catalog.** Anthropic tools and streaming require separate proofs. Generic success and capability claims cannot establish this client protocol.
+**Write an imported legacy settings document.** Later writes need not reach the active profile consumer. Configuration changes require the current Settings service.
 
 ## Consequences
 
-A temporary catalog failure can leave no selectable models until recovery. Existing session selections remain visible as unavailable rather than being rerouted. Refresh has a bounded polling delay and does not guarantee future provider uptime. A stopped local backend cannot receive changes until it returns. [Usage](../../../../docs/user/router-live-catalog.md) and the CLI transport, live-configuration, and status-reader regressions define the supported flow.
-
-
-Protocol correction: synchronization follows the existing route API (`anthropic-messages` or `openai-completions`) and requires that protocol's proofs. A concurrent protocol edit refetches evidence. One transient network/timeout/5xx retry uses a new response; exhausted failure withdraws choices, preserving expiry and local lease. This permits the OpenAI path that passed the Ghost Opus native blind read while retaining revision checks and per-model options. Deployment and protocol changes still require the installation's operational approval.
-
-Scoped reads pass the namespace into ConfigEditor before inherited-layer composition and detached-value cloning. Full reads still enumerate all unique entries; missing ids return no rows. This removes unrelated profile work left behind by filtering only the final Settings descriptors. Real-profile regressions verify matching inheritance, secret redaction, missing ids, and composition counts. This bounds unnecessary work; it does not certify live renewal latency or upstream tool behavior.
+Real-profile regressions verify matching inheritance, secret redaction, missing IDs, and composition counts. These tests establish the scoped read contract, not live renewal latency or upstream tool behavior. [Usage](../../../../docs/user/router-live-catalog.md) documents the current availability flow.
