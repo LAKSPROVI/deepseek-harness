@@ -18,8 +18,12 @@ This guide connects an existing `9router` provider to a gateway that publishes s
 node scripts/sync-router-live-models.mjs --home /path/to/home --app-url http://127.0.0.1:3080/ --catalog-url https://gateway.example/v1 --launch-log /path/to/launch.log --watch --interval-ms 30000
 ```
 
-3. Inspect `home/sync-9router-models-state.json`. A confirmed cycle has `ok: true`, a current `synchronizedAt`, `validUntil`, and `publishedChatModels`. Compare the complete model IDs in the native model selector with the authenticated catalog's eligible projection.
+3. Inspect `home/sync-9router-models-state.json`. A confirmed cycle has `ok: true`, a current `synchronizedAt` and `publishedChatModels`; schema-2 eligibility follows each model's own evidence expiry. Compare the complete model IDs in the native model selector with the authenticated catalog's eligible projection.
 4. Start this command with your operating system's login scheduler. Keep one watcher running. The same command without `--watch` requests an immediate cycle when that watcher is active.
+
+## Use the selector
+
+Open your local Web Harness, select the configured `9router` provider, and choose an exact model ID. Refresh the selector after synchronization. A missing model may have expired evidence, a negative upstream result, or an incompatible tool presentation; compare IDs and the sanitized status before changing configuration.
 
 ## Understand availability
 
@@ -37,4 +41,4 @@ Local authentication and Settings reads have a 30-second deadline; each external
 
 Before dispatch, an expired known model can request one renewal and wait at most 20 seconds, with cancellation. Without fresh evidence, the call fails with `ROUTER_MODEL_UNAVAILABLE`. A completed tool result remains in session history and can be used on a later follow-up after recovery; renewal does not execute the tool again or silently select another model. Already transmitted streams keep their dispatch.
 
-The [adapter reference](../../packages/llm/llm-pi-ai/README.md) describes custom routes, and the [decision record](../../.agents/notes/implemented/bug-fix/2026-10-07-router-live-catalog.md) explains the availability contract.
+The [adapter reference](../../packages/llm/llm-pi-ai/README.md) describes custom routes, and the [decision record](../../.agents/notes/implemented/architecture/2026-10-11-router-runtime-evidence.md) explains the availability contract.

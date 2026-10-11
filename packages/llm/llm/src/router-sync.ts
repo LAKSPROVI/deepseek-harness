@@ -199,7 +199,12 @@ function runtimeModels(data: unknown): RuntimeModel[] {
   return result
 }
 
-/** Read dynamic model options for the exact configured route; undefined preserves legacy configuration. */
+/**
+ * Read dynamic model options for the exact configured route.
+ * @param home - Harness home containing the enrollment marker and runtime snapshot.
+ * @param route - Configured protocol, base URL, and credential reference to match against the snapshot.
+ * @returns current proved model options, an empty list for invalid modern state, or undefined for unmanaged or legacy configuration.
+ */
 export function readRouterRuntimeModels(
   home: string | undefined, route: { api?: unknown; baseURL?: unknown; apiKeyEnv?: unknown },
 ): (Record<string, unknown> & { id: string })[] | undefined {
@@ -218,7 +223,12 @@ export function readRouterRuntimeModels(
   return runtimeModels(data).map(row => row.model)
 }
 
-/** Bind actual dispatch credentials to the credential used to fetch this snapshot. */
+/**
+ * Bind actual dispatch credentials to the credential used to fetch this snapshot.
+ * @param home - Harness home containing the enrollment marker and runtime snapshot.
+ * @param key - Effective dispatch credential; only its digest is compared with the snapshot.
+ * @returns true for matching modern credentials or unmanaged/legacy configuration; false for invalid modern state or a mismatch.
+ */
 export function routerCredentialMatches(home: string | undefined, key: string): boolean {
   if (!home || !existsSync(join(home, 'router-live-catalog.enabled'))) return true
   try {
@@ -269,7 +279,14 @@ export async function readRouterCatalogLease(home?: string): Promise<RouterCatal
   return { ids: new Set(ids), expiresAt: deadline }
 }
 
-/** Request one bounded renewal for an expired schema-2 proof; never replay tools or extend evidence. */
+/**
+ * Request one bounded renewal for an expired schema-2 proof; never replay tools or extend evidence.
+ * @param home - Harness home used to read evidence and request its synchronizer's renewal.
+ * @param model - Exact model ID whose availability must be confirmed.
+ * @param signal - Optional cancellation signal propagated through renewal and polling.
+ * @param expectedScope - Optional dispatch binding from the prepared lease; any changed scope refuses the call.
+ * @returns true when unmanaged or currently confirmed, otherwise whether matching fresh proof arrives within 20 seconds.
+ */
 export async function confirmRouterModel(
   home: string | undefined, model: string, signal?: AbortSignal, expectedScope?: string,
 ): Promise<boolean> {

@@ -18,8 +18,12 @@ kind: "tutorial"
 node scripts/sync-router-live-models.mjs --home /path/to/home --app-url http://127.0.0.1:3080/ --catalog-url https://gateway.example/v1 --launch-log /path/to/launch.log --watch --interval-ms 30000
 ```
 
-3. 查看 `home/sync-9router-models-state.json`。确认成功的周期具有 `ok: true`、当前的 `synchronizedAt`、`validUntil` 和 `publishedChatModels`。将原生模型选择器中的完整模型 ID 集合与经过认证的目录投影进行比较。
+3. 查看 `home/sync-9router-models-state.json`。确认周期具有 `ok: true`、新的 `synchronizedAt` 和 `publishedChatModels`；schema-2 按每个模型自身证据的过期时间判断可用性。比较原生选择器与经过认证目录的完整模型 ID。
 4. 使用操作系统的登录调度器启动此命令。只保留一个监视进程。监视进程运行时，不加 `--watch` 的同一命令会请求立即执行一个周期。
+
+## 使用选择器
+
+打开本地 Web Harness，选择配置的 `9router` 提供方和准确模型 ID。同步后刷新选择器。缺少模型可能因为证据过期、上游否定结果或工具投影不兼容；修改配置前先比较 ID 和脱敏状态。
 
 ## 理解可用性
 
@@ -37,4 +41,4 @@ node scripts/sync-router-live-models.mjs --home /path/to/home --app-url http://1
 
 调用前，已过期的已知模型可以请求一次更新，最多等待 20 秒，并支持取消。没有新鲜证据时，调用以 `ROUTER_MODEL_UNAVAILABLE` 失败。已完成的工具结果保留在会话历史中，恢复后可以通过后续消息继续使用；更新不会再次执行工具或悄悄选择其他模型。已经发送的流保持原有调用。
 
-[适配器参考](../../packages/llm/llm-pi-ai/README.zh.md) 描述自定义路由，[决策记录](../../.agents/notes/implemented/bug-fix/2026-10-07-router-live-catalog.zh.md) 解释可用性契约。
+[适配器参考](../../packages/llm/llm-pi-ai/README.zh.md) 描述自定义路由，[决策记录](../../.agents/notes/implemented/architecture/2026-10-11-router-runtime-evidence.zh.md) 解释可用性契约。
